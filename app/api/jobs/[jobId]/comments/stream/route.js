@@ -95,7 +95,7 @@ export async function GET(request, { params }) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': process.env.NEXTAUTH_URL || 'http://localhost:3000',
         'Access-Control-Allow-Headers': 'Cache-Control'
       }
     });

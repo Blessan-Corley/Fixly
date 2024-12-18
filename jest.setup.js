@@ -1,5 +1,41 @@
 // jest.setup.js - Jest testing configuration
-import '@testing-library/jest-dom';
+require('@testing-library/jest-dom');
+
+// Polyfill Web APIs for Next.js 13+ App Router
+const { TextEncoder, TextDecoder } = require('util');
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
+// Only polyfill if missing (JSDOM usually has these, or Node 18+)
+if (typeof global.Request === 'undefined') {
+  // Try to use native fetch if available in this node version
+  // or mocked implementations for tests
+  global.Request = class Request {
+    constructor(input, init) {
+      this.url = input;
+      this.method = init?.method || 'GET';
+      this.headers = new Headers(init?.headers);
+      this.body = init?.body;
+      this.json = async () => JSON.parse(this.body);
+    }
+  };
+  global.Response = class Response {
+    constructor(body, init) {
+      this.body = body;
+      this.status = init?.status || 200;
+      this.ok = this.status >= 200 && this.status < 300;
+      this.headers = new Headers(init?.headers);
+      this.json = async () => JSON.parse(this.body);
+    }
+    static json(data, init) {
+      return new Response(JSON.stringify(data), init);
+    }
+  };
+  global.Headers = class Headers extends Map {
+    get(name) { return super.get(name.toLowerCase()); }
+    set(name, value) { super.set(name.toLowerCase(), value); }
+  };
+}
 
 // Mock Next.js router
 jest.mock('next/navigation', () => ({
@@ -254,132 +290,125 @@ jest.mock('lucide-react', () => {
   });
 });
 
-// Mock Web APIs
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: jest.fn().mockImplementation(query => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: jest.fn(),
-    removeListener: jest.fn(),
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-  })),
-});
+// Mock Web APIs (only if window exists)
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: jest.fn().mockImplementation(query => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(),
+      removeListener: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  });
 
-// Mock IntersectionObserver
-global.IntersectionObserver = class IntersectionObserver {
-  constructor() {}
-  disconnect() {}
-  observe() {}
-  unobserve() {}
-};
+  // Mock IntersectionObserver
+  global.IntersectionObserver = class IntersectionObserver {
+    constructor() {}
+    disconnect() {}
+    observe() {}
+    unobserve() {}
+  };
 
-// Mock ResizeObserver
-global.ResizeObserver = class ResizeObserver {
-  constructor() {}
-  disconnect() {}
-  observe() {}
-  unobserve() {}
-};
+  // Mock ResizeObserver
+  global.ResizeObserver = class ResizeObserver {
+    constructor() {}
+    disconnect() {}
+    observe() {}
+    unobserve() {}
+  };
 
-// Mock Geolocation API
-Object.defineProperty(navigator, 'geolocation', {
-  value: {
-    getCurrentPosition: jest.fn((success) => 
-      success({
-        coords: {
-          latitude: 19.0760,
-          longitude: 72.8777,
-          accuracy: 10
-        }
-      })
-    ),
-    watchPosition: jest.fn(),
-    clearWatch: jest.fn()
-  }
-});
-
-// Mock localStorage
-const localStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-};
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
-});
-
-// Mock sessionStorage
-const sessionStorageMock = {
-  getItem: jest.fn(),
-  setItem: jest.fn(),
-  removeItem: jest.fn(),
-  clear: jest.fn(),
-};
-Object.defineProperty(window, 'sessionStorage', {
-  value: sessionStorageMock
-});
-
-// Mock fetch
-global.fetch = jest.fn(() =>
-  Promise.resolve({
-    ok: true,
-    json: () => Promise.resolve({}),
-    text: () => Promise.resolve(''),
-    status: 200,
-    headers: new Headers()
-  })
-);
-
-// Mock performance API
-Object.defineProperty(window, 'performance', {
-  value: {
-    mark: jest.fn(),
-    measure: jest.fn(),
-    getEntriesByName: jest.fn(() => []),
-    getEntriesByType: jest.fn(() => []),
-    now: jest.fn(() => Date.now()),
-    navigation: {
-      type: 'navigate'
-    },
-    memory: {
-      usedJSHeapSize: 1000000,
-      totalJSHeapSize: 2000000,
-      jsHeapSizeLimit: 4000000
+  // Mock Geolocation API
+  Object.defineProperty(navigator, 'geolocation', {
+    value: {
+      getCurrentPosition: jest.fn((success) => 
+        success({
+          coords: {
+            latitude: 19.0760,
+            longitude: 72.8777,
+            accuracy: 10
+          }
+        })
+      ),
+      watchPosition: jest.fn(),
+      clearWatch: jest.fn()
     }
-  }
-});
+  });
 
-// Mock Service Worker
-Object.defineProperty(navigator, 'serviceWorker', {
-  value: {
-    register: jest.fn(() => Promise.resolve({})),
-    ready: Promise.resolve({
-      sync: {
-        register: jest.fn()
+  // Mock localStorage
+  const localStorageMock = {
+    getItem: jest.fn(),
+    setItem: jest.fn(),
+    removeItem: jest.fn(),
+    clear: jest.fn(),
+  };
+  Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock
+  });
+
+  // Mock sessionStorage
+  const sessionStorageMock = {
+    getItem: jest.fn(),
+    setItem: jest.fn(),
+    removeItem: jest.fn(),
+    clear: jest.fn(),
+  };
+  Object.defineProperty(window, 'sessionStorage', {
+    value: sessionStorageMock
+  });
+
+  // Mock performance API
+  Object.defineProperty(window, 'performance', {
+    value: {
+      mark: jest.fn(),
+      measure: jest.fn(),
+      getEntriesByName: jest.fn(() => []),
+      getEntriesByType: jest.fn(() => []),
+      now: jest.fn(() => Date.now()),
+      navigation: {
+        type: 'navigate'
+      },
+      memory: {
+        usedJSHeapSize: 1000000,
+        totalJSHeapSize: 2000000,
+        jsHeapSizeLimit: 4000000
       }
-    }),
-    controller: null
-  }
-});
+    }
+  });
 
-// Mock Notification API
-Object.defineProperty(window, 'Notification', {
-  value: class Notification {
-    constructor(title, options) {
-      this.title = title;
-      this.options = options;
+  // Mock Notification API
+  Object.defineProperty(window, 'Notification', {
+    value: class Notification {
+      constructor(title, options) {
+        this.title = title;
+        this.options = options;
+      }
+      static requestPermission() {
+        return Promise.resolve('granted');
+      }
+      static permission = 'granted';
     }
-    static requestPermission() {
-      return Promise.resolve('granted');
+  });
+}
+
+// Mock Service Worker (navigator might exist in Node in some setups, but usually safest here)
+if (typeof navigator !== 'undefined') {
+  Object.defineProperty(navigator, 'serviceWorker', {
+    value: {
+      register: jest.fn(() => Promise.resolve({})),
+      ready: Promise.resolve({
+        sync: {
+          register: jest.fn()
+        }
+      }),
+      controller: null
     }
-    static permission = 'granted';
-  }
-});
+  });
+}
 
 // Setup console error suppression for expected errors
 const originalError = console.error;
@@ -410,4 +439,4 @@ process.env.NEXTAUTH_SECRET = 'test-secret';
 process.env.MONGODB_URI = 'mongodb://localhost:27017/fixly-test';
 process.env.REDIS_URL = 'redis://localhost:6379';
 
-export default {};
+module.exports = {};

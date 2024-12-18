@@ -10,6 +10,7 @@ import { AblyProvider, useAbly } from '../contexts/AblyContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import QueryProvider, { QueryPerformanceMonitor, QueryErrorBoundary } from '../components/providers/QueryProvider';
 import DarkModeManager from '../components/ui/DarkModeManager';
+import GlobalBanModal from '../components/ui/GlobalBanModal';
 
 // App Context
 const AppContext = createContext();
@@ -46,7 +47,7 @@ function AppProviderContent({ children }) {
     }
 
     // ✅ CRITICAL FIX: Don't fetch for temporary session IDs
-    if (!sessionUserId || sessionUserId.startsWith('temp_')) {
+    if (!sessionUserId || sessionUserId.startsWith('temp_') || sessionUserId.startsWith('tmp_')) {
       console.log('⏭️ Skipping fetch for temporary session');
       setUser(null);
       setError('Session not properly established. Please sign in again.');
@@ -138,7 +139,7 @@ function AppProviderContent({ children }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setUser, setError, setLoading]);
 
 
   // ✅ CRITICAL FIX: Only fetch user when session ACTUALLY changes
@@ -196,19 +197,19 @@ function AppProviderContent({ children }) {
   const updateUser = useCallback((userData) => {
     setUser(prev => {
       if (!prev) return userData;
-      
+
       // ✅ OPTIMIZATION: Only update if data actually changed
       const merged = { ...prev, ...userData };
       const hasChanges = JSON.stringify(prev) !== JSON.stringify(merged);
-      
+
       if (hasChanges) {
         console.log('👤 User data updated');
         return merged;
       }
-      
+
       return prev; // No changes, return same reference
     });
-  }, []);
+  }, [setUser]);
 
   // ✅ MEMOIZE: Prevent unnecessary re-renders
   const value = {
@@ -251,6 +252,7 @@ export function Providers({ children }) {
                   <DarkModeManager>
                     {children}
                   </DarkModeManager>
+                  <GlobalBanModal />
                   <QueryPerformanceMonitor />
                   <Toaster 
                   position="top-right"
@@ -356,7 +358,7 @@ export function ProtectedRoute({ children, allowedRoles = [], fallback = null })
   }
 
   // Check if user needs to complete signup (only if we're not already on signup page)
-  if (isAuthenticated && session?.user && (!session.user.isRegistered || !session.user.role || session.user.username?.startsWith('temp_'))) {
+  if (isAuthenticated && session?.user && (!session.user.isRegistered || !session.user.role || session.user.username?.startsWith('temp_') || session.user.username?.startsWith('tmp_'))) {
     // Check if we're already on the signup page to prevent loops
     if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth/signup')) {
       console.log('🔄 User needs to complete signup, redirecting...');

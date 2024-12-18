@@ -55,11 +55,11 @@ export function canPostJob(user) {
     return true;
   }
   
-  // Free users have 3-hour gap between posts
+  // Free users have 4-hour gap between posts
   if (!user.lastJobPostedAt) return true;
-  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000);
   const lastPosted = new Date(user.lastJobPostedAt);
-  return lastPosted < threeHoursAgo;
+  return lastPosted < fourHoursAgo;
 }
 
 /**
@@ -77,7 +77,7 @@ export function getNextJobPostTime(user) {
   
   if (!user.lastJobPostedAt) return null; // Can post immediately
   
-  const nextAllowedTime = new Date(new Date(user.lastJobPostedAt).getTime() + 3 * 60 * 60 * 1000);
+  const nextAllowedTime = new Date(new Date(user.lastJobPostedAt).getTime() + 4 * 60 * 60 * 1000);
   const now = new Date();
   
   if (now >= nextAllowedTime) return null; // Can post now

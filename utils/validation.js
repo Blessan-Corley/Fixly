@@ -454,17 +454,19 @@ export function withSizeLimit(maxSize = 1024 * 1024) { // 1MB default
 }
 
 // CORS middleware
-export function withCORS(allowedOrigins = ['*']) {
+export function withCORS(allowedOrigins = [process.env.NEXTAUTH_URL || 'http://localhost:3000']) {
   return function corsMiddleware(request) {
     const origin = request.headers.get('origin');
     const isAllowed = allowedOrigins.includes('*') || allowedOrigins.includes(origin);
 
     const response = new Response();
-    
-    if (isAllowed) {
-      response.headers.set('Access-Control-Allow-Origin', origin || '*');
+
+    if (isAllowed && origin) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+    } else if (allowedOrigins[0] && allowedOrigins[0] !== '*') {
+      response.headers.set('Access-Control-Allow-Origin', allowedOrigins[0]);
     }
-    
+
     response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     response.headers.set('Access-Control-Allow-Credentials', 'true');

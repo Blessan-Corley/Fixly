@@ -157,32 +157,9 @@ export async function POST(request) {
         }
       });
 
-    } else if (action === 'reset_credits') {
-      // Reset credits for free users (admin or promotional action)
-      if (!user.plan) {
-        user.plan = { type: 'free', creditsUsed: 0, status: 'active' };
-      } else {
-        user.plan.creditsUsed = 0;
-      }
-
-      await user.save();
-
-      // Add notification
-      await user.addNotification(
-        'credits_reset',
-        'Free Credits Restored',
-        'Your free application credits have been reset. You now have 3 free applications!'
-      );
-
-      return NextResponse.json({
-        success: true,
-        message: 'Credits reset successfully',
-        creditsRemaining: 3
-      });
-
     } else {
       return NextResponse.json(
-        { message: 'Invalid action. Allowed: subscribe, cancel, reset_credits' },
+        { message: 'Invalid action. Allowed: subscribe, cancel' },
         { status: 400 }
       );
     }

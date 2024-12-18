@@ -183,18 +183,18 @@ export default function FirebasePhoneAuth({ phoneNumber, onVerificationComplete,
       const result = await confirmationResultRef.current.confirm(otp);
       const firebaseUser = result.user;
 
+      // Get the ID token for secure server verification
+      const idToken = await firebaseUser.getIdToken();
+
       console.log('✅ Firebase verification successful');
 
-      // Call backend
+      // Call backend with ID Token
       const response = await fetch('/api/auth/verify-phone-firebase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phoneNumber: firebaseUser.phoneNumber,
-          firebaseCredential: {
-            verificationId: confirmationResultRef.current.verificationId,
-            verificationCode: otp
-          }
+          idToken: idToken
         })
       });
 

@@ -19,14 +19,9 @@ const nextConfig = {
   // ⚠️ SECURITY: Only expose PUBLIC variables here
   // NEVER expose secrets like NEXTAUTH_SECRET, GOOGLE_CLIENT_SECRET, etc.
   env: {
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     // Only NEXT_PUBLIC_ variables should be exposed to client
-    NEXT_PUBLIC_FIREBASE_API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    // Next.js handles this automatically for variables starting with NEXT_PUBLIC_
+    // So we don't need to manually list them here unless we're aliasing them
   },
   
   webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
