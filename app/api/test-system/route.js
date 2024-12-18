@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
-import { redisUtils } from '@/lib/redis';
-import mongoose from 'mongoose';
+import { redis } from '@/lib/redis';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Comprehensive System Test Endpoint

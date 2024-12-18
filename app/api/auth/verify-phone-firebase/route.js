@@ -31,11 +31,11 @@ export async function POST(request) {
     await connectDB();
 
     const body = await request.json();
-    const { phoneNumber, firebaseCredential } = body;
+    const { idToken, phoneNumber } = body;
 
-    if (!phoneNumber || !firebaseCredential) {
+    if (!idToken) {
       return NextResponse.json(
-        { message: 'Phone number and Firebase credential are required' },
+        { message: 'Firebase ID token is required' },
         { status: 400 }
       );
     }
@@ -48,7 +48,6 @@ export async function POST(request) {
       );
     }
 
-    // Check if phone is already verified
     if (user.phoneVerified) {
       return NextResponse.json(
         { message: 'Phone number is already verified' },
@@ -57,19 +56,26 @@ export async function POST(request) {
     }
 
     try {
-      // Verify the Firebase credential on server-side
-      const { verificationId, verificationCode } = firebaseCredential;
+      // ✅ SECURE VERIFICATION: Verify the ID token sent from the client
+      const decodedToken = await admin.auth().verifyIdToken(idToken);
       
-      // Create credential and verify
-      const credential = admin.auth.PhoneAuthProvider.credential(verificationId, verificationCode);
-      
-      // We don't actually sign in with Firebase, just verify the phone number
-      console.log('✅ Firebase phone credential verified');
+      // Ensure the token's phone number matches what we expect
+      if (decodedToken.phone_number !== phoneNumber && decodedToken.phone_number !== `+91${phoneNumber}`) {
+         return NextResponse.json(
+          { message: 'Phone number mismatch' },
+          { status: 400 }
+        );
+      }
+
+      console.log('✅ Firebase phone ID token verified for:', decodedToken.phone_number);
       
       // Update user verification status
       user.phoneVerified = true;
       user.phoneVerifiedAt = new Date();
       user.lastActivityAt = new Date();
+      
+      // Normalize phone number if needed (e.g., store without +91)
+      // user.phone = ... (logic depends on your storage preference)
 
       // Check if user should be fully verified (both email and phone)
       if (user.emailVerified || user.authMethod === 'google') {
@@ -104,15 +110,15 @@ export async function POST(request) {
       });
 
     } catch (firebaseError) {
-      console.error('Firebase verification error:', firebaseError);
+      console.error('Firebase token verification error:', firebaseError);
       return NextResponse.json(
-        { message: 'Invalid verification code or expired session' },
-        { status: 400 }
+        { message: 'Invalid or expired verification token' },
+        { status: 401 }
       );
     }
 
   } catch (error) {
-    console.error('Firebase phone verification error:', error);
+    console.error('Phone verification server error:', error);
     return NextResponse.json(
       { message: 'Phone verification failed' },
       { status: 500 }
