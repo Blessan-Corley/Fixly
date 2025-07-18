@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
-
+import { Briefcase } from 'lucide-react';
 export default function JobsPage() {
   return (
     <RoleGuard roles={['hirer']} fallback={<div>Access denied</div>}>
