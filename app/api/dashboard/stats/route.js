@@ -6,7 +6,7 @@ import connectDB from '../../../lib/db';
 import Job from '../../../models/Job';
 import User from '../../../models/User';
 import { rateLimit } from '../../../utils/rateLimiting';
-
+// just checking and coding to improve thanks you all its an honur to with you all !! 
 export async function GET(request) {
   try {
     // Apply rate limiting
@@ -97,7 +97,7 @@ async function getHirerStats(userId) {
       createdBy: userId, 
       status: { $in: ['open', 'in_progress'] } 
     }),
-    
+    // nice one great to work in this project
     // Completed jobs
     Job.countDocuments({ 
       createdBy: userId, 

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-
+// please make the changes and more and guide me 
+// ggreat work done nice one lol .... better be Stay humble
 const jobSchema = new mongoose.Schema({
   // Basic Info
   title: {
