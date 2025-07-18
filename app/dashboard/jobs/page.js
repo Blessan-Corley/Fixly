@@ -1,3 +1,4 @@
+// app/dashboard/jobs/page.js:
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
+import { Briefcase } from 'lucide-react';
 
 export default function JobsPage() {
   return (

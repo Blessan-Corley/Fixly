@@ -26,7 +26,27 @@ import { toast } from 'sonner';
 
 export default function AdminPanelPage() {
   return (
-    <RoleGuard roles={['admin']} fallback={<div>Access denied</div>}>
+    <RoleGuard roles={['admin']} fallback={
+      <div className="p-6 lg:p-8">
+        <div className="max-w-md mx-auto text-center">
+          <div className="card">
+            <Shield className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-fixly-text mb-2">
+              Admin Access Required
+            </h2>
+            <p className="text-fixly-text-muted mb-4">
+              You need admin privileges to access this panel.
+            </p>
+            <button
+              onClick={() => window.location.href = '/dashboard'}
+              className="btn-primary w-full"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    }>
       <AdminPanelContent />
     </RoleGuard>
   );

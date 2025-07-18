@@ -44,6 +44,17 @@ export async function GET(request, { params }) {
       );
     }
 
+    // Check if fixer has credits or subscription before showing job details
+    if (user.role === 'fixer' && !user.canApplyToJob()) {
+      return NextResponse.json(
+        { 
+          message: 'You need to upgrade to Pro or have free credits to view job details',
+          needsUpgrade: true 
+        },
+        { status: 403 }
+      );
+    }
+
     // Fetch job with populated data
     const job = await Job.findById(jobId)
       .populate('createdBy', 'name username photoURL rating location isVerified')
@@ -63,6 +74,38 @@ export async function GET(request, { params }) {
     const hasApplied = job.applications?.some(
       app => app.fixer.toString() === user._id.toString() && app.status !== 'withdrawn'
     ) || false;
+
+    // Check if user is involved in this job
+    const isJobCreator = user._id.toString() === job.createdBy._id.toString();
+    const isAssignedFixer = job.assignedTo && job.assignedTo._id.toString() === user._id.toString();
+    const isInvolved = isJobCreator || isAssignedFixer || hasApplied;
+
+    // **SECURITY: Hide sensitive contact details from non-involved fixers**
+    let jobData = { ...job };
+    
+    if (user.role === 'fixer' && !isInvolved) {
+      // Hide sensitive information for fixers who haven't applied
+      jobData.createdBy = {
+        name: job.createdBy.name,
+        username: job.createdBy.username,
+        photoURL: job.createdBy.photoURL,
+        rating: job.createdBy.rating,
+        isVerified: job.createdBy.isVerified,
+        // Hide location details
+        location: {
+          city: job.createdBy.location?.city,
+          state: job.createdBy.location?.state
+          // Don't include full address, phone, etc.
+        }
+      };
+      
+      // Hide exact address, only show city/state
+      jobData.location = {
+        city: job.location.city,
+        state: job.location.state
+        // Hide full address, pincode, lat/lng
+      };
+    }
 
     // Calculate skill match for fixers
     let skillMatchPercentage = 0;
@@ -84,17 +127,17 @@ export async function GET(request, { params }) {
     // Add application count
     const applicationCount = job.applications?.length || 0;
 
-    // Prepare job data for response
-    const jobData = {
-      ...job,
+    // Include additional data
+    jobData = {
+      ...jobData,
       hasApplied,
       skillMatchPercentage,
       isLocalJob,
       applicationCount,
+      canMessage: isInvolved, // Only involved parties can message
+      
       // Remove sensitive application data unless user is job creator
-      applications: user._id.toString() === job.createdBy._id.toString() 
-        ? job.applications 
-        : undefined
+      applications: isJobCreator ? job.applications : undefined
     };
 
     return NextResponse.json({
