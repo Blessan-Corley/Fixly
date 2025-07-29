@@ -17,7 +17,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { PhoneAuth, RateLimiter } from '../../../lib/firebase';
+// import { PhoneAuth, RateLimiter } from '../../../lib/firebase';
+import { useFirebase } from '../../../hooks/useFirebase';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -40,10 +41,15 @@ export default function SignInPage() {
   // Phone authentication
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
-  const [phoneAuth] = useState(new PhoneAuth());
+  const { firebase, loading: firebaseLoading } = useFirebase();
+  const [phoneAuth, setPhoneAuth] = useState(null);
   const [otpCountdown, setOtpCountdown] = useState(0);
   const recaptchaRef = useRef(null);
-
+  useEffect(() => {
+  if (firebase) {
+    setPhoneAuth(new firebase.PhoneAuth());
+  }
+  }, [firebase]);
   // Countdown timer for OTP
   useEffect(() => {
     let timer;
@@ -163,9 +169,14 @@ export default function SignInPage() {
   };
 
   const handleSendOTP = async () => {
+    if (!firebase || !phoneAuth) {
+      toast.error('Firebase not loaded yet');
+      return;
+    }
+  
     if (!validateForm()) return;
 
-    const rateCheck = RateLimiter.canSendOTP(formData.phone);
+    const rateCheck = firebase.RateLimiter.canSendOTP(formData.phone);
     if (!rateCheck.allowed) {
       toast.error(rateCheck.message);
       return;
@@ -178,7 +189,7 @@ export default function SignInPage() {
       if (result.success) {
         setOtpSent(true);
         setOtpCountdown(60);
-        RateLimiter.recordOTPAttempt(formData.phone);
+        firebase?.RateLimiter.recordOTPAttempt(formData.phone);
         toast.success('OTP sent successfully');
       } else {
         toast.error(result.error);

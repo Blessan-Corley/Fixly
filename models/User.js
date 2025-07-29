@@ -1,12 +1,19 @@
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
-  // Basic Info
+  // Authentication IDs
   uid: {
     type: String,
     unique: true,
     sparse: true // For Firebase users
   },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true // For Google OAuth users
+  },
+  
+  // Basic Info
   name: {
     type: String,
     required: true,
@@ -30,14 +37,27 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: true,
-    match: /^[+]?[0-9\s\-()]+$/
+    match: /^(\+91)?[6-9]\d{9}$/ // Updated for Indian numbers
   },
   passwordHash: {
-    type: String,
-    required: function() {
-      return !this.uid; // Password required only for non-Firebase users
-    }
+  type: String,
+  required: function() {
+    return this.authMethod === 'email' && !this.uid && !this.googleId;
   },
+  select: false  // ← Add this line - excludes from queries by default
+  },
+  
+  // Authentication
+  authMethod: {
+    type: String,
+    enum: ['email', 'phone', 'google', 'firebase'],
+    required: true,
+    default: 'email'
+  },
+  providers: [{
+    type: String,
+    enum: ['email', 'phone', 'google', 'firebase']
+  }],
   
   // Role & Status
   role: {
@@ -46,6 +66,14 @@ const userSchema = new mongoose.Schema({
     required: true
   },
   isVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  phoneVerified: {
     type: Boolean,
     default: false
   },
@@ -70,13 +98,26 @@ const userSchema = new mongoose.Schema({
   },
   
   // Profile
-  photoURL: {
+  profilePhoto: {
     type: String,
     default: '/default-avatar.png'
   },
+  picture: {
+    type: String,
+    default: null // For Google profile pictures
+  },
   bio: {
     type: String,
-    maxLength: 500
+    maxLength: 500,
+    default: ''
+  },
+  website: {
+    type: String,
+    default: ''
+  },
+  experience: {
+    type: String,
+    default: ''
   },
   
   // Fixer-specific fields
@@ -88,11 +129,177 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  workRadius: {
+  serviceRadius: {
     type: Number,
     default: 10, // kilometers
     min: 1,
-    max: 50
+    max: 100
+  },
+  hourlyRate: {
+    type: Number,
+    default: null
+  },
+  minimumJobValue: {
+    type: Number,
+    default: null
+  },
+  maximumJobValue: {
+    type: Number,
+    default: null
+  },
+  responseTime: {
+    type: String,
+    default: '1' // hours
+  },
+  workingHours: {
+    start: {
+      type: String,
+      default: '09:00'
+    },
+    end: {
+      type: String,
+      default: '18:00'
+    }
+  },
+  workingDays: {
+    type: [String],
+    default: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']
+  },
+  autoApply: {
+    type: Boolean,
+    default: false
+  },
+  emergencyAvailable: {
+    type: Boolean,
+    default: false
+  },
+  
+  // Portfolio for fixers
+  portfolio: [{
+    title: String,
+    description: String,
+    images: [String],
+    completedAt: Date,
+    category: String,
+    url: String // For portfolio URLs
+  }],
+  
+  // Privacy settings
+  privacy: {
+    profileVisibility: {
+      type: String,
+      enum: ['public', 'verified', 'private'],
+      default: 'public'
+    },
+    showPhone: {
+      type: Boolean,
+      default: true
+    },
+    showEmail: {
+      type: Boolean,
+      default: false
+    },
+    showLocation: {
+      type: Boolean,
+      default: true
+    },
+    showRating: {
+      type: Boolean,
+      default: true
+    },
+    allowReviews: {
+      type: Boolean,
+      default: true
+    },
+    allowMessages: {
+      type: Boolean,
+      default: true
+    },
+    dataSharingConsent: {
+      type: Boolean,
+      default: false
+    }
+  },
+  
+  // App preferences
+  preferences: {
+    // App settings
+    theme: {
+      type: String,
+      enum: ['light', 'dark', 'auto'],
+      default: 'light'
+    },
+    language: {
+      type: String,
+      default: 'en'
+    },
+    currency: {
+      type: String,
+      default: 'INR'
+    },
+    timezone: {
+      type: String,
+      default: 'Asia/Kolkata'
+    },
+    mapProvider: {
+      type: String,
+      default: 'google'
+    },
+    defaultView: {
+      type: String,
+      enum: ['list', 'grid'],
+      default: 'list'
+    },
+    
+    // Notification preferences
+    emailNotifications: {
+      type: Boolean,
+      default: true
+    },
+    smsNotifications: {
+      type: Boolean,
+      default: false
+    },
+    pushNotifications: {
+      type: Boolean,
+      default: true
+    },
+    jobApplications: {
+      type: Boolean,
+      default: true
+    },
+    jobUpdates: {
+      type: Boolean,
+      default: true
+    },
+    paymentUpdates: {
+      type: Boolean,
+      default: true
+    },
+    marketing: {
+      type: Boolean,
+      default: false
+    },
+    newsletter: {
+      type: Boolean,
+      default: true
+    },
+    weeklyDigest: {
+      type: Boolean,
+      default: true
+    },
+    instantAlerts: {
+      type: Boolean,
+      default: false
+    },
+    jobAlerts: {
+      type: Boolean,
+      default: true
+    },
+    marketingEmails: {
+      type: Boolean,
+      default: false
+    }
   },
   
   // Subscription & Payments
@@ -155,7 +362,7 @@ const userSchema = new mongoose.Schema({
   notifications: [{
     type: {
       type: String,
-      enum: ['job_applied', 'job_accepted', 'job_completed', 'payment_due', 'review_received', 'dispute_opened']
+      enum: ['job_applied', 'job_accepted', 'job_completed', 'payment_due', 'review_received', 'dispute_opened', 'settings_updated', 'privacy_updated', 'welcome']
     },
     title: String,
     message: String,
@@ -170,48 +377,27 @@ const userSchema = new mongoose.Schema({
     }
   }],
   
-  // Portfolio for fixers
-  portfolio: [{
-    title: String,
-    description: String,
-    images: [String],
-    completedAt: Date,
-    category: String
-  }],
-  
-  // Preferences
-  preferences: {
-    emailNotifications: {
-      type: Boolean,
-      default: true
-    },
-    smsNotifications: {
-      type: Boolean,
-      default: true
-    },
-    jobAlerts: {
-      type: Boolean,
-      default: true
-    },
-    marketingEmails: {
-      type: Boolean,
-      default: false
-    }
+  // Account status
+  deletedAt: Date,
+  isActive: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true
 });
 
-// Indexes for better query performance
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
-userSchema.index({ uid: 1 });
+// Updated indexes for better query performance
 userSchema.index({ role: 1 });
 userSchema.index({ 'location.city': 1, role: 1 });
 userSchema.index({ skills: 1, role: 1 });
 userSchema.index({ availableNow: 1, role: 1 });
 userSchema.index({ banned: 1 });
 userSchema.index({ 'plan.type': 1, 'plan.status': 1 });
+userSchema.index({ phone: 1 });
+userSchema.index({ isActive: 1, deletedAt: 1 });
+userSchema.index({ authMethod: 1 }); // New
+userSchema.index({ providers: 1 }); // New
 
 // Virtual for full name
 userSchema.virtual('fullName').get(function() {
@@ -260,6 +446,21 @@ userSchema.methods.updateRating = function(newRating) {
   return this.save();
 };
 
+// NEW: Method to link Google account
+userSchema.methods.linkGoogleAccount = function(googleId, picture) {
+  this.googleId = googleId;
+  this.picture = picture || this.profilePhoto;
+  this.emailVerified = true;
+  this.isVerified = true;
+  this.authMethod = 'google';
+  
+  if (!this.providers.includes('google')) {
+    this.providers.push('google');
+  }
+  
+  return this.save();
+};
+
 // Method to update badges based on performance
 userSchema.methods.updateBadges = function() {
   const badges = [];
@@ -296,6 +497,8 @@ userSchema.statics.findNearbyFixers = function(city, skills = [], radius = 10) {
     role: 'fixer',
     banned: false,
     availableNow: true,
+    isActive: true,
+    deletedAt: { $exists: false },
     'location.city': new RegExp(city, 'i')
   };
   
@@ -304,6 +507,23 @@ userSchema.statics.findNearbyFixers = function(city, skills = [], radius = 10) {
   }
   
   return this.find(query).sort({ 'rating.average': -1, jobsCompleted: -1 });
+};
+
+// NEW: Static method to find by Google ID
+userSchema.statics.findByGoogleId = function(googleId) {
+  return this.findOne({ googleId });
+};
+
+// NEW: Static method to find by email or Google ID
+userSchema.statics.findByEmailOrGoogleId = function(email, googleId) {
+  const query = { email: email.toLowerCase() };
+  if (googleId) {
+    query.$or = [
+      { email: email.toLowerCase() },
+      { googleId }
+    ];
+  }
+  return this.findOne(query);
 };
 
 // Pre-save middleware

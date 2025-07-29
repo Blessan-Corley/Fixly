@@ -16,21 +16,56 @@ module.exports = {
     },
     extend: {
       colors: {
-        // Fixly Brand Colors
+        // Professional Soft Color Palette
         fixly: {
-          bg: '#F1F2EE',      // Background (White Smoke)
-          text: '#374650',     // Text/Card/Header (Outer Space)
-          accent: '#DCF763',   // Accent/Highlights (Mindaro)
-          'accent-dark': '#c4d951',
-          'text-light': '#5a6c75',
-          'text-muted': '#8b9ba3',
-          'border': '#e1e3e0',
-          'card': '#ffffff',
-          'success': '#22c55e',
-          'warning': '#f59e0b',
-          'error': '#ef4444',
-          'info': '#3b82f6',
+          // Backgrounds - Warm, soft neutrals
+          bg: '#FEFEFE',           // Softest white with warmth
+          'bg-secondary': '#F8F9FA', // Very light warm gray
+          'bg-muted': '#F1F3F4',   // Light gray for sections
+          
+          // Text colors - Professional and readable
+          text: '#1F2937',         // Rich dark gray (not black)
+          'text-secondary': '#4B5563', // Medium gray
+          'text-muted': '#6B7280', // Light gray for subtle text
+          'text-light': '#9CA3AF', // Very light for placeholders
+          
+          // Primary accent - Muted teal/blue (professional yet friendly)
+          primary: '#0F766E',      // Deep teal
+          'primary-light': '#14B8A6', // Medium teal
+          'primary-soft': '#5EEAD4',  // Light teal
+          'primary-bg': '#F0FDFA',    // Very light teal background
+          
+          // Secondary accent - Warm gray
+          secondary: '#64748B',    // Professional gray
+          'secondary-light': '#94A3B8',
+          'secondary-soft': '#CBD5E1',
+          'secondary-bg': '#F8FAFC',
+          
+          // Cards and surfaces
+          card: '#FFFFFF',         // Pure white for cards
+          'card-hover': '#FAFBFC', // Slight gray on hover
+          border: '#E5E7EB',       // Soft border gray
+          'border-light': '#F3F4F6', // Very light borders
+          
+          // Status colors - Muted and professional
+          success: '#059669',      // Forest green
+          'success-light': '#10B981',
+          'success-bg': '#ECFDF5',
+          
+          warning: '#D97706',      // Warm orange
+          'warning-light': '#F59E0B',
+          'warning-bg': '#FFFBEB',
+          
+          error: '#DC2626',        // Muted red
+          'error-light': '#EF4444',
+          'error-bg': '#FEF2F2',
+          
+          info: '#2563EB',         // Professional blue
+          'info-light': '#3B82F6',
+          'info-bg': '#EFF6FF',
         },
+        
+        // Keep existing shadcn colors for compatibility
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -113,9 +148,12 @@ module.exports = {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        'fixly': '0 4px 6px -1px rgba(55, 70, 80, 0.1), 0 2px 4px -1px rgba(55, 70, 80, 0.06)',
-        'fixly-lg': '0 10px 15px -3px rgba(55, 70, 80, 0.1), 0 4px 6px -2px rgba(55, 70, 80, 0.05)',
-        'fixly-hover': '0 8px 25px -5px rgba(55, 70, 80, 0.15), 0 8px 10px -6px rgba(55, 70, 80, 0.1)',
+        // Softer, more professional shadows
+        'fixly': '0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px 0 rgba(0, 0, 0, 0.04)',
+        'fixly-md': '0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04)',
+        'fixly-lg': '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04)',
+        'fixly-xl': '0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 10px 10px -5px rgba(0, 0, 0, 0.02)',
+        'fixly-hover': '0 8px 25px -8px rgba(15, 118, 110, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.04)',
       },
     },
   },

@@ -1,11 +1,13 @@
 // app/api/dashboard/recent-jobs/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../lib/auth';
+import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../lib/db';
 import Job from '../../../../models/Job';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
+
+// app/api/dashboard/recent-jobs/route.js - Fix to match stats API pattern
 
 export async function GET(request) {
   try {
@@ -28,6 +30,7 @@ export async function GET(request) {
 
     await connectDB();
 
+    // ✅ CRITICAL FIX: Get user from database (same as stats API)
     const user = await User.findById(session.user.id);
     if (!user) {
       return NextResponse.json(
@@ -36,9 +39,21 @@ export async function GET(request) {
       );
     }
 
+    // ✅ REMOVED: Don't get role from URL parameters
+    // const role = searchParams.get('role') || user.role;
+    // ✅ USE: Get role from database user
+    const role = user.role;
+
+    // ✅ VALIDATE: Ensure role is valid
+    if (!role || !['fixer', 'hirer', 'admin'].includes(role)) {
+      return NextResponse.json(
+        { message: 'Invalid user role' },
+        { status: 400 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit')) || 5, 20);
-    const role = searchParams.get('role') || user.role;
 
     let jobs = [];
 
@@ -103,6 +118,7 @@ export async function GET(request) {
     }
 
     return NextResponse.json({
+      success: true,  // ✅ ADD: Success flag
       jobs,
       total: jobs.length,
       role

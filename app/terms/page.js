@@ -297,7 +297,7 @@ export default function TermsConditionsPage() {
             Questions About These Terms?
           </h2>
           <p className="text-fixly-text-light mb-4">
-            If you have any questions about these Terms & Conditions, please contact us:
+            If you have any questions about these Terms & Conditions, please contact us: blessancorley@gmail.com  , call : +91 9976768211
           </p>
           <div className="flex flex-col md:flex-row gap-4">
             <a 

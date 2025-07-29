@@ -18,7 +18,8 @@ import {
   BarChart3,
   Loader,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Search
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';

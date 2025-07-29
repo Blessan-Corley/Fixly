@@ -39,29 +39,33 @@ export default function DashboardPage() {
   }, [user]);
 
   const fetchDashboardData = async () => {
-    try {
-      setLoadingStats(true);
-      
-      // Fetch dashboard stats based on user role
-      const statsResponse = await fetch(`/api/dashboard/stats?role=${user.role}`);
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setStats(statsData);
-      }
-
-      // Fetch recent jobs
-      const jobsResponse = await fetch(`/api/dashboard/recent-jobs?role=${user.role}`);
-      if (jobsResponse.ok) {
-        const jobsData = await jobsResponse.json();
-        setRecentJobs(jobsData.jobs || []);
-      }
-
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoadingStats(false);
+  try {
+    setLoadingStats(true);
+    
+    // ✅ Fetch dashboard stats - API gets role from session/database
+    const statsResponse = await fetch('/api/dashboard/stats');
+    if (statsResponse.ok) {
+      const statsData = await statsResponse.json();
+      setStats(statsData);
+    } else {
+      console.error('Stats API error:', statsResponse.status);
     }
-  };
+
+    // ✅ Fetch recent jobs - API gets role from session/database  
+    const jobsResponse = await fetch('/api/dashboard/recent-jobs');
+    if (jobsResponse.ok) {
+      const jobsData = await jobsResponse.json();
+      setRecentJobs(jobsData.jobs || []);
+    } else {
+      console.error('Jobs API error:', jobsResponse.status);
+    }
+
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+  } finally {
+    setLoadingStats(false);
+  }
+};
 
   useEffect(() => {
     if (user?.role) {

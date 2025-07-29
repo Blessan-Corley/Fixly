@@ -37,7 +37,7 @@ export default function ProfilePage() {
     location: null,
     skills: [],
     availableNow: true,
-    workRadius: 10,
+    serviceRadius: 10,
     preferences: {
       emailNotifications: true,
       smsNotifications: true,
@@ -60,7 +60,7 @@ export default function ProfilePage() {
         location: user.location || null,
         skills: user.skills || [],
         availableNow: user.availableNow ?? true,
-        workRadius: user.workRadius || 10,
+        serviceRadius: user.serviceRadius || 10,
         preferences: {
           emailNotifications: user.preferences?.emailNotifications ?? true,
           smsNotifications: user.preferences?.smsNotifications ?? true,
@@ -232,7 +232,7 @@ export default function ProfilePage() {
             <div className="text-center">
               <div className="relative inline-block">
                 <img
-                  src={user.photoURL || '/default-avatar.png'}
+                  src={user.profilePhoto || '/default-avatar.png'}
                   alt={user.name}
                   className="h-24 w-24 rounded-full object-cover mx-auto"
                 />
@@ -546,13 +546,13 @@ export default function ProfilePage() {
                         type="range"
                         min="1"
                         max="50"
-                        value={formData.workRadius}
-                        onChange={(e) => handleInputChange('workRadius', parseInt(e.target.value))}
+                        value={formData.serviceRadius}
+                        onChange={(e) => handleInputChange('serviceRadius', parseInt(e.target.value))}
                         className="w-full"
                       />
                       <div className="flex justify-between text-sm text-fixly-text-muted">
                         <span>1 km</span>
-                        <span>{formData.workRadius} km</span>
+                        <span>{formData.serviceRadius} km</span>
                         <span>50 km</span>
                       </div>
                     </div>
@@ -576,7 +576,7 @@ export default function ProfilePage() {
                     <div>
                       <span className="font-medium text-fixly-text">Availability</span>
                       <p className="text-sm text-fixly-text-muted">
-                        Work radius: {user.workRadius || 10} km
+                        Work radius: {user.serviceRadius || 10} km
                       </p>
                     </div>
                     <div className="flex items-center">
@@ -673,7 +673,7 @@ export default function ProfilePage() {
                     location: user.location || null,
                     skills: user.skills || [],
                     availableNow: user.availableNow ?? true,
-                    workRadius: user.workRadius || 10,
+                    serviceRadius: user.serviceRadius || 10,
                     preferences: {
                       emailNotifications: user.preferences?.emailNotifications ?? true,
                       smsNotifications: user.preferences?.smsNotifications ?? true,

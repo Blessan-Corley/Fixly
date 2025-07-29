@@ -292,55 +292,6 @@ const jobSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
-   completion: {
-    markedDoneBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    markedDoneAt: Date,
-    completionNotes: String,
-    beforeImages: [String],
-    afterImages: [String],
-    confirmedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    confirmedAt: Date,
-    
-    // ADD THESE NEW REVIEW FIELDS:
-    hirerReview: {
-      rating: {
-        type: Number,
-        min: 1,
-        max: 5
-      },
-      review: {
-        type: String,
-        maxLength: 1000
-      },
-      reviewedAt: Date,
-      reviewedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-      }
-    },
-    fixerReview: {
-      rating: {
-        type: Number,
-        min: 1,
-        max: 5
-      },
-      review: {
-        type: String,
-        maxLength: 1000
-      },
-      reviewedAt: Date,
-      reviewedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-      }
-    }
-  },
   // Dispute
   dispute: {
     raised: {

@@ -38,6 +38,10 @@ export default function HomePage() {
     router.push(`/auth/signup?role=${role}`);
   };
 
+  const handleFooterLink = (path) => {
+    router.push(path);
+  };
+
   const stats = [
     { label: 'Active Fixers', value: '10,000+', icon: Users },
     { label: 'Jobs Completed', value: '50,000+', icon: CheckCircle },
@@ -330,30 +334,114 @@ export default function HomePage() {
             <div>
               <h3 className="font-semibold mb-4">For Customers</h3>
               <ul className="space-y-2 text-fixly-bg/80">
-                <li>Post a Job</li>
-                <li>Find Services</li>
-                <li>How It Works</li>
-                <li>Safety</li>
+                <li>
+                  <button 
+                    onClick={() => handleRoleSelect('hirer')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Post a Job
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/services')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Find Services
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/how-it-works')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    How It Works
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/safety')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Safety
+                  </button>
+                </li>
               </ul>
             </div>
             
             <div>
               <h3 className="font-semibold mb-4">For Fixers</h3>
               <ul className="space-y-2 text-fixly-bg/80">
-                <li>Become a Fixer</li>
-                <li>Pricing</li>
-                <li>Resources</li>
-                <li>Support</li>
+                <li>
+                  <button 
+                    onClick={() => handleRoleSelect('fixer')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Become a Fixer
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/pricing')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Pricing
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/resources')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Resources
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/support')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Support
+                  </button>
+                </li>
               </ul>
             </div>
             
             <div>
               <h3 className="font-semibold mb-4">Company</h3>
               <ul className="space-y-2 text-fixly-bg/80">
-                <li>About Us</li>
-                <li>Contact</li>
-                <li>Privacy Policy</li>
-                <li>Terms of Service</li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/about')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    About Us
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/contact')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Contact
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/privacy')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Privacy Policy
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => handleFooterLink('/terms')}
+                    className="hover:text-fixly-accent transition-colors"
+                  >
+                    Terms of Service
+                  </button>
+                </li>
               </ul>
             </div>
           </div>

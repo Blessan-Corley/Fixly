@@ -1,4 +1,3 @@
-// app/dashboard/jobs/page.js:
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -134,228 +133,6 @@ function JobsContent() {
   if (loading && jobs.length === 0) {
     return (
       <div className="p-6 lg:p-8">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-fixly-text mb-2">
-              My Jobs
-            </h1>
-            <p className="text-fixly-text-light">
-              Manage your job postings and view applications
-            </p>
-      );
-}
-          
-          <div className="flex items-center space-x-4 mt-4 lg:mt-0">
-            <button
-              onClick={() => router.push('/dashboard/post-job')}
-              className="btn-primary flex items-center"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Post New Job
-            </button>
-          </div>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="card mb-8">
-          <div className="flex flex-col lg:flex-row gap-4 mb-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                <input
-                  type="text"
-                  value={filters.search}
-                  onChange={(e) => handleFilterChange('search', e.target.value)}
-                  placeholder="Search jobs by title or description..."
-                  className="input-field pl-10"
-                />
-              </div>
-            </div>
-            
-            <div className="flex gap-4">
-              <select
-                value={filters.status}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
-                className="select-field"
-              >
-                <option value="all">All Status</option>
-                <option value="open">Open</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className="btn-secondary flex items-center lg:w-auto"
-              >
-                <Filter className="h-4 w-4 mr-2" />
-                Filters
-              </button>
-            </div>
-          </div>
-
-          <div className="text-sm text-fixly-text-muted">
-            {pagination.total} jobs found
-          </div>
-        </div>
-
-        {/* Jobs List */}
-        {jobs.length === 0 ? (
-          <div className="text-center py-12">
-            <Briefcase className="h-12 w-12 text-fixly-text-muted mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-fixly-text mb-2">
-              No jobs posted yet
-            </h3>
-            <p className="text-fixly-text-muted mb-4">
-              Post your first job to find skilled professionals
-            </p>
-            <button
-              onClick={() => router.push('/dashboard/post-job')}
-              className="btn-primary"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Post Your First Job
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {jobs.map((job, index) => (
-              <motion.div
-                key={job._id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="card card-hover"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className={`text-xs px-2 py-1 rounded-full border ${getStatusColor(job.status)}`}>
-                        {job.status.replace('_', ' ').toUpperCase()}
-                      </span>
-                      {job.featured && (
-                        <span className="bg-fixly-accent text-fixly-text text-xs px-2 py-1 rounded-full font-medium">
-                          Featured
-                        </span>
-                      )}
-                    </div>
-                    
-                    <h3 
-                      className="text-xl font-semibold text-fixly-text mb-2 hover:text-fixly-accent cursor-pointer"
-                      onClick={() => router.push(`/dashboard/jobs/${job._id}`)}
-                    >
-                      {job.title}
-                    </h3>
-                    
-                    <p className="text-fixly-text-muted line-clamp-2 mb-3">
-                      {job.description}
-                    </p>
-
-                    {/* Job Details */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div className="flex items-center text-fixly-text-muted">
-                        <DollarSign className="h-4 w-4 mr-1" />
-                        {job.budget.type === 'negotiable' 
-                          ? 'Negotiable' 
-                          : `₹${job.budget.amount?.toLocaleString()}`
-                        }
-                      </div>
-                      
-                      <div className="flex items-center text-fixly-text-muted">
-                        <MapPin className="h-4 w-4 mr-1" />
-                        {job.location.city}
-                      </div>
-                      
-                      <div className="flex items-center text-fixly-text-muted">
-                        <Clock className="h-4 w-4 mr-1" />
-                        {getTimeRemaining(job.deadline)}
-                      </div>
-                      
-                      <div className="flex items-center text-fixly-text-muted">
-                        <Users className="h-4 w-4 mr-1" />
-                        {job.applicationCount} applications
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions Menu */}
-                  <div className="relative">
-                    <button className="p-2 hover:bg-fixly-accent/10 rounded-lg">
-                      <MoreVertical className="h-4 w-4 text-fixly-text-muted" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Skills */}
-                <div className="flex flex-wrap gap-1 mb-4">
-                  {job.skillsRequired.slice(0, 3).map((skill, index) => (
-                    <span key={index} className="skill-chip text-xs">
-                      {skill}
-                    </span>
-                  ))}
-                  {job.skillsRequired.length > 3 && (
-                    <span className="text-xs text-fixly-text-muted">
-                      +{job.skillsRequired.length - 3} more
-                    </span>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between pt-4 border-t border-fixly-border">
-                  <div className="flex items-center space-x-4 text-sm text-fixly-text-muted">
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-1" />
-                      Posted {new Date(job.createdAt).toLocaleDateString()}
-                    </div>
-                    <div className="flex items-center">
-                      <Eye className="h-4 w-4 mr-1" />
-                      {job.views || 0} views
-                    </div>
-                  </div>
-
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => router.push(`/dashboard/jobs/${job._id}`)}
-                      className="btn-ghost text-sm"
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      View
-                    </button>
-                    
-                    {job.status === 'open' && (
-                      <button
-                        onClick={() => router.push(`/dashboard/jobs/${job._id}/edit`)}
-                        className="btn-secondary text-sm"
-                      >
-                        <Edit className="h-4 w-4 mr-1" />
-                        Edit
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-
-        {/* Load More Button */}
-        {pagination.hasMore && jobs.length > 0 && (
-          <div className="text-center mt-8">
-            <button
-              onClick={loadMore}
-              disabled={loading}
-              className="btn-primary"
-            >
-              {loading ? (
-                <Loader className="animate-spin h-4 w-4 mr-2" />
-              ) : null}
-              Load More Jobs
-            </button>
-          </div>
-        )}
-      </div>
         <div className="flex items-center justify-center min-h-[400px]">
           <Loader className="animate-spin h-8 w-8 text-fixly-accent" />
         </div>
@@ -364,4 +141,227 @@ function JobsContent() {
   }
 
   return (
-    <div className="p-6 lg:p-8"></div>
+    <div className="p-6 lg:p-8">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-fixly-text mb-2">
+            My Jobs
+          </h1>
+          <p className="text-fixly-text-light">
+            Manage your job postings and view applications
+          </p>
+        </div>
+        
+        <div className="flex items-center space-x-4 mt-4 lg:mt-0">
+          <button
+            onClick={() => router.push('/dashboard/post-job')}
+            className="btn-primary flex items-center"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Post New Job
+          </button>
+        </div>
+      </div>
+
+      {/* Search and Filters */}
+      <div className="card mb-8">
+        <div className="flex flex-col lg:flex-row gap-4 mb-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+              <input
+                type="text"
+                value={filters.search}
+                onChange={(e) => handleFilterChange('search', e.target.value)}
+                placeholder="Search jobs by title or description..."
+                className="input-field pl-10"
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-4">
+            <select
+              value={filters.status}
+              onChange={(e) => handleFilterChange('status', e.target.value)}
+              className="select-field"
+            >
+              <option value="all">All Status</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="btn-secondary flex items-center lg:w-auto"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+            </button>
+          </div>
+        </div>
+
+        <div className="text-sm text-fixly-text-muted">
+          {pagination.total} jobs found
+        </div>
+      </div>
+
+      {/* Jobs List */}
+      {jobs.length === 0 ? (
+        <div className="text-center py-12">
+          <Briefcase className="h-12 w-12 text-fixly-text-muted mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-fixly-text mb-2">
+            No jobs posted yet
+          </h3>
+          <p className="text-fixly-text-muted mb-4">
+            Post your first job to find skilled professionals
+          </p>
+          <button
+            onClick={() => router.push('/dashboard/post-job')}
+            className="btn-primary"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Post Your First Job
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {jobs.map((job, index) => (
+            <motion.div
+              key={job._id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="card card-hover"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className={`text-xs px-2 py-1 rounded-full border ${getStatusColor(job.status)}`}>
+                      {job.status.replace('_', ' ').toUpperCase()}
+                    </span>
+                    {job.featured && (
+                      <span className="bg-fixly-accent text-fixly-text text-xs px-2 py-1 rounded-full font-medium">
+                        Featured
+                      </span>
+                    )}
+                  </div>
+                  
+                  <h3 
+                    className="text-xl font-semibold text-fixly-text mb-2 hover:text-fixly-accent cursor-pointer"
+                    onClick={() => router.push(`/dashboard/jobs/${job._id}`)}
+                  >
+                    {job.title}
+                  </h3>
+                  
+                  <p className="text-fixly-text-muted line-clamp-2 mb-3">
+                    {job.description}
+                  </p>
+
+                  {/* Job Details */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="flex items-center text-fixly-text-muted">
+                      <DollarSign className="h-4 w-4 mr-1" />
+                      {job.budget.type === 'negotiable' 
+                        ? 'Negotiable' 
+                        : `₹${job.budget.amount?.toLocaleString()}`
+                      }
+                    </div>
+                    
+                    <div className="flex items-center text-fixly-text-muted">
+                      <MapPin className="h-4 w-4 mr-1" />
+                      {job.location.city}
+                    </div>
+                    
+                    <div className="flex items-center text-fixly-text-muted">
+                      <Clock className="h-4 w-4 mr-1" />
+                      {getTimeRemaining(job.deadline)}
+                    </div>
+                    
+                    <div className="flex items-center text-fixly-text-muted">
+                      <Users className="h-4 w-4 mr-1" />
+                      {job.applicationCount} applications
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions Menu */}
+                <div className="relative">
+                  <button className="p-2 hover:bg-fixly-accent/10 rounded-lg">
+                    <MoreVertical className="h-4 w-4 text-fixly-text-muted" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div className="flex flex-wrap gap-1 mb-4">
+                {job.skillsRequired.slice(0, 3).map((skill, index) => (
+                  <span key={index} className="skill-chip text-xs">
+                    {skill}
+                  </span>
+                ))}
+                {job.skillsRequired.length > 3 && (
+                  <span className="text-xs text-fixly-text-muted">
+                    +{job.skillsRequired.length - 3} more
+                  </span>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between pt-4 border-t border-fixly-border">
+                <div className="flex items-center space-x-4 text-sm text-fixly-text-muted">
+                  <div className="flex items-center">
+                    <Calendar className="h-4 w-4 mr-1" />
+                    Posted {new Date(job.createdAt).toLocaleDateString()}
+                  </div>
+                  <div className="flex items-center">
+                    <Eye className="h-4 w-4 mr-1" />
+                    {job.views || 0} views
+                  </div>
+                </div>
+
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => router.push(`/dashboard/jobs/${job._id}`)}
+                    className="btn-ghost text-sm"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    View
+                  </button>
+                  
+                  {job.status === 'open' && (
+                    <button
+                      onClick={() => router.push(`/dashboard/jobs/${job._id}/edit`)}
+                      className="btn-secondary text-sm"
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </button>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {/* Load More Button */}
+      {pagination.hasMore && jobs.length > 0 && (
+        <div className="text-center mt-8">
+          <button
+            onClick={loadMore}
+            disabled={loading}
+            className="btn-primary"
+          >
+            {loading ? (
+              <Loader className="animate-spin h-4 w-4 mr-2" />
+            ) : null}
+            Load More Jobs
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

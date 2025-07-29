@@ -3,19 +3,42 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import {
-  Upload,
+import { 
+  ChevronLeft,
+  ChevronRight,      // ← Add this
+  ChevronDown,
+  ChevronUp,
+  CheckCircle,
+  Plus,
   X,
+  Trash2,
+  Edit,
+  Eye,
+  EyeOff,
   MapPin,
   Clock,
   DollarSign,
   Calendar,
+  Camera,
+  Upload,
+  Image as ImageIcon,
+  FileText,
   AlertCircle,
-  CheckCircle,
-  Loader,
-  Plus,
-  Minus,
-  Search
+  Check,
+  Star,
+  User,
+  Users,
+  Search,
+  Filter,
+  Save,
+  Share,
+  Copy,
+  ExternalLink,
+  ArrowLeft,
+  ArrowRight,
+  Phone,
+  Mail,
+  Loader
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
@@ -229,10 +252,11 @@ function PostJobContent() {
 
       const data = await response.json();
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         toast.success('Job posted successfully!');
         router.push(`/dashboard/jobs/${data.job._id}`);
       } else {
+        console.error('Error posting job:', data);
         toast.error(data.message || 'Failed to post job');
       }
     } catch (error) {

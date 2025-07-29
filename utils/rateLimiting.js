@@ -1,5 +1,5 @@
 // utils/rateLimiting.js
-import { headers } from 'next/headers';
+// Remove the import of headers from next/headers
 
 // In-memory store for rate limiting (in production, use Redis)
 const requestStore = new Map();
@@ -16,17 +16,19 @@ setInterval(() => {
 
 export async function rateLimit(request, identifier, maxRequests = 100, windowMs = 60 * 1000) {
   try {
-    // Get client IP
-    let clientIP;
+    // Get client IP from request object
+    let clientIP = 'unknown';
     
-    if (request.ip) {
-      clientIP = request.ip;
-    } else if (request.headers) {
-      const forwardedFor = request.headers.get('x-forwarded-for');
-      const realIP = request.headers.get('x-real-ip');
-      clientIP = forwardedFor?.split(',')[0] || realIP || 'unknown';
-    } else {
-      clientIP = 'unknown';
+    if (request) {
+      // Try different ways to get IP from the request
+      if (request.ip) {
+        clientIP = request.ip;
+      } else if (request.headers) {
+        // Use request.headers directly (not headers() function)
+        const forwardedFor = request.headers.get('x-forwarded-for');
+        const realIP = request.headers.get('x-real-ip');
+        clientIP = forwardedFor?.split(',')[0] || realIP || 'unknown';
+      }
     }
 
     const key = `${identifier}_${clientIP}`;

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 // Line 3 - Fix this path:
-import { authOptions } from '../../../lib/auth';
-import connectDB from '../../../lib/db';
-import Job from '../../../models/Job';
-import User from '../../../models/User';
-import { rateLimit } from '../../../utils/rateLimiting';
+// NEW - clean @ imports
+import { authOptions } from '@/lib/auth';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
+import { rateLimit } from '@/utils/rateLimiting';
 // just checking and coding to improve thanks you all its an honur to with you all !! 
 export async function GET(request) {
   try {

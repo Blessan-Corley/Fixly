@@ -302,7 +302,7 @@ function AdminPanelContent() {
                       <div key={user._id} className="flex items-center justify-between p-3 bg-fixly-bg rounded-lg">
                         <div className="flex items-center">
                           <img
-                            src={user.photoURL || '/default-avatar.png'}
+                            src={user.profilePhoto || '/default-avatar.png'}
                             alt={user.name}
                             className="h-8 w-8 rounded-full object-cover mr-3"
                           />
@@ -399,7 +399,7 @@ function AdminPanelContent() {
                         <td className="py-3 px-4">
                           <div className="flex items-center">
                             <img
-                              src={user.photoURL || '/default-avatar.png'}
+                              src={user.profilePhoto || '/default-avatar.png'}
                               alt={user.name}
                               className="h-8 w-8 rounded-full object-cover mr-3"
                             />

@@ -1,7 +1,7 @@
-// app/providers.js
+// app/providers.js - OPTIMIZED VERSION
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { SessionProvider, useSession } from 'next-auth/react';
 import { Toaster } from 'sonner';
 
@@ -22,52 +22,151 @@ function AppProviderContent({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
+  const [error, setError] = useState(null);
 
-  // Fetch user data when session changes
-  useEffect(() => {
-    async function fetchUser() {
-      if (session?.user?.id) {
-        try {
-          const response = await fetch('/api/user/profile');
-          if (response.ok) {
-            const userData = await response.json();
-            setUser(userData);
-          }
-        } catch (error) {
-          console.error('Error fetching user:', error);
-        }
+  // ✅ CRITICAL FIX: Use refs to prevent excessive API calls
+  const lastSessionId = useRef(null);
+  const lastUserId = useRef(null);
+  const userFetchController = useRef(null);
+  const notificationsFetchController = useRef(null);
+
+  // ✅ OPTIMIZATION: Debounced fetch functions
+  const fetchUserProfile = useCallback(async (sessionUserId) => {
+    // Cancel previous request
+    if (userFetchController.current) {
+      userFetchController.current.abort();
+    }
+
+    // Create new abort controller
+    userFetchController.current = new AbortController();
+
+    try {
+      console.log('📡 Fetching user profile for:', sessionUserId);
+      
+      const response = await fetch('/api/user/profile', {
+        signal: userFetchController.current.signal
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        console.log('✅ User profile fetched:', userData.email);
+        setUser(userData);
+        setError(null);
+        
+        // Update last user ID for notifications
+        lastUserId.current = userData._id;
       } else {
+        console.error('❌ Failed to fetch user profile:', response.status);
+        setUser(null);
+        setError('Failed to load user profile');
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('❌ User fetch error:', error);
+        setError('Failed to load user profile');
         setUser(null);
       }
-      setLoading(false);
+    }
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    // Only fetch if we have a user
+    if (!lastUserId.current) return;
+
+    // Cancel previous request
+    if (notificationsFetchController.current) {
+      notificationsFetchController.current.abort();
     }
 
-    if (status !== 'loading') {
-      fetchUser();
-    }
-  }, [session, status]);
+    // Create new abort controller
+    notificationsFetchController.current = new AbortController();
 
-  // Fetch notifications for authenticated users
-  useEffect(() => {
-    async function fetchNotifications() {
-      if (user) {
-        try {
-          const response = await fetch('/api/user/notifications');
-          if (response.ok) {
-            const data = await response.json();
-            setNotifications(data.notifications || []);
-          }
-        } catch (error) {
-          console.error('Error fetching notifications:', error);
-        }
+    try {
+      console.log('🔔 Fetching notifications...');
+      
+      const response = await fetch('/api/user/notifications', {
+        signal: notificationsFetchController.current.signal
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data.notifications || []);
+        console.log('✅ Notifications fetched:', data.notifications?.length || 0);
+      } else {
+        console.error('❌ Failed to fetch notifications:', response.status);
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('❌ Notifications fetch error:', error);
       }
     }
+  }, []);
 
-    fetchNotifications();
-  }, [user]);
+  // ✅ CRITICAL FIX: Only fetch user when session ACTUALLY changes
+  useEffect(() => {
+    const handleSessionChange = async () => {
+      if (status === 'loading') {
+        return; // Still loading, don't do anything
+      }
+
+      // ✅ CRITICAL: Check if session actually changed
+      const currentSessionId = session?.user?.id;
+      
+      if (lastSessionId.current === currentSessionId) {
+        console.log('⏭️ Session ID unchanged, skipping user fetch');
+        setLoading(false);
+        return; // No change, don't refetch
+      }
+
+      console.log('🔄 Session changed:', {
+        from: lastSessionId.current,
+        to: currentSessionId
+      });
+
+      // Update the ref BEFORE making API call
+      lastSessionId.current = currentSessionId;
+
+      if (currentSessionId) {
+        await fetchUserProfile(currentSessionId);
+      } else {
+        setUser(null);
+        setNotifications([]);
+        lastUserId.current = null;
+      }
+
+      setLoading(false);
+    };
+
+    handleSessionChange();
+  }, [session?.user?.id, status, fetchUserProfile]); // ✅ Only depend on user ID, not entire session
+
+  // ✅ OPTIMIZATION: Fetch notifications only when user ID changes (not on every user update)
+  useEffect(() => {
+    if (user && user._id && lastUserId.current !== user._id) {
+      lastUserId.current = user._id;
+      // Debounce notifications fetch
+      const timer = setTimeout(() => {
+        fetchNotifications();
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [user?._id, fetchNotifications]); // ✅ Only depend on user ID
+
+  // ✅ CLEANUP: Cancel requests on unmount
+  useEffect(() => {
+    return () => {
+      if (userFetchController.current) {
+        userFetchController.current.abort();
+      }
+      if (notificationsFetchController.current) {
+        notificationsFetchController.current.abort();
+      }
+    };
+  }, []);
 
   // Mark notification as read
-  const markNotificationRead = async (notificationId) => {
+  const markNotificationRead = useCallback(async (notificationId) => {
     try {
       const response = await fetch('/api/user/notifications/read', {
         method: 'POST',
@@ -87,18 +186,32 @@ function AppProviderContent({ children }) {
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
-  };
+  }, []);
 
   // Add new notification
-  const addNotification = (notification) => {
-    setNotifications(prev => [notification, ...prev]);
-  };
+  const addNotification = useCallback((notification) => {
+    setNotifications(prev => [notification, ...prev.slice(0, 49)]); // Keep only latest 50
+  }, []);
 
-  // Update user data
-  const updateUser = (userData) => {
-    setUser(prev => ({ ...prev, ...userData }));
-  };
+  // Update user data (optimized to prevent unnecessary re-renders)
+  const updateUser = useCallback((userData) => {
+    setUser(prev => {
+      if (!prev) return userData;
+      
+      // ✅ OPTIMIZATION: Only update if data actually changed
+      const merged = { ...prev, ...userData };
+      const hasChanges = JSON.stringify(prev) !== JSON.stringify(merged);
+      
+      if (hasChanges) {
+        console.log('👤 User data updated');
+        return merged;
+      }
+      
+      return prev; // No changes, return same reference
+    });
+  }, []);
 
+  // ✅ MEMOIZE: Prevent unnecessary re-renders
   const value = {
     user,
     setUser,
@@ -108,7 +221,8 @@ function AppProviderContent({ children }) {
     addNotification,
     updateUser,
     session,
-    isAuthenticated: !!session
+    isAuthenticated: !!session,
+    error
   };
 
   return (
@@ -121,12 +235,16 @@ function AppProviderContent({ children }) {
 // Main Providers Component
 export function Providers({ children }) {
   return (
-    <SessionProvider>
+    <SessionProvider 
+      refetchInterval={0} // ✅ CRITICAL: Disable automatic session refetching
+      refetchOnWindowFocus={false} // ✅ CRITICAL: Disable refetch on window focus
+    >
       <AppProviderContent>
         {children}
         <Toaster 
           position="top-right"
           toastOptions={{
+            duration: 4000,
             style: {
               background: '#ffffff',
               border: '1px solid #e1e3e0',
@@ -168,14 +286,35 @@ export function LoadingSpinner({ size = 'default' }) {
   );
 }
 
-// Protected Route Component
+// Protected Route Component (optimized)
 export function ProtectedRoute({ children, allowedRoles = [], fallback = null }) {
-  const { user, loading, isAuthenticated } = useApp();
+  const { user, loading, isAuthenticated, error } = useApp();
 
   if (loading) {
     return (
       <div className="min-h-screen bg-fixly-bg flex items-center justify-center">
         <LoadingSpinner size="large" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-fixly-bg flex items-center justify-center p-4">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-fixly-text mb-4">
+            Something went wrong
+          </h1>
+          <p className="text-fixly-text-light mb-6">
+            {error}
+          </p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="btn-primary"
+          >
+            Refresh Page
+          </button>
+        </div>
       </div>
     );
   }
@@ -221,7 +360,7 @@ export function ProtectedRoute({ children, allowedRoles = [], fallback = null })
   return children;
 }
 
-// Role-based Component
+// Role-based Component (optimized)
 export function RoleGuard({ children, roles, fallback = null }) {
   const { user } = useApp();
 

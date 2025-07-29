@@ -842,7 +842,7 @@ export default function JobDetailsPage({ params }) {
                   <div key={comment._id} className="card">
                     <div className="flex items-start">
                       <img
-                        src={comment.user.photoURL || '/default-avatar.png'}
+                        src={comment.user.profilePhoto || '/default-avatar.png'}
                         alt={comment.user.name}
                         className="h-10 w-10 rounded-full object-cover mr-4"
                       />

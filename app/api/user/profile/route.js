@@ -1,15 +1,15 @@
-// app/api/user/profile/route.js
+// app/api/user/profile/route.js - CRITICAL API ROUTE
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../lib/auth';
-import connectDB from '../../../../lib/db';
-import User from '../../../../models/User';
-import { rateLimit } from '../../../../utils/rateLimiting';
+import { authOptions } from '@/lib/auth';
+import connectDB from '@/lib/db';
+import User from '@/models/User';
+import { rateLimit } from '@/utils/rateLimiting';
 
 export async function GET(request) {
   try {
     // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'user_profile', 60, 60); // 60 requests per minute
+    const rateLimitResult = await rateLimit(request, 'user_profile', 100, 60 * 1000);
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many requests. Please try again later.' },
@@ -27,7 +27,33 @@ export async function GET(request) {
 
     await connectDB();
 
-    const user = await User.findById(session.user.id).select('-passwordHash').lean();
+    // Find user with all necessary fields
+    const user = await User.findById(session.user.id).select(`
+      name
+      username
+      email
+      phone
+      role
+      profilePhoto
+      isRegistered
+      banned
+      location
+      skills
+      rating
+      jobsCompleted
+      totalEarnings
+      plan
+      notifications
+      preferences
+      createdAt
+      lastLoginAt
+      authMethod
+      emailVerified
+      phoneVerified
+      googleId
+      firebaseUid
+    `);
+
     if (!user) {
       return NextResponse.json(
         { message: 'User not found' },
@@ -35,12 +61,100 @@ export async function GET(request) {
       );
     }
 
-    return NextResponse.json(user);
+    // Check if user is banned
+    if (user.banned) {
+      return NextResponse.json(
+        { 
+          message: 'Account suspended. Please contact support.',
+          banned: true 
+        },
+        { status: 403 }
+      );
+    }
+
+    // Update last login time
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    // Calculate unread notifications count
+    const unreadNotifications = user.notifications?.filter(n => !n.read)?.length || 0;
+
+    // Prepare response data
+    const profileData = {
+      id: user._id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      profilePhoto: user.profilePhoto || null,
+      isRegistered: user.isRegistered || false,
+      banned: user.banned || false,
+      
+      // Location
+      location: user.location || null,
+      
+      // Role-specific data
+      skills: user.role === 'fixer' ? (user.skills || []) : undefined,
+      
+      // Stats
+      rating: user.rating || { average: 0, count: 0 },
+      jobsCompleted: user.jobsCompleted || 0,
+      totalEarnings: user.totalEarnings || 0,
+      
+      // Subscription
+      plan: user.plan || { type: 'free', status: 'active' },
+      
+      // Notifications
+      unreadNotifications,
+      
+      // Preferences
+      preferences: user.preferences || {
+        emailNotifications: true,
+        smsNotifications: true,
+        jobAlerts: true
+      },
+      
+      // Account info
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+      authMethod: user.authMethod || 'email',
+      emailVerified: user.emailVerified || false,
+      phoneVerified: user.phoneVerified || false,
+      
+      // Auth IDs (don't expose sensitive data)
+      hasGoogleAuth: !!user.googleId,
+      hasPhoneAuth: !!user.firebaseUid,
+    };
+
+    return NextResponse.json({
+      success: true,
+      user: profileData
+    });
 
   } catch (error) {
-    console.error('Get user profile error:', error);
+    console.error('User profile fetch error:', error);
+    
+    // Check for specific database errors
+    if (error.name === 'CastError') {
+      return NextResponse.json(
+        { message: 'Invalid user ID format' },
+        { status: 400 }
+      );
+    }
+    
+    if (error.name === 'MongoNetworkError') {
+      return NextResponse.json(
+        { message: 'Database connection error' },
+        { status: 503 }
+      );
+    }
+    
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { 
+        message: 'Failed to fetch user profile',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }
@@ -49,10 +163,10 @@ export async function GET(request) {
 export async function PUT(request) {
   try {
     // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'update_profile', 10, 60); // 10 updates per minute
+    const rateLimitResult = await rateLimit(request, 'update_profile', 20, 60 * 1000);
     if (!rateLimitResult.success) {
       return NextResponse.json(
-        { message: 'Too many update requests. Please try again later.' },
+        { message: 'Too many update attempts. Please try again later.' },
         { status: 429 }
       );
     }
@@ -83,103 +197,57 @@ export async function PUT(request) {
     }
 
     const body = await request.json();
-    const {
-      name,
-      bio,
-      location,
-      skills,
-      availableNow,
-      workRadius,
-      preferences
-    } = body;
+    const allowedUpdates = [
+      'name',
+      'location',
+      'skills',
+      'preferences',
+      'profilePhoto'
+    ];
 
     // Validate and update allowed fields
-    const updateData = {};
-
-    if (name !== undefined) {
-      if (!name.trim()) {
-        return NextResponse.json(
-          { message: 'Name cannot be empty' },
-          { status: 400 }
-        );
+    const updates = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (allowedUpdates.includes(key)) {
+        if (key === 'skills' && user.role !== 'fixer') {
+          continue; // Skip skills for non-fixers
+        }
+        if (key === 'name' && (!value || value.trim().length < 2)) {
+          return NextResponse.json(
+            { message: 'Name must be at least 2 characters' },
+            { status: 400 }
+          );
+        }
+        updates[key] = value;
       }
-      updateData.name = name.trim();
     }
 
-    if (bio !== undefined) {
-      if (bio.length > 500) {
-        return NextResponse.json(
-          { message: 'Bio cannot exceed 500 characters' },
-          { status: 400 }
-        );
-      }
-      updateData.bio = bio.trim();
-    }
-
-    if (location !== undefined && location) {
-      updateData.location = {
-        city: location.city?.trim(),
-        state: location.state?.trim(),
-        lat: location.lat,
-        lng: location.lng
-      };
-    }
-
-    if (skills !== undefined && user.role === 'fixer') {
-      if (!Array.isArray(skills)) {
-        return NextResponse.json(
-          { message: 'Skills must be an array' },
-          { status: 400 }
-        );
-      }
-      updateData.skills = skills.map(skill => skill.toLowerCase().trim());
-    }
-
-    if (availableNow !== undefined && user.role === 'fixer') {
-      updateData.availableNow = Boolean(availableNow);
-    }
-
-    if (workRadius !== undefined && user.role === 'fixer') {
-      const radius = Number(workRadius);
-      if (radius < 1 || radius > 50) {
-        return NextResponse.json(
-          { message: 'Work radius must be between 1 and 50 kilometers' },
-          { status: 400 }
-        );
-      }
-      updateData.workRadius = radius;
-    }
-
-    if (preferences !== undefined) {
-      updateData.preferences = {
-        ...user.preferences,
-        ...preferences
-      };
-    }
-
-    // Update user
-    const updatedUser = await User.findByIdAndUpdate(
-      user._id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    ).select('-passwordHash');
-
-    return NextResponse.json({
-      success: true,
-      message: 'Profile updated successfully',
-      user: updatedUser
-    });
-
-  } catch (error) {
-    console.error('Update profile error:', error);
-    
-    if (error.name === 'ValidationError') {
+    if (Object.keys(updates).length === 0) {
       return NextResponse.json(
-        { message: Object.values(error.errors)[0].message },
+        { message: 'No valid updates provided' },
         { status: 400 }
       );
     }
 
+    // Apply updates
+    Object.assign(user, updates);
+    await user.save();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        location: user.location,
+        skills: user.skills,
+        preferences: user.preferences,
+        profilePhoto: user.profilePhoto
+      }
+    });
+
+  } catch (error) {
+    console.error('Profile update error:', error);
     return NextResponse.json(
       { message: 'Failed to update profile' },
       { status: 500 }

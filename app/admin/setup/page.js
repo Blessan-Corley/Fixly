@@ -104,7 +104,7 @@ export default function AdminSetupPage() {
                 required
               />
               <p className="text-xs text-fixly-text-muted mt-1">
-                Default: fixly_admin_setup_2024_change_this_secret
+                Enter the ADMIN KEY
               </p>
             </div>
 

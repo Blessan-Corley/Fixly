@@ -17,7 +17,8 @@ import {
   Loader,
   Crown,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  User
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';

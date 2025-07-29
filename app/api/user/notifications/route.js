@@ -1,7 +1,7 @@
 // app/api/user/notifications/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../lib/auth';
+import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';

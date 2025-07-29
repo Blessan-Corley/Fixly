@@ -1,7 +1,7 @@
 // app/api/jobs/[jobId]/apply/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../../lib/auth';
+import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
@@ -9,7 +9,7 @@ import { rateLimit } from '../../../../../utils/rateLimiting';
 import nodemailer from 'nodemailer';
 
 // Email transporter
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: process.env.EMAIL_PORT,
   secure: false,
