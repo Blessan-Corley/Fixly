@@ -12,7 +12,7 @@ Create a `.env.local` file in the project root with the following variables:
 
 ```env
 # Required: Database Connection
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/fixly
+MONGODB_URI=mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@YOUR_CLUSTER.mongodb.net/YOUR_DATABASE
 
 # Required: NextAuth Configuration
 NEXTAUTH_URL=http://localhost:3000

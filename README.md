@@ -85,7 +85,7 @@ npm install
 Create `.env.local` file:
 ```env
 # Database
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/fixly
+MONGODB_URI=mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@YOUR_CLUSTER.mongodb.net/YOUR_DATABASE
 
 # NextAuth
 NEXTAUTH_URL=http://localhost:3000
