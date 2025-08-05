@@ -447,7 +447,7 @@ export default function HomePage() {
           </div>
           
           <div className="border-t border-fixly-bg/20 mt-8 pt-8 text-center text-fixly-bg/60">
-            <p>&copy; 2024 Fixly. All rights reserved.</p>
+            <p>&copy; 2025 Fixly. All rights reserved.</p>
           </div>
         </div>
       </footer>

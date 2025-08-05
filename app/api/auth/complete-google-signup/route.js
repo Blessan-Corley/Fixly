@@ -52,7 +52,7 @@ export async function POST(request) {
       { new: true }
     );
 
-    console.log('✅ Google signup completion successful for:', updatedUser.email);
+    console.log('✅ Google signup completion successful');
 
     return NextResponse.json({
       success: true,

@@ -45,7 +45,7 @@ export async function GET(request) {
     }
 
     if (!user.role) {
-      console.log('❌ User has no role:', user.email);
+      console.log('❌ User has no role');
       return NextResponse.json(
         { message: 'User role not set. Please complete your profile.' },
         { status: 400 }
@@ -53,7 +53,7 @@ export async function GET(request) {
     }
 
     const role = user.role;
-    console.log('✅ User found for recent jobs:', user.email, 'role:', role);
+    console.log('✅ User found for recent jobs, role:', role);
 
     // ✅ VALIDATE: Ensure role is valid
     if (!['fixer', 'hirer', 'admin'].includes(role)) {

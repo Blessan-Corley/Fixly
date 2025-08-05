@@ -99,7 +99,7 @@ export default function SignupPage() {
     const checkExistingUser = async () => {
       try {
         const session = await getSession();
-        console.log('🔍 Checking existing session:', session);
+        console.log('🔍 Checking existing session');
         
         if (session?.user) {
           // Check if user has completed profile
@@ -331,7 +331,7 @@ export default function SignupPage() {
     setLoading(true);
     
     try {
-      console.log('📝 Submitting signup data for:', formData.email, 'Method:', authMethod);
+      console.log('📝 Submitting signup data - Method:', authMethod);
       
       const formattedPhone = formData.phone ? `+91${formData.phone.replace(/[^\d]/g, '')}` : '';
       

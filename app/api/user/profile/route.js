@@ -164,7 +164,7 @@ export async function GET(request) {
       hasPhoneAuth: !!user.firebaseUid,
     };
 
-    console.log('✅ User profile fetched successfully:', profileData.email);
+    console.log('✅ User profile fetched successfully');
 
     return NextResponse.json({
       success: true,

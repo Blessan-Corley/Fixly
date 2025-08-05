@@ -34,7 +34,7 @@ function AppProviderContent({ children }) {
   const fetchUserProfile = useCallback(async (sessionUserId) => {
     // ✅ CRITICAL FIX: Don't fetch for temporary session IDs
     if (!sessionUserId || sessionUserId.startsWith('temp_')) {
-      console.log('⏭️ Skipping fetch for temporary session:', sessionUserId);
+      console.log('⏭️ Skipping fetch for temporary session');
       setUser(null);
       setError('Session not properly established. Please sign in again.');
       setLoading(false);
@@ -50,7 +50,7 @@ function AppProviderContent({ children }) {
     userFetchController.current = new AbortController();
 
     try {
-      console.log('📡 Fetching user profile for:', sessionUserId);
+      console.log('📡 Fetching user profile');
       
       const response = await fetch('/api/user/profile', {
         signal: userFetchController.current.signal
@@ -58,7 +58,7 @@ function AppProviderContent({ children }) {
 
       if (response.ok) {
         const userData = await response.json();
-        console.log('✅ User profile fetched:', userData.user.email);
+        console.log('✅ User profile fetched');
         setUser(userData.user);
         setError(null);
         
@@ -360,12 +360,7 @@ export function ProtectedRoute({ children, allowedRoles = [], fallback = null })
   if (isAuthenticated && session?.user && (!session.user.isRegistered || !session.user.role || session.user.username?.startsWith('temp_'))) {
     // Check if we're already on the signup page to prevent loops
     if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth/signup')) {
-      console.log('🔄 User needs to complete signup, redirecting...', {
-        isRegistered: session.user.isRegistered,
-        role: session.user.role,
-        username: session.user.username,
-        currentPath: window.location.pathname
-      });
+      console.log('🔄 User needs to complete signup, redirecting...');
       
       // Redirect to signup completion
       const method = session.user.authMethod === 'google' ? '?method=google' : '';

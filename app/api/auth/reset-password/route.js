@@ -166,9 +166,6 @@ export async function POST(request) {
         `
       });
       
-      if (process.env.NODE_ENV === 'development') {
-        console.log('✅ Password reset confirmation email sent to:', matchedUser.email);
-      }
     } catch (error) {
       console.error('Failed to send password reset confirmation email:', error);
       // Don't return error - password was still reset successfully

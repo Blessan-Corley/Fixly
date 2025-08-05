@@ -34,7 +34,7 @@ export async function POST(request) {
     
     // Always return success (security best practice - don't reveal if email exists)
     if (!user) {
-      console.log('Password reset requested for non-existent email:', email);
+      console.log('Password reset requested for non-existent email');
       return NextResponse.json({
         success: true,
         message: 'If an account with that email exists, a password reset link has been sent.'
@@ -43,7 +43,7 @@ export async function POST(request) {
 
     // Check if user has a password (might be Google-only user)
     if (!user.passwordHash) {
-      console.log('Password reset requested for Google-only user:', email);
+      console.log('Password reset requested for Google-only user');
       return NextResponse.json({
         success: true,
         message: 'If an account with that email exists, a password reset link has been sent.'
@@ -64,7 +64,7 @@ export async function POST(request) {
     // For now, just log the reset link (in production, send email)
     const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${resetToken}`;
     
-    console.log('🔗 Password Reset Link for', email);
+    console.log('🔗 Password Reset Link generated');
     console.log('📧 Reset URL:', resetUrl);
     console.log('⏰ Expires at:', resetTokenExpiry.toLocaleString());
 
@@ -140,7 +140,7 @@ export async function PUT(request) {
       }
     });
 
-    console.log('✅ Password reset successful for:', user.email);
+    console.log('✅ Password reset successful');
 
     return NextResponse.json({
       success: true,

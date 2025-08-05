@@ -64,14 +64,14 @@ export async function GET(request) {
     }
 
     if (!user.role) {
-      console.log('❌ User has no role:', user.email);
+      console.log('❌ User has no role');
       return NextResponse.json(
         { message: 'User role not set. Please complete your profile.' },
         { status: 400 }
       );
     }
 
-    console.log('✅ User found:', user.email, 'role:', user.role);
+    console.log('✅ User found, role:', user.role);
 
     let stats = {};
 

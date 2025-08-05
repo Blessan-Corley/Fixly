@@ -108,7 +108,7 @@ export default function SignInPage() {
 
     setLoading(true);
     try {
-      console.log('🔄 Starting email signin for:', formData.email);
+      console.log('🔄 Starting email signin');
 
       const result = await signIn('credentials', {
         email: formData.email.toLowerCase().trim(),
@@ -117,7 +117,7 @@ export default function SignInPage() {
         redirect: false
       });
 
-      console.log('📋 Signin result:', result);
+      console.log('📋 Signin result received');
 
       if (result?.error) {
         console.error('❌ Signin error:', result.error);

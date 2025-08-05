@@ -28,7 +28,7 @@ export async function POST(request) {
       );
     }
 
-    console.log('🔄 Session update requested for user:', user.email);
+    // Session update requested
 
     // Return updated user data for session refresh
     return NextResponse.json({
