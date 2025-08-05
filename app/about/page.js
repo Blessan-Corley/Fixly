@@ -32,7 +32,7 @@ export default function AboutUsPage() {
       bio: 'Visionary leader in tech startups. Passionate about connecting people and solving real-world problems through technology.',
       expertise: 'Product Strategy, Business Development, Team Leadership',
       quote: 'Building bridges between skilled professionals and those who need their services.',
-      image: '/public/founders/blessan.jpg', // You'll need to add actual photos
+      image: '/founders/blessan.jpg',
       social: {
         linkedin: '#',
         twitter: '#',
@@ -46,7 +46,7 @@ export default function AboutUsPage() {
       bio: 'Full-stack developer and system architect with expertise in scalable platforms. Loves building robust, user-friendly applications.',
       expertise: 'Software Architecture, DevOps, Mobile Development',
       quote: 'Technology should make life simpler, not more complicated.',
-      image: '/public/founders/vinoth.jpg',
+      image: '/founders/vinoth.jpg',
       social: {
         linkedin: '#',
         github: '#',
@@ -60,7 +60,7 @@ export default function AboutUsPage() {
       bio: 'Operations expert with deep understanding of local markets. Ensures quality service delivery and customer satisfaction.',
       expertise: 'Operations Management, Quality Assurance, Customer Success',
       quote: 'Excellence in execution is what transforms ideas into impact.',
-      image: '/public/founders/dinesh.jpg',
+      image: '/founders/dinesh.jpg',
       social: {
         linkedin: '#',
         twitter: '#',
@@ -204,14 +204,14 @@ export default function AboutUsPage() {
                 }`}>
                   {/* Photo Container */}
                   <div className="relative h-80 overflow-hidden">
-                    {/* Placeholder for founder photo */}
-                    <div className={`w-full h-full bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center transition-all duration-500 ${
-                      hoveredFounder === founder.id ? 'grayscale-0' : 'grayscale'
-                    }`}>
-                      <div className="text-6xl font-bold text-white opacity-50">
-                        {founder.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                    </div>
+                    {/* Founder photo */}
+                    <img 
+                      src={founder.image} 
+                      alt={founder.name}
+                      className={`w-full h-full object-cover transition-all duration-500 ${
+                        hoveredFounder === founder.id ? 'grayscale-0 scale-110' : 'grayscale scale-100'
+                      }`}
+                    />
                     
                     {/* Overlay that appears on hover */}
                     <div className={`absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent transition-opacity duration-500 ${
@@ -402,6 +402,16 @@ export default function AboutUsPage() {
           </motion.div>
         </div>
       </section>
+
+      {/* Back to Home */}
+      <div className="fixed bottom-6 left-6">
+        <button
+          onClick={() => router.push('/')}
+          className="bg-fixly-card hover:bg-fixly-card/80 border border-fixly-border rounded-full p-3 shadow-fixly transition-all duration-200 hover-lift"
+        >
+          <ArrowLeft className="h-5 w-5 text-fixly-text" />
+        </button>
+      </div>
     </div>
   );
 }

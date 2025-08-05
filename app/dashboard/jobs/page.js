@@ -18,7 +18,8 @@ import {
   CheckCircle,
   AlertCircle,
   Calendar,
-  Loader
+  Loader,
+  TrendingUp
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
@@ -42,7 +43,9 @@ function JobsContent() {
   const [pagination, setPagination] = useState({
     page: 1,
     hasMore: true,
-    total: 0
+    total: 0,
+    totalPages: 0,
+    limit: 10
   });
 
   // Filters
@@ -72,15 +75,23 @@ function JobsContent() {
       });
 
       const response = await fetch(`/api/jobs/post?${params}`);
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        data = {};
+      }
 
       if (response.ok) {
         if (reset) {
-          setJobs(data.jobs);
+          setJobs(data.jobs || []);
         } else {
-          setJobs(prev => [...prev, ...data.jobs]);
+          setJobs(prev => [...prev, ...(data.jobs || [])]);
         }
-        setPagination(data.pagination);
+        setPagination(data.pagination || { page: 1, hasMore: false, total: 0, totalPages: 0, limit: 10 });
       } else {
         toast.error(data.message || 'Failed to fetch jobs');
       }
@@ -154,6 +165,15 @@ function JobsContent() {
         </div>
         
         <div className="flex items-center space-x-4 mt-4 lg:mt-0">
+          {user?.plan?.type !== 'pro' && (
+            <button
+              onClick={() => router.push('/dashboard/subscription')}
+              className="btn-secondary flex items-center"
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Upgrade to Pro
+            </button>
+          )}
           <button
             onClick={() => router.push('/dashboard/post-job')}
             className="btn-primary flex items-center"
@@ -204,7 +224,7 @@ function JobsContent() {
         </div>
 
         <div className="text-sm text-fixly-text-muted">
-          {pagination.total} jobs found
+          {pagination.total || 0} jobs found
         </div>
       </div>
 
@@ -360,6 +380,29 @@ function JobsContent() {
             ) : null}
             Load More Jobs
           </button>
+        </div>
+      )}
+
+      {/* Upgrade Prompt for Free Users */}
+      {user?.plan?.type !== 'pro' && user?.jobsPosted >= 3 && (
+        <div className="fixed bottom-6 right-6 card max-w-sm border-fixly-accent shadow-fixly-lg">
+          <div className="flex items-start">
+            <TrendingUp className="h-6 w-6 text-fixly-accent mr-3 mt-1" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-fixly-text mb-1">
+                Upgrade to Pro
+              </h4>
+              <p className="text-sm text-fixly-text-muted mb-3">
+                You've posted multiple jobs. Upgrade for unlimited posting and priority support.
+              </p>
+              <button
+                onClick={() => router.push('/dashboard/subscription')}
+                className="btn-primary w-full text-sm"
+              >
+                Upgrade Now - ₹199/month
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

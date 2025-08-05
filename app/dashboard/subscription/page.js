@@ -4,34 +4,69 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
-  Star,
-  Check,
-  X,
-  TrendingUp,
+  Crown,
+  CheckCircle,
+  Clock,
   Zap,
+  Rocket,
+  Star,
+  Users,
+  TrendingUp,
   Shield,
+  Headphones,
+  ArrowRight,
+  Loader,
+  X,
+  Calendar,
+  CreditCard,
+  AlertCircle,
+  Check,
+  User,
   Target,
   Award,
-  Clock,
-  DollarSign,
-  Loader,
-  Crown,
-  ChevronRight,
-  AlertCircle,
-  User
+  Briefcase,
+  MessageSquare,
+  BarChart3
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 
 export default function SubscriptionPage() {
+  const { user } = useApp();
+
+  if (user?.role === 'fixer') {
+    // Redirect fixers to fixer subscription page
+    return <FixerSubscriptionContent />;
+  }
+
   return (
-    <RoleGuard roles={['fixer']} fallback={<div>Access denied</div>}>
-      <SubscriptionContent />
+    <RoleGuard roles={['hirer']} fallback={
+      <div className="p-6 lg:p-8">
+        <div className="max-w-md mx-auto text-center">
+          <div className="card">
+            <Crown className="h-16 w-16 text-fixly-accent mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-fixly-text mb-2">
+              Subscription Required
+            </h2>
+            <p className="text-fixly-text-muted mb-4">
+              Please sign in to manage your subscription.
+            </p>
+            <button
+              onClick={() => window.location.href = '/auth/signin'}
+              className="btn-primary w-full"
+            >
+              Sign In
+            </button>
+          </div>
+        </div>
+      </div>
+    }>
+      <HirerSubscriptionContent />
     </RoleGuard>
   );
 }
 
-function SubscriptionContent() {
+function HirerSubscriptionContent() {
   const { user, updateUser } = useApp();
   const router = useRouter();
   
@@ -518,6 +553,363 @@ function SubscriptionContent() {
               </p>
             </div>
           ))}
+        </div>
+      </motion.div>
+
+      {/* CTA */}
+      {!isCurrentPlanActive && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="text-center"
+        >
+          <div className="card max-w-md mx-auto">
+            <Crown className="h-12 w-12 text-fixly-accent mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-fixly-text mb-2">
+              Ready to Go Pro?
+            </h3>
+            <p className="text-fixly-text-muted mb-6">
+              Join hundreds of successful hirers who've upgraded their hiring process with Fixly Pro.
+            </p>
+            <button
+              onClick={() => handleUpgrade('monthly')}
+              disabled={loading}
+              className="btn-primary w-full"
+            >
+              {loading ? (
+                <Loader className="animate-spin h-4 w-4 mr-2" />
+              ) : (
+                <Crown className="h-4 w-4 mr-2" />
+              )}
+              Start Your Pro Journey
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function FixerSubscriptionContent() {
+  const { user, updateUser } = useApp();
+  const router = useRouter();
+  
+  const [loading, setLoading] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState('monthly');
+
+  const plans = [
+    {
+      id: 'monthly',
+      name: 'Monthly Pro',
+      price: 99,
+      duration: 'month',
+      description: 'Perfect for getting started',
+      popular: true,
+      savings: null
+    },
+    {
+      id: 'yearly',
+      name: 'Yearly Pro',
+      price: 999,
+      duration: 'year',
+      description: 'Best value for serious fixers',
+      popular: false,
+      savings: '₹189 (16% off)'
+    }
+  ];
+
+  const features = [
+    {
+      icon: Zap,
+      title: 'Unlimited Job Applications',
+      description: 'Apply to as many jobs as you want without any restrictions',
+      free: '3 applications',
+      pro: 'Unlimited'
+    },
+    {
+      icon: Target,
+      title: 'Priority Listing',
+      description: 'Your applications appear higher in search results',
+      free: false,
+      pro: true
+    },
+    {
+      icon: TrendingUp,
+      title: 'Advanced Analytics',
+      description: 'Track success rates, earnings, and job performance',
+      free: 'Basic stats',
+      pro: 'Advanced insights'
+    },
+    {
+      icon: Crown,
+      title: 'Profile Boost',
+      description: 'Enhanced visibility to hirers with Pro badge',
+      free: false,
+      pro: true
+    },
+    {
+      icon: Shield,
+      title: 'Priority Support',
+      description: 'Get faster responses from our support team',
+      free: 'Standard',
+      pro: 'Priority'
+    },
+    {
+      icon: Award,
+      title: 'Exclusive Job Alerts',
+      description: 'Get notified about high-value jobs first',
+      free: false,
+      pro: true
+    }
+  ];
+
+  const handleUpgrade = async (planType) => {
+    if (user?.plan?.type === 'pro' && user?.plan?.status === 'active') {
+      toast.error('You already have an active Pro subscription');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // For fixers, we can use a different API endpoint or same with role detection
+      const response = await fetch('/api/subscription/fixer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'subscribe',
+          duration: planType
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        toast.success('Pro subscription activated successfully! 🎉');
+        
+        // Update user context
+        updateUser({
+          plan: data.plan
+        });
+
+        // Refresh page to show updated status
+        window.location.reload();
+      } else {
+        throw new Error(data.message || 'Failed to activate subscription');
+      }
+    } catch (error) {
+      console.error('Subscription error:', error);
+      toast.error(error.message || 'Failed to activate subscription');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isCurrentPlanActive = user?.plan?.type === 'pro' && user?.plan?.status === 'active';
+  const creditsRemaining = Math.max(0, 3 - (user?.plan?.creditsUsed || 0));
+
+  return (
+    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-12">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <Crown className="h-16 w-16 text-fixly-accent mx-auto mb-4" />
+          <h1 className="text-4xl font-bold text-fixly-text mb-4">
+            Upgrade to Fixly Pro
+          </h1>
+          <p className="text-xl text-fixly-text-light max-w-2xl mx-auto">
+            Unlock unlimited job applications and premium features to grow your business faster
+          </p>
+        </motion.div>
+
+        {/* Current Status */}
+        {isCurrentPlanActive ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8 max-w-md mx-auto"
+          >
+            <div className="flex items-center justify-center mb-2">
+              <Crown className="h-6 w-6 text-green-600 mr-2" />
+              <span className="font-semibold text-green-800">Pro Active</span>
+            </div>
+            <p className="text-green-700 text-sm">
+              Your Pro subscription is active until{' '}
+              {user?.plan?.endDate && new Date(user.plan.endDate).toLocaleDateString()}
+            </p>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-orange-50 border border-orange-200 rounded-lg p-6 mb-8 max-w-md mx-auto"
+          >
+            <div className="flex items-center justify-center mb-2">
+              <AlertCircle className="h-6 w-6 text-orange-600 mr-2" />
+              <span className="font-semibold text-orange-800">Free Plan</span>
+            </div>
+            <p className="text-orange-700 text-sm">
+              {creditsRemaining > 0 
+                ? `${creditsRemaining} free application${creditsRemaining > 1 ? 's' : ''} remaining`
+                : 'All free applications used. Upgrade to continue applying.'
+              }
+            </p>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Pricing Plans */}
+      <div className="grid md:grid-cols-2 gap-8 mb-16">
+        {plans.map((plan, index) => (
+          <motion.div
+            key={plan.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className={`card relative ${
+              plan.popular ? 'ring-2 ring-fixly-accent' : ''
+            } ${selectedPlan === plan.id ? 'ring-2 ring-fixly-accent' : ''}`}
+          >
+            {plan.popular && (
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                <span className="bg-fixly-accent text-fixly-text px-4 py-1 rounded-full text-sm font-medium">
+                  Most Popular
+                </span>
+              </div>
+            )}
+
+            <div className="text-center mb-6">
+              <h3 className="text-2xl font-bold text-fixly-text mb-2">
+                {plan.name}
+              </h3>
+              <p className="text-fixly-text-muted mb-4">
+                {plan.description}
+              </p>
+              
+              <div className="mb-4">
+                <span className="text-4xl font-bold text-fixly-text">
+                  ₹{plan.price}
+                </span>
+                <span className="text-fixly-text-muted">/{plan.duration}</span>
+              </div>
+
+              {plan.savings && (
+                <div className="text-green-600 font-medium text-sm mb-4">
+                  Save {plan.savings}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                setSelectedPlan(plan.id);
+                if (!isCurrentPlanActive) {
+                  handleUpgrade(plan.id);
+                }
+              }}
+              disabled={loading || isCurrentPlanActive}
+              className={`btn-primary w-full mb-6 ${
+                isCurrentPlanActive ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              {loading && selectedPlan === plan.id ? (
+                <Loader className="animate-spin h-4 w-4 mr-2" />
+              ) : null}
+              {isCurrentPlanActive 
+                ? 'Current Plan' 
+                : `Upgrade to ${plan.name}`
+              }
+            </button>
+
+            <div className="text-sm text-fixly-text-muted">
+              <p>✓ All Pro features included</p>
+              <p>✓ Cancel anytime</p>
+              <p>✓ Instant activation</p>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Feature Comparison - abbreviated for space */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="mb-16"
+      >
+        <h2 className="text-2xl font-bold text-fixly-text text-center mb-8">
+          Feature Comparison
+        </h2>
+
+        <div className="card overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Feature column */}
+            <div className="lg:col-span-2">
+              <h3 className="font-semibold text-fixly-text mb-4">Features</h3>
+              <div className="space-y-4">
+                {features.map((feature, index) => (
+                  <div key={index} className="flex items-start">
+                    <feature.icon className="h-5 w-5 text-fixly-accent mr-3 mt-1 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-medium text-fixly-text">
+                        {feature.title}
+                      </h4>
+                      <p className="text-sm text-fixly-text-muted mt-1">
+                        {feature.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Free plan column */}
+            <div className="text-center">
+              <h3 className="font-semibold text-fixly-text mb-4">Free Plan</h3>
+              <div className="space-y-4">
+                {features.map((feature, index) => (
+                  <div key={index} className="h-16 flex items-center justify-center">
+                    {feature.free === false ? (
+                      <X className="h-5 w-5 text-red-500" />
+                    ) : feature.free === true ? (
+                      <Check className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <span className="text-sm text-fixly-text-muted">
+                        {feature.free}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Pro plan column */}
+            <div className="text-center">
+              <h3 className="font-semibold text-fixly-text mb-4">
+                Pro Plan
+                <Crown className="h-4 w-4 text-fixly-accent inline ml-1" />
+              </h3>
+              <div className="space-y-4">
+                {features.map((feature, index) => (
+                  <div key={index} className="h-16 flex items-center justify-center">
+                    {feature.pro === false ? (
+                      <X className="h-5 w-5 text-red-500" />
+                    ) : feature.pro === true ? (
+                      <Check className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <span className="text-sm font-medium text-fixly-text">
+                        {feature.pro}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </motion.div>
 

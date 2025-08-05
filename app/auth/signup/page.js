@@ -59,7 +59,9 @@ const validateUsername = (username) => {
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const urlRole = searchParams.get('role') || 'fixer';
+  const urlRole = searchParams.get('role') || 
+                 (typeof window !== 'undefined' ? sessionStorage.getItem('selectedRole') : null) || 
+                 'hirer';
   const method = searchParams.get('method');
   
   // Form steps
@@ -127,6 +129,12 @@ export default function SignupPage() {
               .replace(/[^a-z0-9_]/g, '')
               .slice(0, 10);
             
+            // Determine the correct role to use
+            let preferredRole = urlRole;
+            if (typeof window !== 'undefined' && sessionStorage.getItem('selectedRole')) {
+              preferredRole = sessionStorage.getItem('selectedRole');
+            }
+            
             setFormData(prev => ({
               ...prev,
               name: session.user.name,
@@ -134,7 +142,7 @@ export default function SignupPage() {
               username: session.user.username?.startsWith('temp_') 
                 ? emailUsername 
                 : (session.user.username || emailUsername),
-              role: session.user.role || urlRole || 'fixer'
+              role: session.user.role || preferredRole
             }));
             
             // Skip to profile completion step
@@ -309,6 +317,11 @@ export default function SignupPage() {
     setLoading(true);
     try {
       console.log('🔄 Starting Google authentication...');
+      
+      // Save role to sessionStorage to preserve it through OAuth flow
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('selectedRole', formData.role);
+      }
       
       // Clear any existing session
       await signOut({ redirect: false });

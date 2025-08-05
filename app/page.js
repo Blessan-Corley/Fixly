@@ -16,7 +16,12 @@ import {
   ArrowRight,
   Smartphone,
   Building,
-  Zap
+  Zap,
+  Instagram,
+  Twitter,
+  Facebook,
+  MessageCircle,
+  Mail
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -329,6 +334,45 @@ export default function HomePage() {
               <p className="text-fixly-bg/80 mb-4">
                 Your trusted local service marketplace
               </p>
+              
+              {/* Social Media Icons */}
+              <div className="flex space-x-4">
+                <a 
+                  href="#" 
+                  className="text-fixly-bg/60 hover:text-fixly-accent transition-colors duration-200"
+                  aria-label="Instagram"
+                >
+                  <Instagram className="h-5 w-5" />
+                </a>
+                <a 
+                  href="#" 
+                  className="text-fixly-bg/60 hover:text-fixly-accent transition-colors duration-200"
+                  aria-label="Twitter/X"
+                >
+                  <Twitter className="h-5 w-5" />
+                </a>
+                <a 
+                  href="#" 
+                  className="text-fixly-bg/60 hover:text-fixly-accent transition-colors duration-200"
+                  aria-label="Facebook"
+                >
+                  <Facebook className="h-5 w-5" />
+                </a>
+                <a 
+                  href="https://wa.me/919976768211" 
+                  className="text-fixly-bg/60 hover:text-fixly-accent transition-colors duration-200"
+                  aria-label="WhatsApp"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                </a>
+                <a 
+                  href="mailto:blessancorley@gmail.com" 
+                  className="text-fixly-bg/60 hover:text-fixly-accent transition-colors duration-200"
+                  aria-label="Email"
+                >
+                  <Mail className="h-5 w-5" />
+                </a>
+              </div>
             </div>
             
             <div>
@@ -447,7 +491,14 @@ export default function HomePage() {
           </div>
           
           <div className="border-t border-fixly-bg/20 mt-8 pt-8 text-center text-fixly-bg/60">
-            <p>&copy; 2025 Fixly. All rights reserved.</p>
+            <p>&copy; 2025 Fixly. All rights reserved. | 
+              <button 
+                onClick={() => handleFooterLink('/cookies')}
+                className="hover:text-fixly-accent transition-colors underline ml-1"
+              >
+                Cookies
+              </button>
+            </p>
           </div>
         </div>
       </footer>

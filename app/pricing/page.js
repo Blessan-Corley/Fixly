@@ -129,13 +129,6 @@ export default function PricingPage() {
       <header className="bg-fixly-card/80 backdrop-blur-md border-b border-fixly-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center py-4">
-            <button
-              onClick={() => router.back()}
-              className="btn-ghost mr-4 flex items-center"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </button>
             <h1 className="text-2xl font-bold text-fixly-text">Pricing</h1>
           </div>
         </div>
@@ -376,6 +369,16 @@ export default function PricingPage() {
             </button>
           </div>
         </motion.div>
+      </div>
+
+      {/* Back to Home */}
+      <div className="fixed bottom-6 left-6">
+        <button
+          onClick={() => router.push('/')}
+          className="bg-fixly-card hover:bg-fixly-card/80 border border-fixly-border rounded-full p-3 shadow-fixly transition-all duration-200 hover-lift"
+        >
+          <ArrowLeft className="h-5 w-5 text-fixly-text" />
+        </button>
       </div>
     </div>
   );

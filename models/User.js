@@ -695,11 +695,33 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   }
 };
 
-// Method to check if user can post a job (6-hour limit)
+// Method to check if user can post a job (3-hour limit for free, unlimited for pro)
 userSchema.methods.canPostJob = function() {
+  // Pro users can post unlimited jobs
+  if (this.plan?.type === 'pro' && this.plan?.status === 'active') {
+    return true;
+  }
+  
+  // Free users have 3-hour gap between posts
   if (!this.lastJobPostedAt) return true;
-  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
-  return this.lastJobPostedAt < sixHoursAgo;
+  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  return this.lastJobPostedAt < threeHoursAgo;
+};
+
+// Method to get time remaining until next job can be posted
+userSchema.methods.getNextJobPostTime = function() {
+  if (this.plan?.type === 'pro' && this.plan?.status === 'active') {
+    return null; // No restrictions for pro users
+  }
+  
+  if (!this.lastJobPostedAt) return null; // Can post immediately
+  
+  const nextAllowedTime = new Date(this.lastJobPostedAt.getTime() + 3 * 60 * 60 * 1000);
+  const now = new Date();
+  
+  if (now >= nextAllowedTime) return null; // Can post now
+  
+  return nextAllowedTime;
 };
 
 // Method to check if fixer can apply to jobs

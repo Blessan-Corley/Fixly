@@ -89,7 +89,16 @@ function BrowseJobsContent() {
       }
 
       const response = await fetch(`/api/jobs/browse?${params}`);
-      const data = await response.json();
+      
+      // Check if response has content before parsing JSON
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError, 'Response text:', text);
+        throw new Error('Invalid response from server');
+      }
 
       if (response.ok) {
         if (reset) {

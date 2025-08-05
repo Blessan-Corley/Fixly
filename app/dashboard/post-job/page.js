@@ -91,6 +91,11 @@ function PostJobContent() {
   const [errors, setErrors] = useState({});
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
+  
+  // Subscription states
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  const [showProModal, setShowProModal] = useState(false);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
 
   // Search states
   const [citySearch, setCitySearch] = useState('');
@@ -99,6 +104,25 @@ function PostJobContent() {
   const [skillSearch, setSkillSearch] = useState('');
   const [skillResults, setSkillResults] = useState([]);
   const [showSkillDropdown, setShowSkillDropdown] = useState(false);
+
+  // Fetch subscription info
+  useEffect(() => {
+    fetchSubscriptionInfo();
+  }, []);
+
+  const fetchSubscriptionInfo = async () => {
+    try {
+      const response = await fetch('/api/subscription/hirer');
+      if (response.ok) {
+        const data = await response.json();
+        setSubscriptionInfo(data);
+      }
+    } catch (error) {
+      console.error('Error fetching subscription info:', error);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
 
   // City search
   useEffect(() => {
@@ -250,7 +274,15 @@ function PostJobContent() {
         body: JSON.stringify(formData)
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        data = {};
+      }
 
       if (response.ok && data.success) {
         toast.success('Job posted successfully!');
@@ -587,27 +619,45 @@ function PostJobContent() {
         </label>
         <div className="grid grid-cols-3 gap-4">
           {[
-            { value: 'asap', label: 'ASAP', desc: 'Within 24 hours' },
+            { value: 'asap', label: 'ASAP', desc: 'Within 24 hours', requiresPro: true },
             { value: 'flexible', label: 'Flexible', desc: 'Within a few days' },
             { value: 'scheduled', label: 'Scheduled', desc: 'On specific date' }
-          ].map(({ value, label, desc }) => (
-            <button
-              key={value}
-              onClick={() => handleInputChange('urgency', value)}
-              className={`p-4 rounded-lg border-2 transition-colors text-left ${
-                formData.urgency === value
-                  ? 'border-fixly-accent bg-fixly-accent/10'
-                  : 'border-fixly-border hover:border-fixly-accent'
-              }`}
-            >
-              <div className="font-medium text-fixly-text">{label}</div>
-              <div className="text-sm text-fixly-text-muted">{desc}</div>
-            </button>
-          ))}
+          ].map(({ value, label, desc, requiresPro }) => {
+            const isPro = subscriptionInfo?.isPro;
+            const canSelect = !requiresPro || isPro;
+            
+            return (
+              <button
+                key={value}
+                onClick={() => {
+                  if (requiresPro && !isPro) {
+                    setShowProModal(true);
+                  } else {
+                    handleInputChange('urgency', value);
+                  }
+                }}
+                className={`p-4 rounded-lg border-2 transition-colors text-left relative ${
+                  formData.urgency === value
+                    ? 'border-fixly-accent bg-fixly-accent/10'
+                    : canSelect 
+                      ? 'border-fixly-border hover:border-fixly-accent'
+                      : 'border-fixly-border opacity-60'
+                }`}
+              >
+                <div className="font-medium text-fixly-text">{label}</div>
+                {requiresPro && (
+                  <div className="text-xs text-fixly-accent font-medium mt-1">
+                    {isPro ? '✓ Pro' : '🔒 Pro Required'}
+                  </div>
+                )}
+                <div className="text-sm text-fixly-text-muted">{desc}</div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <div>
           <label className="block text-sm font-medium text-fixly-text mb-2">
             Job Type
@@ -621,21 +671,6 @@ function PostJobContent() {
             <option value="recurring">Recurring Job</option>
           </select>
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Experience Level
-          </label>
-          <select
-            value={formData.experienceLevel}
-            onChange={(e) => handleInputChange('experienceLevel', e.target.value)}
-            className="select-field"
-          >
-            <option value="beginner">Beginner (Entry Level)</option>
-            <option value="intermediate">Intermediate (Some Experience)</option>
-            <option value="expert">Expert (Highly Experienced)</option>
-          </select>
-        </div>
       </div>
 
       <div>
@@ -646,10 +681,26 @@ function PostJobContent() {
           <input
             type="number"
             value={formData.estimatedDuration.value}
-            onChange={(e) => handleInputChange('estimatedDuration.value', e.target.value)}
+            onChange={(e) => {
+              const value = parseInt(e.target.value);
+              const unit = formData.estimatedDuration.unit;
+              
+              // Apply limits based on unit
+              let maxValue = 1000; // default for weeks
+              if (unit === 'hours') maxValue = 24;
+              if (unit === 'days') maxValue = 7;
+              
+              if (value <= maxValue) {
+                handleInputChange('estimatedDuration.value', e.target.value);
+              }
+            }}
             placeholder="Duration"
             className="input-field flex-1"
             min="1"
+            max={
+              formData.estimatedDuration.unit === 'hours' ? 24 :
+              formData.estimatedDuration.unit === 'days' ? 7 : 1000
+            }
           />
           <select
             value={formData.estimatedDuration.unit}
@@ -738,7 +789,7 @@ function PostJobContent() {
               Rate Limit Notice
             </p>
             <p className="text-yellow-700 mt-1">
-              You can post another job in 6 hours after this one to maintain platform quality.
+              Free users can post another job in 3 hours. Upgrade to Pro for unlimited posting!
             </p>
           </div>
         </div>
@@ -814,6 +865,90 @@ function PostJobContent() {
           )}
         </div>
       </div>
+
+      {/* Pro Subscription Modal */}
+      {showProModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-fixly-card rounded-xl p-6 w-full max-w-md"
+          >
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-fixly-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Star className="h-8 w-8 text-fixly-accent" />
+              </div>
+              <h3 className="text-xl font-bold text-fixly-text mb-2">
+                Unlock Pro Features
+              </h3>
+              <p className="text-fixly-text-muted">
+                Get ASAP posting, unlimited jobs, and job boosting for just ₹49/month!
+              </p>
+            </div>
+            
+            <div className="space-y-3 mb-6">
+              <div className="flex items-center text-sm text-fixly-text">
+                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                Unlimited job posting (no 3-hour wait)
+              </div>
+              <div className="flex items-center text-sm text-fixly-text">
+                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                ASAP feature for urgent jobs
+              </div>
+              <div className="flex items-center text-sm text-fixly-text">
+                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                Job boosting for better visibility
+              </div>
+              <div className="flex items-center text-sm text-fixly-text">
+                <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                Priority support
+              </div>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowProModal(false)}
+                className="btn-ghost flex-1"
+              >
+                Maybe Later
+              </button>
+              <button
+                onClick={() => {
+                  setShowProModal(false);
+                  router.push('/dashboard/subscription');
+                }}
+                className="btn-primary flex-1"
+              >
+                Upgrade Now
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      
+      {/* Subscription Info Banner */}
+      {subscriptionInfo && !subscriptionInfo.isPro && !subscriptionInfo.canPostJob && (
+        <div className="card mb-6 bg-yellow-50 border-yellow-200">
+          <div className="flex items-center text-yellow-800">
+            <Clock className="h-5 w-5 mr-3" />
+            <div className="flex-1">
+              <p className="font-medium">Job posting limit reached</p>
+              <p className="text-sm">
+                {subscriptionInfo.nextJobPostTime 
+                  ? `Next job can be posted at ${new Date(subscriptionInfo.nextJobPostTime).toLocaleTimeString()}`
+                  : 'Upgrade to Pro for unlimited posting'
+                }
+              </p>
+            </div>
+            <button
+              onClick={() => router.push('/dashboard/subscription')}
+              className="btn-primary ml-4"
+            >
+              Upgrade to Pro
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

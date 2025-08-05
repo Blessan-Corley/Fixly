@@ -173,7 +173,11 @@ module.exports = {
         "shimmer": "shimmer 2s infinite",
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        'manrope': ['var(--font-manrope)', 'sans-serif'],
+        'pt-mono': ['var(--font-pt-mono)', 'monospace'],
+        sans: ['var(--font-manrope)', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-manrope)', 'sans-serif'],
+        mono: ['var(--font-pt-mono)', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace'],
       },
       boxShadow: {
         // Softer, more professional shadows

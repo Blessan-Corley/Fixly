@@ -1,12 +1,21 @@
 // app/layout.js
-import { Inter } from 'next/font/google';
+import { Manrope, PT_Mono } from 'next/font/google';
 import { Providers } from './providers';
+import CookieConsent from '../components/CookieConsent';
 import './globals.css';
 
-const inter = Inter({ 
+const manrope = Manrope({ 
   subsets: ['latin'],
+  weight: ['200', '300', '400', '500', '600', '700', '800'],
   display: 'swap',
-  variable: '--font-inter'
+  variable: '--font-manrope'
+});
+
+const ptMono = PT_Mono({ 
+  subsets: ['latin'],
+  weight: ['400'],
+  display: 'swap',
+  variable: '--font-pt-mono'
 });
 
 export const metadata = {
@@ -59,8 +68,15 @@ export const metadata = {
     google: process.env.GOOGLE_SITE_VERIFICATION,
   },
   icons: {
-    icon: '/favicon.ico',
-    apple: '/apple-touch-icon.png',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' }
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }
+    ],
+    shortcut: '/favicon.svg'
   },
   manifest: '/manifest.json',
 };
@@ -74,10 +90,11 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="font-sans antialiased">
+    <html lang="en" className={`${manrope.variable} ${ptMono.variable}`}>
+      <body className="font-manrope antialiased">
         <Providers>
           {children}
+          <CookieConsent />
         </Providers>
       </body>
     </html>

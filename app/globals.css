@@ -1,8 +1,8 @@
+/* Fonts are now loaded via Next.js font optimization */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
@@ -50,9 +50,50 @@
   }
   
   body {
-    @apply bg-fixly-bg text-fixly-text font-sans antialiased;
+    @apply bg-fixly-bg text-fixly-text font-manrope antialiased;
     font-feature-settings: 'rlig' 1, 'calt' 1;
     line-height: 1.6;
+  }
+  
+  /* Font families - Manrope + PT Mono */
+  .font-manrope {
+    font-family: var(--font-manrope), sans-serif;
+  }
+  
+  .font-pt-mono {
+    font-family: var(--font-pt-mono), monospace;
+  }
+  
+  /* Navigation and functional UI elements */
+  .font-mono {
+    font-family: var(--font-pt-mono), monospace;
+  }
+  
+  /* Heading styles with Manrope */
+  h1, h2, h3, h4, h5, h6,
+  .heading {
+    font-family: var(--font-manrope), sans-serif;
+    font-weight: 700; /* ExtraBold for h1/h2, Bold for others */
+    line-height: 1.2;
+  }
+  
+  h1 {
+    font-weight: 800; /* ExtraBold */
+  }
+  
+  h2 {
+    font-weight: 700; /* Bold */
+  }
+  
+  h3, h4 {
+    font-weight: 600; /* Medium */
+  }
+  
+  /* Logo styling */
+  .logo {
+    font-family: var(--font-manrope), sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
   }
   
   html {
@@ -165,12 +206,19 @@
     @apply bg-fixly-bg/90 backdrop-blur-xl border-b border-fixly-border-light sticky top-0 z-50;
   }
   
+  /* Navigation menu items */
+  .nav-link {
+    font-family: var(--font-pt-mono), monospace;
+    font-size: 14px;
+    font-weight: 400;
+  }
+  
   .sidebar {
     @apply bg-fixly-bg border-r border-fixly-border h-full overflow-y-auto;
   }
   
   .sidebar-item {
-    @apply flex items-center px-4 py-3 text-fixly-text-secondary hover:bg-fixly-primary-bg hover:text-fixly-primary rounded-xl transition-all duration-200 cursor-pointer mx-2;
+    @apply flex items-center px-4 py-3 text-fixly-text-secondary hover:bg-fixly-primary-bg hover:text-fixly-primary rounded-xl transition-all duration-200 cursor-pointer mx-2 font-pt-mono text-sm;
   }
   
   .sidebar-item-active {

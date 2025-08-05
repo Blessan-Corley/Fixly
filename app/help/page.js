@@ -903,7 +903,7 @@ export default function HelpPage() {
         )}
 
         {/* Contact Support */}
-        <div className="bg-fixly-accent-light rounded-lg p-8 text-center">
+        <div className="bg-fixly-primary-bg rounded-lg p-8 text-center">
           <h3 className="text-xl font-bold text-fixly-text mb-4">Still need help?</h3>
           <p className="text-fixly-text-light mb-6">
             Can't find what you're looking for? Our support team is here to help.
