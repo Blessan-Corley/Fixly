@@ -32,6 +32,15 @@ function AppProviderContent({ children }) {
 
   // ✅ OPTIMIZATION: Debounced fetch functions
   const fetchUserProfile = useCallback(async (sessionUserId) => {
+    // ✅ CRITICAL FIX: Don't fetch for temporary session IDs
+    if (!sessionUserId || sessionUserId.startsWith('temp_')) {
+      console.log('⏭️ Skipping fetch for temporary session:', sessionUserId);
+      setUser(null);
+      setError('Session not properly established. Please sign in again.');
+      setLoading(false);
+      return;
+    }
+
     // Cancel previous request
     if (userFetchController.current) {
       userFetchController.current.abort();
@@ -49,16 +58,23 @@ function AppProviderContent({ children }) {
 
       if (response.ok) {
         const userData = await response.json();
-        console.log('✅ User profile fetched:', userData.email);
-        setUser(userData);
+        console.log('✅ User profile fetched:', userData.user.email);
+        setUser(userData.user);
         setError(null);
         
         // Update last user ID for notifications
-        lastUserId.current = userData._id;
+        lastUserId.current = userData.user._id;
       } else {
-        console.error('❌ Failed to fetch user profile:', response.status);
-        setUser(null);
-        setError('Failed to load user profile');
+        const errorData = await response.json();
+        console.error('❌ Failed to fetch user profile:', response.status, errorData);
+        
+        if (response.status === 401 && errorData.needsReauth) {
+          setError('Session expired. Please sign in again.');
+          setUser(null);
+        } else {
+          setError(errorData.message || 'Failed to load user profile');
+          setUser(null);
+        }
       }
     } catch (error) {
       if (error.name !== 'AbortError') {
@@ -66,6 +82,8 @@ function AppProviderContent({ children }) {
         setError('Failed to load user profile');
         setUser(null);
       }
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -132,9 +150,8 @@ function AppProviderContent({ children }) {
         setUser(null);
         setNotifications([]);
         lastUserId.current = null;
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     handleSessionChange();
@@ -288,7 +305,7 @@ export function LoadingSpinner({ size = 'default' }) {
 
 // Protected Route Component (optimized)
 export function ProtectedRoute({ children, allowedRoles = [], fallback = null }) {
-  const { user, loading, isAuthenticated, error } = useApp();
+  const { user, loading, isAuthenticated, error, session } = useApp();
 
   if (loading) {
     return (
@@ -337,6 +354,34 @@ export function ProtectedRoute({ children, allowedRoles = [], fallback = null })
         </div>
       </div>
     );
+  }
+
+  // Check if user needs to complete signup (only if we're not already on signup page)
+  if (isAuthenticated && session?.user && (!session.user.isRegistered || !session.user.role || session.user.username?.startsWith('temp_'))) {
+    // Check if we're already on the signup page to prevent loops
+    if (typeof window !== 'undefined' && !window.location.pathname.includes('/auth/signup')) {
+      console.log('🔄 User needs to complete signup, redirecting...', {
+        isRegistered: session.user.isRegistered,
+        role: session.user.role,
+        username: session.user.username,
+        currentPath: window.location.pathname
+      });
+      
+      // Redirect to signup completion
+      const method = session.user.authMethod === 'google' ? '?method=google' : '';
+      window.location.href = `/auth/signup${method}`;
+      
+      return (
+        <div className="min-h-screen bg-fixly-bg flex items-center justify-center">
+          <LoadingSpinner size="large" />
+        </div>
+      );
+    }
+    
+    // If we're already on signup page, don't redirect - let the signup page handle it
+    if (typeof window !== 'undefined' && window.location.pathname.includes('/auth/signup')) {
+      return children;
+    }
   }
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(user?.role)) {

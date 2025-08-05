@@ -30,7 +30,9 @@ export default function OnboardingPage() {
     phone: '',
     role: '',
     location: null,
-    skills: []
+    skills: [],
+    authMethod: searchParams.get('provider') || 'email',
+    googleId: searchParams.get('googleId') || null
   });
 
   // UI states
@@ -175,31 +177,44 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...userData,
-          authMethod: 'google',
-          termsAccepted: true
+          termsAccepted: true,
+          // Ensure location is properly formatted
+          location: userData.location ? {
+            city: userData.location.city,
+            state: userData.location.state,
+            lat: userData.location.lat,
+            lng: userData.location.lng
+          } : null,
+          // Ensure skills are properly formatted
+          skills: userData.role === 'fixer' ? userData.skills : []
         })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Account created successfully!');
+        toast.success('Profile completed successfully!');
         
-        // Sign in the user
-        const result = await signIn('google', {
-          callbackUrl: '/dashboard',
-          redirect: false
-        });
-        
-        if (result?.ok) {
-          router.push('/dashboard');
+        // Sign in the user with their chosen method
+        if (userData.authMethod === 'google') {
+          const result = await signIn('google', {
+            callbackUrl: '/dashboard',
+            redirect: false
+          });
+          
+          if (result?.ok) {
+            router.push('/dashboard');
+          }
+        } else {
+          // For email users, redirect to sign in
+          router.push('/auth/signin');
         }
       } else {
-        toast.error(data.message || 'Registration failed');
+        toast.error(data.message || 'Profile setup failed');
       }
     } catch (error) {
-      console.error('Registration error:', error);
-      toast.error('Registration failed');
+      console.error('Profile setup error:', error);
+      toast.error('Profile setup failed');
     } finally {
       setLoading(false);
     }

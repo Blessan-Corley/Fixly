@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-// Line 3 - Fix this path:
-// NEW - clean @ imports
 import { authOptions } from '@/lib/auth';
 import connectDB from '@/lib/db';
 import Job from '@/models/Job';
 import User from '@/models/User';
 import { rateLimit } from '@/utils/rateLimiting';
-// just checking and coding to improve thanks you all its an honur to with you all !! 
+
+export const dynamic = 'force-dynamic'; 
 export async function GET(request) {
   try {
     // Apply rate limiting
@@ -20,25 +19,59 @@ export async function GET(request) {
     }
 
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
+      console.log('❌ No session or user ID found');
       return NextResponse.json(
         { message: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const role = searchParams.get('role');
+    // ✅ CRITICAL FIX: Handle temporary session IDs
+    const userId = session.user.id;
+    if (userId.startsWith('temp_')) {
+      console.log('⚠️ Temporary session detected in dashboard stats:', userId);
+      return NextResponse.json(
+        { 
+          message: 'Session not properly established. Please complete signup.',
+          needsReauth: true,
+          needsSignup: true
+        },
+        { status: 401 }
+      );
+    }
+
+    // ✅ CRITICAL FIX: Validate ObjectId format
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('❌ Invalid user ID format in stats:', userId);
+      return NextResponse.json(
+        { message: 'Invalid user session. Please sign in again.' },
+        { status: 400 }
+      );
+    }
+
+    console.log('📊 Stats request for user:', session.user.id, 'role:', session.user.role);
 
     await connectDB();
 
     const user = await User.findById(session.user.id);
     if (!user) {
+      console.log('❌ User not found in database:', session.user.id);
       return NextResponse.json(
         { message: 'User not found' },
         { status: 404 }
       );
     }
+
+    if (!user.role) {
+      console.log('❌ User has no role:', user.email);
+      return NextResponse.json(
+        { message: 'User role not set. Please complete your profile.' },
+        { status: 400 }
+      );
+    }
+
+    console.log('✅ User found:', user.email, 'role:', user.role);
 
     let stats = {};
 
@@ -53,8 +86,9 @@ export async function GET(request) {
         stats = await getAdminStats();
         break;
       default:
+        console.log('❌ Invalid user role:', user.role);
         return NextResponse.json(
-          { message: 'Invalid user role' },
+          { message: `Invalid user role: ${user.role}` },
           { status: 400 }
         );
     }

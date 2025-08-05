@@ -126,15 +126,26 @@ function EarningsContent() {
   };
 
   const exportEarnings = () => {
+    // Check if there are jobs to export
+    if (!recentJobs || recentJobs.length === 0) {
+      toast.error('No earnings data to export');
+      return;
+    }
+
     // Generate CSV export
     const csvData = recentJobs.map(job => ({
-      Date: new Date(job.progress?.completedAt).toLocaleDateString(),
-      Job: job.title,
+      Date: job.progress?.completedAt ? new Date(job.progress.completedAt).toLocaleDateString() : 'N/A',
+      Job: job.title || 'Untitled Job',
       Amount: job.budget?.amount || 0,
-      Client: job.createdBy?.name,
-      Status: job.status
+      Client: job.createdBy?.name || 'Unknown Client',
+      Status: job.status || 'Unknown'
     }));
     
+    if (csvData.length === 0) {
+      toast.error('No valid earnings data to export');
+      return;
+    }
+
     const csv = [
       Object.keys(csvData[0]).join(','),
       ...csvData.map(row => Object.values(row).join(','))

@@ -1,4 +1,4 @@
-// app/api/jobs/post/route.js
+// app/api/jobs/post/route.js - Enhanced with all improvements
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -6,57 +6,78 @@ import connectDB from '../../../../lib/db';
 import Job from '../../../../models/Job';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
+import { validateData, sanitizeObject, withSecurity } from '../../../../utils/validation';
+import { 
+  ValidationError, 
+  AuthenticationError, 
+  AuthorizationError, 
+  DatabaseError,
+  handleDatabaseError,
+  withErrorHandling
+} from '../../../../utils/errorHandling';
 
-export async function POST(request) {
+export const dynamic = 'force-dynamic';
+
+// Enhanced job posting with all security measures
+export const POST = withErrorHandling(async (request) => {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'job_posting', 5, 60 * 60 * 1000); // 5 jobs per hour
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { message: 'Too many job posts. Please try again later.' },
-        { status: 429 }
-      );
+    // Apply comprehensive security middleware
+    const securityResponse = await withSecurity({
+      validationSchema: 'jobPosting',
+      rateLimitType: 'job_posting',
+      maxAttempts: 5,
+      windowMs: 60 * 60 * 1000, // 1 hour
+      maxSize: 5 * 1024 * 1024, // 5MB
+      corsOrigins: ['*']
+    })(request);
+
+    if (securityResponse) {
+      return securityResponse;
     }
 
+    // Get user session
     const session = await getServerSession(authOptions);
     if (!session) {
-      return NextResponse.json(
-        { message: 'Authentication required' },
-        { status: 401 }
-      );
+      throw new AuthenticationError('Authentication required');
     }
 
+    // Connect to database
     await connectDB();
 
+    // Get user with enhanced validation
     const user = await User.findById(session.user.id);
-    if (!user || user.role !== 'hirer') {
-      return NextResponse.json(
-        { message: 'Only hirers can post jobs' },
-        { status: 403 }
-      );
+    if (!user) {
+      throw new AuthenticationError('User not found');
+    }
+
+    if (user.role !== 'hirer') {
+      throw new AuthorizationError('Only hirers can post jobs');
     }
 
     if (user.banned) {
-      return NextResponse.json(
-        { message: 'Account suspended' },
-        { status: 403 }
-      );
+      throw new AuthorizationError('Account suspended');
     }
 
-    // Check 6-hour rate limit for job posting
+    // Check job posting rate limit
     if (!user.canPostJob()) {
       const nextAllowedTime = new Date(user.lastJobPostedAt.getTime() + 6 * 60 * 60 * 1000);
       const hoursLeft = Math.ceil((nextAllowedTime - new Date()) / (1000 * 60 * 60));
       
-      return NextResponse.json(
-        { 
-          message: `You can post another job in ${hoursLeft} hour(s). This helps maintain quality on our platform.` 
-        },
-        { status: 429 }
+      throw new ValidationError(
+        `You can post another job in ${hoursLeft} hour(s). This helps maintain quality on our platform.`
       );
     }
 
+    // Parse and validate request body
     const body = await request.json();
+    const sanitizedBody = sanitizeObject(body);
+
+    // Enhanced validation
+    const validation = validateData(sanitizedBody, 'jobPosting');
+    if (!validation.valid) {
+      throw new ValidationError('Invalid job data', validation.errors);
+    }
+
     const {
       title,
       description,
@@ -71,75 +92,32 @@ export async function POST(request) {
       scheduledDate,
       estimatedDuration,
       featured
-    } = body;
+    } = sanitizedBody;
 
-    // Validation
-    if (!title || !description || !skillsRequired || !budget || !location || !deadline) {
-      return NextResponse.json(
-        { message: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
-
-    if (title.length < 10 || title.length > 100) {
-      return NextResponse.json(
-        { message: 'Title must be between 10 and 100 characters' },
-        { status: 400 }
-      );
-    }
-
-    if (description.length < 30 || description.length > 2000) {
-      return NextResponse.json(
-        { message: 'Description must be between 30 and 2000 characters' },
-        { status: 400 }
-      );
-    }
-
-    if (!Array.isArray(skillsRequired) || skillsRequired.length === 0) {
-      return NextResponse.json(
-        { message: 'At least one skill is required' },
-        { status: 400 }
-      );
-    }
-
+    // Additional business logic validation
     if (new Date(deadline) <= new Date()) {
-      return NextResponse.json(
-        { message: 'Deadline must be in the future' },
-        { status: 400 }
-      );
+      throw new ValidationError('Deadline must be in the future');
     }
 
     if (scheduledDate && new Date(scheduledDate) <= new Date()) {
-      return NextResponse.json(
-        { message: 'Scheduled date must be in the future' },
-        { status: 400 }
-      );
+      throw new ValidationError('Scheduled date must be in the future');
     }
 
-    // Validate budget
+    // Validate budget for fixed/hourly jobs
     if (budget.type !== 'negotiable' && (!budget.amount || budget.amount <= 0)) {
-      return NextResponse.json(
-        { message: 'Budget amount is required for fixed and hourly pricing' },
-        { status: 400 }
-      );
+      throw new ValidationError('Budget amount is required for fixed and hourly pricing');
     }
 
     // Validate location
     if (!location.address || !location.city || !location.state) {
-      return NextResponse.json(
-        { message: 'Complete address is required' },
-        { status: 400 }
-      );
+      throw new ValidationError('Complete address is required');
     }
 
     if (location.pincode && !/^[0-9]{6}$/.test(location.pincode)) {
-      return NextResponse.json(
-        { message: 'Invalid pincode format' },
-        { status: 400 }
-      );
+      throw new ValidationError('Invalid pincode format');
     }
 
-    // Create job
+    // Create job with enhanced data
     const jobData = {
       title: title.trim(),
       description: description.trim(),
@@ -192,12 +170,14 @@ export async function POST(request) {
       jobData.featuredUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
     }
 
+    // Create and save job
     const job = new Job(jobData);
     await job.save();
 
-    // Update user's last job posted time and count
+    // Update user's job posting stats
     user.lastJobPostedAt = new Date();
     user.jobsPosted = (user.jobsPosted || 0) + 1;
+    user.lastActivityAt = new Date();
     await user.save();
 
     // Add notification to user
@@ -210,6 +190,7 @@ export async function POST(request) {
     // Populate the created job for response
     await job.populate('createdBy', 'name username photoURL rating location');
 
+    // Return success response with enhanced data
     return NextResponse.json({
       success: true,
       message: 'Job posted successfully',
@@ -225,55 +206,94 @@ export async function POST(request) {
         featured: job.featured,
         createdAt: job.createdAt,
         skillsRequired: job.skillsRequired,
-        applicationCount: 0
+        applicationCount: 0,
+        timeRemaining: job.timeRemaining,
+        isUrgent: job.isUrgent
       }
-    }, { status: 200 });
+    }, { 
+      status: 200,
+      headers: {
+        'X-Job-ID': job._id.toString(),
+        'X-Job-Status': job.status,
+        'X-Job-Featured': job.featured.toString()
+      }
+    });
 
   } catch (error) {
-    console.error('Job posting error:', error);
-    return NextResponse.json(
-      { message: 'Failed to post job. Please try again.' },
-      { status: 500 }
-    );
-  }
-}
+    // Enhanced error handling
+    if (error instanceof ValidationError || 
+        error instanceof AuthenticationError || 
+        error instanceof AuthorizationError) {
+      throw error;
+    }
 
-export async function GET(request) {
+    // Handle database errors
+    if (error.name === 'ValidationError' || error.name === 'CastError') {
+      throw handleDatabaseError(error, 'job creation');
+    }
+
+    // Log and rethrow other errors
+    console.error('Job posting error:', error);
+    throw new DatabaseError('Failed to post job. Please try again.');
+  }
+});
+
+// Enhanced GET endpoint for user's jobs
+export const GET = withErrorHandling(async (request) => {
   try {
+    // Apply security middleware
+    const securityResponse = await withSecurity({
+      rateLimitType: 'api_requests',
+      maxAttempts: 100,
+      windowMs: 15 * 60 * 1000
+    })(request);
+
+    if (securityResponse) {
+      return securityResponse;
+    }
+
     const session = await getServerSession(authOptions);
     if (!session) {
-      return NextResponse.json(
-        { message: 'Authentication required' },
-        { status: 401 }
-      );
+      throw new AuthenticationError('Authentication required');
     }
 
     await connectDB();
 
     const user = await User.findById(session.user.id);
     if (!user || user.role !== 'hirer') {
-      return NextResponse.json(
-        { message: 'Only hirers can access this endpoint' },
-        { status: 403 }
-      );
+      throw new AuthorizationError('Only hirers can access this endpoint');
     }
 
+    // Parse query parameters with validation
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page')) || 1;
-    const limit = Math.min(parseInt(searchParams.get('limit')) || 10, 50);
+    const page = Math.max(1, parseInt(searchParams.get('page')) || 1);
+    const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit')) || 10), 50);
     const status = searchParams.get('status') || '';
+    const sortBy = searchParams.get('sortBy') || 'createdAt';
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
 
+    // Validate status parameter
+    const validStatuses = ['open', 'in_progress', 'completed', 'cancelled'];
+    if (status && !validStatuses.includes(status)) {
+      throw new ValidationError('Invalid status parameter');
+    }
+
+    // Build query
     const query = { createdBy: user._id };
-    
-    if (status && ['open', 'in_progress', 'completed', 'cancelled'].includes(status)) {
+    if (status) {
       query.status = status;
     }
 
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
     const skip = (page - 1) * limit;
 
+    // Execute query with error handling
     const [jobs, total] = await Promise.all([
       Job.find(query)
-        .sort({ createdAt: -1 })
+        .sort(sort)
         .skip(skip)
         .limit(limit)
         .populate('assignedTo', 'name username photoURL rating')
@@ -281,14 +301,34 @@ export async function GET(request) {
       Job.countDocuments(query)
     ]);
 
-    // Add application count to each job
+    // Process jobs with enhanced data
     const jobsWithCounts = jobs.map(job => ({
       ...job,
-      applicationCount: job.applications?.length || 0,
+      applicationCount: job.applications?.filter(app => app.status !== 'withdrawn').length || 0,
+      timeRemaining: (() => {
+        const now = new Date();
+        const deadline = new Date(job.deadline);
+        const diff = deadline - now;
+        
+        if (diff <= 0) return 'Expired';
+        
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        
+        if (days > 0) return `${days} days`;
+        return `${hours} hours`;
+      })(),
+      isUrgent: (() => {
+        const now = new Date();
+        const deadline = new Date(job.deadline);
+        const diff = deadline - now;
+        return diff <= 24 * 60 * 60 * 1000; // Less than 24 hours
+      })(),
       applications: undefined // Remove applications from response for privacy
     }));
 
     return NextResponse.json({
+      success: true,
       jobs: jobsWithCounts,
       pagination: {
         page,
@@ -296,14 +336,29 @@ export async function GET(request) {
         total,
         totalPages: Math.ceil(total / limit),
         hasMore: skip + jobs.length < total
+      },
+      filters: {
+        status,
+        sortBy,
+        sortOrder
+      }
+    }, {
+      status: 200,
+      headers: {
+        'X-Total-Count': total.toString(),
+        'X-Page-Count': Math.ceil(total / limit).toString()
       }
     });
 
   } catch (error) {
+    // Enhanced error handling
+    if (error instanceof ValidationError || 
+        error instanceof AuthenticationError || 
+        error instanceof AuthorizationError) {
+      throw error;
+    }
+
     console.error('Get jobs error:', error);
-    return NextResponse.json(
-      { message: 'Failed to fetch jobs' },
-      { status: 500 }
-    );
+    throw new DatabaseError('Failed to fetch jobs');
   }
-}
+});

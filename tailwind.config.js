@@ -16,53 +16,81 @@ module.exports = {
     },
     extend: {
       colors: {
-        // Professional Soft Color Palette
+        // Enhanced Professional Color Palette - Light/Dark Compatible
         fixly: {
-          // Backgrounds - Warm, soft neutrals
-          bg: '#FEFEFE',           // Softest white with warmth
-          'bg-secondary': '#F8F9FA', // Very light warm gray
-          'bg-muted': '#F1F3F4',   // Light gray for sections
+          // Backgrounds - Enhanced neutral system
+          bg: '#FDFDFD',           // Softest warm white
+          'bg-secondary': '#F7F8FA', // Light warm gray with blue undertone
+          'bg-muted': '#F0F2F5',   // Slightly darker for contrast
+          'bg-dark': '#1A1D23',    // Rich dark background
+          'bg-dark-secondary': '#252830', // Dark secondary
           
-          // Text colors - Professional and readable
-          text: '#1F2937',         // Rich dark gray (not black)
-          'text-secondary': '#4B5563', // Medium gray
-          'text-muted': '#6B7280', // Light gray for subtle text
-          'text-light': '#9CA3AF', // Very light for placeholders
+          // Text colors - Enhanced contrast and readability
+          text: '#1C1F26',         // Rich charcoal (better than pure black)
+          'text-secondary': '#4A5568', // Balanced medium gray
+          'text-muted': '#718096', // Softer muted text
+          'text-light': '#A0AEC0', // Light for placeholders/disabled
+          'text-dark': '#E2E8F0',  // Light text for dark backgrounds
           
-          // Primary accent - Muted teal/blue (professional yet friendly)
-          primary: '#0F766E',      // Deep teal
-          'primary-light': '#14B8A6', // Medium teal
-          'primary-soft': '#5EEAD4',  // Light teal
-          'primary-bg': '#F0FDFA',    // Very light teal background
+          // Primary accent - Enhanced teal system
+          primary: '#0D9488',      // Vibrant professional teal
+          'primary-light': '#14C0B8', // Brighter teal
+          'primary-dark': '#0F766E', // Deeper teal
+          'primary-soft': '#7DD3FC', // Very light accent
+          'primary-bg': '#F0FDFA',   // Minimal background tint
+          'primary-hover': '#0B7E73', // Darker hover state
           
-          // Secondary accent - Warm gray
-          secondary: '#64748B',    // Professional gray
+          // Enhanced accent system
+          accent: '#0D9488',       // Matching primary
+          'accent-light': '#14C0B8',
+          'accent-dark': '#0A5D56',
+          'accent-soft': '#B2F5EA',
+          'accent-bg': '#E6FFFA',
+          
+          // Professional secondary colors
+          secondary: '#64748B',    // Slate gray
           'secondary-light': '#94A3B8',
-          'secondary-soft': '#CBD5E1',
+          'secondary-dark': '#475569',
+          'secondary-soft': '#E2E8F0',
           'secondary-bg': '#F8FAFC',
           
-          // Cards and surfaces
-          card: '#FFFFFF',         // Pure white for cards
-          'card-hover': '#FAFBFC', // Slight gray on hover
-          border: '#E5E7EB',       // Soft border gray
-          'border-light': '#F3F4F6', // Very light borders
+          // Enhanced surface colors
+          card: '#FFFFFF',         // Pure white cards
+          'card-hover': '#FAFBFC', // Subtle hover
+          'card-dark': '#2D3748',  // Dark mode cards
+          border: '#E2E8F0',       // Softer borders
+          'border-light': '#F1F5F9', // Very light borders
+          'border-dark': '#4A5568', // Dark mode borders
           
-          // Status colors - Muted and professional
+          // Professional status colors with better contrast
           success: '#059669',      // Forest green
           'success-light': '#10B981',
+          'success-dark': '#047857',
           'success-bg': '#ECFDF5',
+          'success-text': '#065F46',
           
-          warning: '#D97706',      // Warm orange
+          warning: '#D97706',      // Amber
           'warning-light': '#F59E0B',
+          'warning-dark': '#B45309',
           'warning-bg': '#FFFBEB',
+          'warning-text': '#92400E',
           
-          error: '#DC2626',        // Muted red
+          error: '#DC2626',        // Professional red
           'error-light': '#EF4444',
+          'error-dark': '#B91C1C',
           'error-bg': '#FEF2F2',
+          'error-text': '#991B1B',
           
           info: '#2563EB',         // Professional blue
           'info-light': '#3B82F6',
+          'info-dark': '#1D4ED8',
           'info-bg': '#EFF6FF',
+          'info-text': '#1E40AF',
+          
+          // Brand gradient colors
+          'gradient-start': '#0D9488',
+          'gradient-end': '#14C0B8',
+          'gradient-secondary': '#64748B',
         },
         
         // Keep existing shadcn colors for compatibility

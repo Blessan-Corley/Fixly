@@ -19,7 +19,16 @@ export async function POST(request) {
       );
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (jsonError) {
+      return NextResponse.json({
+        available: false,
+        message: 'Invalid request body'
+      }, { status: 400 });
+    }
+    
     const { username } = body;
 
     if (!username) {
@@ -34,7 +43,8 @@ export async function POST(request) {
     if (!validation.valid) {
       return NextResponse.json({
         available: false,
-        message: validation.message
+        message: validation.error,
+        errors: [{ field: 'username', error: validation.error }]
       });
     }
 
@@ -131,7 +141,7 @@ export async function GET(request) {
     if (!validation.valid) {
       return NextResponse.json({
         suggestions: [],
-        message: validation.message
+        message: validation.error
       });
     }
 

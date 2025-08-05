@@ -1,7 +1,7 @@
 // app/dashboard/profile/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -83,43 +83,45 @@ export default function ProfilePage() {
     }
   }, [citySearch]);
 
-  const handleInputChange = (field, value) => {
-    if (field.includes('.')) {
-      const keys = field.split('.');
-      setFormData(prev => ({
-        ...prev,
-        [keys[0]]: {
-          ...prev[keys[0]],
-          [keys[1]]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }));
-    }
-  };
+  const handleInputChange = useCallback((field, value) => {
+    setFormData(prev => {
+      if (field.includes('.')) {
+        const keys = field.split('.');
+        return {
+          ...prev,
+          [keys[0]]: {
+            ...prev[keys[0]],
+            [keys[1]]: value
+          }
+        };
+      } else {
+        return { ...prev, [field]: value };
+      }
+    });
+  }, []);
 
-  const selectCity = (city) => {
+  const selectCity = useCallback((city) => {
     handleInputChange('location', city);
     setCitySearch('');
     setShowCityDropdown(false);
-  };
+  }, [handleInputChange]);
 
-  const addSkill = (skill) => {
+  const addSkill = useCallback((skill) => {
     if (!formData.skills.includes(skill)) {
       handleInputChange('skills', [...formData.skills, skill]);
     }
-  };
+  }, [formData.skills, handleInputChange]);
 
-  const removeSkill = (skillToRemove) => {
+  const removeSkill = useCallback((skillToRemove) => {
     handleInputChange('skills', formData.skills.filter(skill => skill !== skillToRemove));
-  };
+  }, [formData.skills, handleInputChange]);
 
-  const addCustomSkill = () => {
+  const addCustomSkill = useCallback(() => {
     if (customSkill.trim() && !formData.skills.includes(customSkill.trim())) {
       addSkill(customSkill.trim());
       setCustomSkill('');
     }
-  };
+  }, [customSkill, formData.skills, addSkill]);
 
   const handlePhotoUpload = async (event) => {
     const file = event.target.files[0];
@@ -184,7 +186,7 @@ export default function ProfilePage() {
     }
   };
 
-  const ProfileSection = ({ title, children, editable = false }) => (
+  const ProfileSection = memo(({ title, children, editable = false }) => (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-fixly-text">{title}</h3>
@@ -200,7 +202,7 @@ export default function ProfilePage() {
       </div>
       {children}
     </div>
-  );
+  ));
 
   if (!user) {
     return (

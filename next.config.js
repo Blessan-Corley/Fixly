@@ -1,9 +1,8 @@
 // Create: next.config.js - ADD this to ensure env vars load properly
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverComponentsExternalPackages: ['mongoose'],
-  
   experimental: {
+    serverComponentsExternalPackages: ['mongoose'],
     webpackBuildWorker: true
   },
   

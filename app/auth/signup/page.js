@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn, getSession, signOut } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,35 +10,65 @@ import {
   Lock, 
   User, 
   MapPin, 
-  Search,
   Check,
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Eye,
   EyeOff,
-  Smartphone,
   Chrome,
   Loader,
-  X,
-  Shield
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { searchCities, skillCategories, getAllSkills, searchSkills } from '../../../data/cities';
-import { useFirebase } from '../../../hooks/useFirebase';
+import { searchCities, skillCategories } from '../../../data/cities';
+
+// Username validation
+const validateUsername = (username) => {
+  if (!username || username.length < 3) {
+    return { valid: false, error: 'Username must be at least 3 characters' };
+  }
+  
+  if (username.length > 20) {
+    return { valid: false, error: 'Username cannot exceed 20 characters' };
+  }
+  
+  if (!/^[a-z0-9_]+$/.test(username)) {
+    return { valid: false, error: 'Username can only contain lowercase letters, numbers, and underscores' };
+  }
+  
+  if (/^\d+$/.test(username)) {
+    return { valid: false, error: 'Username cannot be only numbers' };
+  }
+  
+  if (username.startsWith('_') || username.endsWith('_')) {
+    return { valid: false, error: 'Username cannot start or end with underscore' };
+  }
+  
+  if (username.includes('__')) {
+    return { valid: false, error: 'Username cannot contain consecutive underscores' };
+  }
+  
+  const reserved = ['admin', 'root', 'fixly', 'api', 'dashboard'];
+  if (reserved.includes(username)) {
+    return { valid: false, error: 'This username is reserved' };
+  }
+  
+  return { valid: true };
+};
 
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const role = searchParams.get('role') || 'hirer';
+  const urlRole = searchParams.get('role') || 'fixer';
+  const method = searchParams.get('method');
   
   // Form steps
   const [currentStep, setCurrentStep] = useState(1);
-  const [authMethod, setAuthMethod] = useState(''); // 'phone', 'email', 'google'
+  const [authMethod, setAuthMethod] = useState(method || '');
   
   // Form data
   const [formData, setFormData] = useState({
-    role: role,
+    role: urlRole,
     name: '',
     username: '',
     email: '',
@@ -47,7 +77,6 @@ export default function SignupPage() {
     confirmPassword: '',
     location: null,
     skills: [],
-    customSkill: '',
     termsAccepted: false
   });
   
@@ -60,44 +89,10 @@ export default function SignupPage() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [googleUser, setGoogleUser] = useState(null);
   
-  // Phone authentication states
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [otpCountdown, setOtpCountdown] = useState(0);
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [firebaseUid, setFirebaseUid] = useState('');
-  const recaptchaRef = useRef(null);
-  
-  // Firebase hook
-  const { firebase, loading: firebaseLoading, isReady } = useFirebase();
-  const [phoneAuth, setPhoneAuth] = useState(null);
-  
   // Search states
   const [citySearch, setCitySearch] = useState('');
   const [cityResults, setCityResults] = useState([]);
-  const [skillSearch, setSkillSearch] = useState('');
-  const [skillResults, setSkillResults] = useState([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const [showSkillDropdown, setShowSkillDropdown] = useState(false);
-
-  // Initialize phone auth when Firebase is ready
-  useEffect(() => {
-    if (isReady && firebase) {
-      setPhoneAuth(new firebase.PhoneAuth());
-    }
-  }, [firebase, isReady]);
-
-  // Countdown timer for OTP
-  useEffect(() => {
-    let timer;
-    if (otpCountdown > 0) {
-      timer = setTimeout(() => setOtpCountdown(otpCountdown - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [otpCountdown]);
-
-  // Check for existing session and handle Google auth
-  // REPLACE THIS ENTIRE useEffect (around line 119 in your signup page):
 
   // Check for existing session and handle Google auth
   useEffect(() => {
@@ -107,32 +102,30 @@ export default function SignupPage() {
         console.log('🔍 Checking existing session:', session);
         
         if (session?.user) {
-          // ✅ USER IS ALREADY LOGGED IN
-          
           // Check if user has completed profile
           const isProfileComplete = session.user.isRegistered && 
+                                  session.user.role && 
                                   session.user.username && 
                                   !session.user.username.startsWith('temp_');
           
           if (isProfileComplete) {
-            // User is fully registered - redirect to dashboard
             console.log('✅ User already registered, redirecting to dashboard');
-            toast.success('You are already registered!');
-            router.push('/dashboard');
+            toast.success('Welcome back!');
+            router.replace('/dashboard');
             return;
           }
           
-          // ✅ EXISTING USER WITH INCOMPLETE PROFILE
+          // User exists but needs to complete profile
           if (session.user.email && session.user.name) {
             console.log('🔄 Existing user with incomplete profile, pre-filling data');
             
-            // Pre-fill data for Google users or incomplete profiles
             setGoogleUser(session.user);
             setAuthMethod(session.user.authMethod || 'google');
             
             const emailUsername = session.user.email.split('@')[0]
               .toLowerCase()
-              .replace(/[^a-z0-9_]/g, '');
+              .replace(/[^a-z0-9_]/g, '')
+              .slice(0, 10);
             
             setFormData(prev => ({
               ...prev,
@@ -141,9 +134,7 @@ export default function SignupPage() {
               username: session.user.username?.startsWith('temp_') 
                 ? emailUsername 
                 : (session.user.username || emailUsername),
-              role: session.user.role && session.user.role !== 'undefined' 
-                ? session.user.role 
-                : (role || 'fixer')
+              role: session.user.role || urlRole || 'fixer'
             }));
             
             // Skip to profile completion step
@@ -151,13 +142,8 @@ export default function SignupPage() {
             toast.info('Please complete your profile setup');
             return;
           }
-          
-          // ✅ EDGE CASE: Session exists but missing data
-          console.log('⚠️ Session exists but missing essential data');
-          toast.warning('Please complete your registration');
         }
         
-        // ✅ NEW USER - Continue with normal signup flow
         console.log('👤 New user signup');
         
       } catch (error) {
@@ -167,21 +153,22 @@ export default function SignupPage() {
     };
 
     checkExistingUser();
-  }, [router, role]); // ✅ Only depend on router and role
-
-  // ✅ ALSO ADD THIS: Check URL params for role
-  useEffect(() => {
-    const urlRole = searchParams.get('role');
-    if (urlRole && ['hirer', 'fixer'].includes(urlRole)) {
-      setFormData(prev => ({ ...prev, role: urlRole }));
-    }
-  }, [searchParams]);
+  }, [router, urlRole]);
 
   // Username availability check
   useEffect(() => {
     const checkUsername = async () => {
       if (formData.username.length < 3) {
         setUsernameAvailable(null);
+        setErrors(prev => ({ ...prev, username: '' }));
+        return;
+      }
+
+      const validation = validateUsername(formData.username);
+      if (!validation.valid) {
+        setUsernameAvailable(false);
+        setCheckingUsername(false);
+        setErrors(prev => ({ ...prev, username: validation.error }));
         return;
       }
 
@@ -195,8 +182,16 @@ export default function SignupPage() {
         
         const data = await response.json();
         setUsernameAvailable(data.available);
+        
+        if (!data.available) {
+          setErrors(prev => ({ ...prev, username: data.message || 'Username is taken' }));
+        } else {
+          setErrors(prev => ({ ...prev, username: '' }));
+        }
       } catch (error) {
         console.error('Error checking username:', error);
+        setUsernameAvailable(false);
+        setErrors(prev => ({ ...prev, username: 'Unable to check username availability' }));
       } finally {
         setCheckingUsername(false);
       }
@@ -218,39 +213,10 @@ export default function SignupPage() {
     }
   }, [citySearch]);
 
-  // Skill search
-  useEffect(() => {
-    if (skillSearch.length > 0) {
-      const results = searchSkills(skillSearch);
-      setSkillResults(results);
-      setShowSkillDropdown(results.length > 0);
-    } else {
-      setSkillResults([]);
-      setShowSkillDropdown(false);
-    }
-  }, [skillSearch]);
-
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
-    }
-  };
-
-  const handlePhoneChange = (value) => {
-    const cleanPhone = value.replace(/[^\d]/g, '');
-    const limitedPhone = cleanPhone.slice(0, 10);
-    handleInputChange('phone', limitedPhone);
-    
-    // Reset OTP states when phone changes
-    if (otpSent) {
-      setOtpSent(false);
-      setOtp('');
-      setPhoneVerified(false);
-      setFirebaseUid('');
-      if (phoneAuth) {
-        phoneAuth.cleanup();
-      }
     }
   };
 
@@ -265,15 +231,7 @@ export default function SignupPage() {
         break;
         
       case 2:
-        if (authMethod === 'phone') {
-          if (!formData.phone) {
-            newErrors.phone = 'Phone number is required';
-          } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
-            newErrors.phone = 'Please enter a valid 10-digit phone number';
-          } else if (!phoneVerified) {
-            newErrors.phone = 'Please verify your phone number';
-          }
-        } else if (authMethod === 'email') {
+        if (authMethod === 'email') {
           if (!formData.email) {
             newErrors.email = 'Email is required';
           } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
@@ -299,18 +257,17 @@ export default function SignupPage() {
         
         if (!formData.username.trim()) {
           newErrors.username = 'Username is required';
-        } else if (formData.username.length < 3) {
-          newErrors.username = 'Username must be at least 3 characters';
-        } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-          newErrors.username = 'Username can only contain letters, numbers, and underscores';
-        } else if (usernameAvailable === false) {
-          newErrors.username = 'Username is already taken';
+        } else {
+          const validation = validateUsername(formData.username);
+          if (!validation.valid) {
+            newErrors.username = validation.error;
+          } else if (usernameAvailable === false) {
+            newErrors.username = 'Username is already taken';
+          }
         }
         
         if (!formData.email) {
           newErrors.email = 'Email is required';
-        } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-          newErrors.email = 'Please enter a valid email address';
         }
         
         if (authMethod === 'email' && !formData.phone) {
@@ -344,147 +301,29 @@ export default function SignupPage() {
   };
 
   const handlePrevStep = () => {
+    setErrors({});
     setCurrentStep(prev => prev - 1);
   };
 
   const handleGoogleAuth = async () => {
     setLoading(true);
     try {
+      console.log('🔄 Starting Google authentication...');
+      
+      // Clear any existing session
       await signOut({ redirect: false });
       
-      const result = await signIn('google', { 
-        callbackUrl: `${window.location.origin}/auth/signup?role=${role}&method=google`,
-        redirect: false 
+      // Start Google OAuth
+      await signIn('google', { 
+        callbackUrl: `/auth/signup?role=${formData.role}&method=google`
       });
       
-      if (result?.ok) {
-        setTimeout(async () => {
-          const session = await getSession();
-          if (session?.user) {
-            setGoogleUser(session.user);
-            setAuthMethod('google');
-            
-            const emailUsername = session.user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '');
-            setFormData(prev => ({
-              ...prev,
-              name: session.user.name,
-              email: session.user.email,
-              username: prev.username || emailUsername
-            }));
-            
-            setCurrentStep(3);
-            toast.success('Google authentication successful!');
-          }
-          setLoading(false);
-        }, 1500);
-      } else {
-        toast.error('Google authentication failed');
-        setLoading(false);
-      }
     } catch (error) {
       console.error('Google auth error:', error);
-      toast.error('Authentication failed');
+      toast.error('Google authentication failed. Please try again.');
       setLoading(false);
     }
   };
-
-  const handleSendOTP = async () => {
-    if (!isReady || !firebase || !phoneAuth) {
-      toast.error('Phone verification service not ready. Please refresh and try again.');
-      return;
-    }
-    
-    if (!validateStep(2)) return;
-
-    // Check rate limiting
-    const rateCheck = firebase.RateLimiter.canSendOTP(formData.phone);
-    if (!rateCheck.allowed) {
-      toast.error(rateCheck.message);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      console.log('Sending OTP to:', formData.phone);
-      
-      const result = await phoneAuth.sendOTP(formData.phone, 'recaptcha-container');
-      
-      if (result.success) {
-        setOtpSent(true);
-        setOtpCountdown(60);
-        firebase.RateLimiter.recordOTPAttempt(formData.phone);
-        toast.success('OTP sent successfully! Please check your phone.');
-      } else {
-        console.error('OTP send failed:', result.error);
-        toast.error(result.error || 'Failed to send OTP. Please try again.');
-      }
-    } catch (error) {
-      console.error('OTP send error:', error);
-      toast.error('Failed to send OTP. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    if (!otp || otp.length !== 6) {
-      toast.error('Please enter a valid 6-digit OTP');
-      return;
-    }
-
-    if (!phoneAuth) {
-      toast.error('Phone verification service not available');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      console.log('Verifying OTP:', otp);
-      
-      // Verify OTP with Firebase
-      const result = await phoneAuth.verifyOTP(otp);
-      
-      if (result.success) {
-        console.log('Firebase OTP verified:', result);
-        
-        // Verify with backend
-        const backendResponse = await fetch('/api/auth/verify-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phoneNumber: result.phoneNumber,
-            firebaseUid: result.firebaseUid,
-            action: 'signup'
-          })
-        });
-
-        const backendData = await backendResponse.json();
-
-        if (backendResponse.ok && backendData.success) {
-          setPhoneVerified(true);
-          setFirebaseUid(result.firebaseUid);
-          toast.success('Phone number verified successfully!');
-          
-          // Auto-advance to next step
-          setTimeout(() => {
-            handleNextStep();
-          }, 1000);
-        } else {
-          toast.error(backendData.message || 'Backend verification failed');
-        }
-      } else {
-        console.error('OTP verify failed:', result.error);
-        toast.error(result.error || 'Invalid OTP. Please try again.');
-      }
-    } catch (error) {
-      console.error('OTP verify error:', error);
-      toast.error('OTP verification failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  
 
   const handleSubmit = async () => {
     if (!validateStep(4)) return;
@@ -492,85 +331,114 @@ export default function SignupPage() {
     setLoading(true);
     
     try {
-      console.log('📝 Submitting signup data for:', formData.email);
+      console.log('📝 Submitting signup data for:', formData.email, 'Method:', authMethod);
       
-      const submitData = {
-        name: formData.name.trim(),
-        username: formData.username.trim().toLowerCase(),
-        email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.replace(/[^\d]/g, ''),
-        role: formData.role,
-        location: formData.location,
-        termsAccepted: formData.termsAccepted,
-        authMethod: authMethod
-      };
-      
-      if (formData.role === 'fixer') {
-        submitData.skills = formData.skills;
-      }
-      
-      if (authMethod === 'email') {
-        submitData.password = formData.password;
-      }
+      const formattedPhone = formData.phone ? `+91${formData.phone.replace(/[^\d]/g, '')}` : '';
       
       if (authMethod === 'google' && googleUser) {
-        submitData.googleId = googleUser.googleId || googleUser.id;
-        submitData.picture = googleUser.image || googleUser.picture;
-      }
-
-      if (authMethod === 'phone' && phoneVerified) {
-        submitData.firebaseUid = firebaseUid;
-        submitData.phoneVerified = true;
-      }
-      
-      console.log('📤 Final submit data:', {
-        ...submitData,
-        password: submitData.password ? '[HIDDEN]' : undefined
-      });
-
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submitData)
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        toast.success('Account setup completed successfully! 🎉');
+        // Google completion API
+        console.log('🔄 Using Google completion API');
         
-        // ✅ IMPROVED REDIRECT LOGIC
-        if (authMethod === 'email') {
-          // For email users, sign them in
-          const result = await signIn('credentials', {
-            email: formData.email,
-            password: formData.password,
-            loginMethod: 'email',
-            redirect: false
-          });
-          
-          if (result?.ok) {
-            router.push('/dashboard');
-          } else {
-            router.push('/auth/signin?message=signup_complete');
-          }
-        } else if (authMethod === 'google') {
-          // For Google users, they're already signed in
-          router.push('/dashboard');
-        } else if (authMethod === 'phone') {
-          // For phone users, redirect to signin with phone number
-          router.push(`/auth/signin?phone=${encodeURIComponent(`+91${formData.phone}`)}&message=signup_complete`);
+        const googleCompletionData = {
+          role: formData.role,
+          phone: formattedPhone,
+          location: formData.location ? {
+            city: formData.location.name,
+            state: formData.location.state,
+            lat: formData.location.lat || 0,
+            lng: formData.location.lng || 0
+          } : null
+        };
+        
+        if (formData.role === 'fixer') {
+          googleCompletionData.skills = formData.skills;
         }
-      } else {
-        console.error('❌ Signup failed:', data);
         
-        // ✅ HANDLE SPECIFIC ERROR CASES
-        if (data.message?.includes('already exists') || data.message?.includes('already taken')) {
-          toast.error('An account with these details already exists. Try signing in instead.');
+        const response = await fetch('/api/auth/complete-google-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(googleCompletionData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          toast.success('Profile completed successfully! 🎉');
+          
+          // Wait for session to update
           setTimeout(() => {
-            router.push('/auth/signin');
-          }, 2000);
+            router.replace('/dashboard');
+          }, 1000);
         } else {
+          console.error('❌ Google completion failed:', data);
+          toast.error(data.message || 'Failed to complete profile. Please try again.');
+        }
+        
+      } else {
+        // Regular signup flow
+        console.log('🔄 Using regular signup API');
+        
+        const submitData = {
+          name: formData.name.trim(),
+          username: formData.username.trim().toLowerCase(),
+          email: formData.email.trim().toLowerCase(),
+          phone: formattedPhone,
+          role: formData.role,
+          location: formData.location ? {
+            city: formData.location.name,
+            state: formData.location.state,
+            lat: formData.location.lat || 0,
+            lng: formData.location.lng || 0
+          } : null,
+          termsAccepted: formData.termsAccepted,
+          authMethod: authMethod
+        };
+        
+        if (formData.role === 'fixer') {
+          submitData.skills = formData.skills;
+        }
+        
+        if (authMethod === 'email') {
+          submitData.password = formData.password;
+          submitData.confirmPassword = formData.confirmPassword;
+        } else if (authMethod === 'google' && googleUser) {
+          submitData.googleId = googleUser.googleId || googleUser.id;
+          submitData.picture = googleUser.image || googleUser.picture;
+          submitData.isVerified = true;
+          submitData.emailVerified = true;
+        }
+
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(submitData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          toast.success('Account created successfully! 🎉');
+          
+          if (authMethod === 'email') {
+            // Sign in the user
+            const result = await signIn('credentials', {
+              email: formData.email,
+              password: formData.password,
+              loginMethod: 'email',
+              redirect: false
+            });
+            
+            if (result?.error) {
+              toast.error('Account created but login failed. Please try signing in manually.');
+              router.push('/auth/signin?message=signup_complete');
+            } else {
+              router.push('/dashboard');
+            }
+          } else {
+            router.push('/dashboard');
+          }
+        } else {
+          console.error('❌ Signup failed:', data);
           toast.error(data.message || 'Registration failed. Please try again.');
         }
       }
@@ -586,19 +454,10 @@ export default function SignupPage() {
     if (!formData.skills.includes(skill)) {
       handleInputChange('skills', [...formData.skills, skill]);
     }
-    setSkillSearch('');
-    setShowSkillDropdown(false);
   };
 
   const removeSkill = (skillToRemove) => {
     handleInputChange('skills', formData.skills.filter(skill => skill !== skillToRemove));
-  };
-
-  const addCustomSkill = () => {
-    if (formData.customSkill.trim() && !formData.skills.includes(formData.customSkill.trim())) {
-      addSkill(formData.customSkill.trim());
-      handleInputChange('customSkill', '');
-    }
   };
 
   const renderStepContent = () => {
@@ -638,28 +497,6 @@ export default function SignupPage() {
               </button>
 
               <button
-                onClick={() => setAuthMethod('phone')}
-                className={`w-full p-4 rounded-xl border-2 transition-all duration-200 ${
-                  authMethod === 'phone' 
-                    ? 'border-fixly-accent bg-fixly-accent/10' 
-                    : 'border-fixly-border hover:border-fixly-accent'
-                }`}
-              >
-                <div className="flex items-center">
-                  <Smartphone className="h-6 w-6 text-fixly-accent mr-3" />
-                  <div className="text-left">
-                    <div className="font-semibold text-fixly-text">Continue with Phone</div>
-                    <div className="text-sm text-fixly-text-light">Verify with OTP</div>
-                  </div>
-                  {!isReady && (
-                    <div className="ml-auto">
-                      <Loader className="h-4 w-4 animate-spin text-fixly-text-muted" />
-                    </div>
-                  )}
-                </div>
-              </button>
-
-              <button
                 onClick={() => setAuthMethod('email')}
                 className={`w-full p-4 rounded-xl border-2 transition-all duration-200 ${
                   authMethod === 'email' 
@@ -676,17 +513,6 @@ export default function SignupPage() {
                 </div>
               </button>
             </div>
-
-            {!isReady && authMethod === 'phone' && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center">
-                  <Loader className="h-4 w-4 animate-spin text-yellow-600 mr-2" />
-                  <span className="text-sm text-yellow-800">
-                    Loading phone verification service...
-                  </span>
-                </div>
-              </div>
-            )}
 
             {errors.authMethod && (
               <p className="text-red-500 text-sm mt-2">{errors.authMethod}</p>
@@ -727,7 +553,7 @@ export default function SignupPage() {
           );
         }
 
-        if (authMethod === 'phone') {
+        if (authMethod === 'email') {
           return (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
@@ -736,206 +562,98 @@ export default function SignupPage() {
             >
               <div className="text-center mb-8">
                 <h2 className="text-2xl font-bold text-fixly-text mb-2">
-                  Verify Phone Number
+                  Create Account
                 </h2>
                 <p className="text-fixly-text-light">
-                  We'll send you a verification code
+                  Enter your details to create your account
                 </p>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Phone Number
+                    Email Address
                   </label>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
                     <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="Enter 10-digit phone number"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      placeholder="Enter your email"
                       className="input-field pl-10"
-                      disabled={otpSent || phoneVerified}
                     />
-                    {phoneVerified && (
-                      <Check className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-green-500" />
-                    )}
                   </div>
-                  {errors.phone && (
-                    <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
+                  {errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                   )}
                 </div>
 
-                {!otpSent && !phoneVerified ? (
-                  <button
-                    onClick={handleSendOTP}
-                    disabled={loading || !isReady}
-                    className="btn-primary w-full"
-                  >
-                    {loading ? (
-                      <Loader className="animate-spin h-5 w-5 mr-2" />
-                    ) : (
-                      <Smartphone className="h-5 w-5 mr-2" />
-                    )}
-                    Send OTP
-                  </button>
-                ) : !phoneVerified ? (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-fixly-text mb-2">
-                        Enter OTP
-                      </label>
-                      <input
-                        type="text"
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value.replace(/[^\d]/g, '').slice(0, 6))}
-                        placeholder="Enter 6-digit OTP"
-                        className="input-field text-center text-lg tracking-widest"
-                        maxLength={6}
-                      />
-                    </div>
-
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={formData.password}
+                      onChange={(e) => handleInputChange('password', e.target.value)}
+                      placeholder="Create a password"
+                      className="input-field pl-10 pr-10"
+                    />
                     <button
-                      onClick={handleVerifyOTP}
-                      disabled={loading || otp.length !== 6}
-                      className="btn-primary w-full"
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
                     >
-                      {loading ? (
-                        <Loader className="animate-spin h-5 w-5 mr-2" />
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5 text-fixly-text-muted" />
                       ) : (
-                        <Shield className="h-5 w-5 mr-2" />
+                        <Eye className="h-5 w-5 text-fixly-text-muted" />
                       )}
-                      Verify OTP
                     </button>
-
-                    {otpCountdown > 0 ? (
-                      <p className="text-center text-fixly-text-muted">
-                        Resend OTP in {otpCountdown}s
-                      </p>
-                    ) : (
-                      <button
-                        onClick={handleSendOTP}
-                        disabled={loading}
-                        className="w-full text-fixly-accent hover:text-fixly-accent-dark"
-                      >
-                        Resend OTP
-                      </button>
-                    )}
                   </div>
-                ) : (
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center">
-                      <Check className="h-5 w-5 text-green-600 mr-2" />
-                      <span className="text-green-800">Phone number verified successfully!</span>
-                    </div>
-                  </div>
-                )}
+                  {errors.password && (
+                    <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+                  )}
+                </div>
 
-                <div ref={recaptchaRef} id="recaptcha-container"></div>
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Confirm Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={formData.confirmPassword}
+                      onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                      placeholder="Confirm your password"
+                      className="input-field pl-10 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-5 w-5 text-fixly-text-muted" />
+                      ) : (
+                        <Eye className="h-5 w-5 text-fixly-text-muted" />
+                      )}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && (
+                    <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
+                  )}
+                </div>
               </div>
             </motion.div>
           );
         }
 
-        // Email auth form
-        return (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-fixly-text mb-2">
-                Create Password
-              </h2>
-              <p className="text-fixly-text-light">
-                Choose a secure password for your account
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-fixly-text mb-2">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    placeholder="Enter your email"
-                    className="input-field pl-10"
-                  />
-                </div>
-                {errors.email && (
-                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-fixly-text mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={(e) => handleInputChange('password', e.target.value)}
-                    placeholder="Create a password"
-                    className="input-field pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-5 w-5 text-fixly-text-muted" />
-                    ) : (
-                      <Eye className="h-5 w-5 text-fixly-text-muted" />
-                    )}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="text-red-500 text-sm mt-1">{errors.password}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-fixly-text mb-2">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={formData.confirmPassword}
-                    onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                    placeholder="Confirm your password"
-                    className="input-field pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-5 w-5 text-fixly-text-muted" />
-                    ) : (
-                      <Eye className="h-5 w-5 text-fixly-text-muted" />
-                    )}
-                  </button>
-                </div>
-                {errors.confirmPassword && (
-                  <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        );
+        return null;
 
       case 3:
         return (
@@ -980,24 +698,6 @@ export default function SignupPage() {
               </div>
             )}
 
-            {/* Phone verification status */}
-            {authMethod === 'phone' && phoneVerified && (
-              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl">
-                <div className="flex items-center space-x-3">
-                  <Shield className="h-12 w-12 p-2 bg-green-100 rounded-full text-green-600" />
-                  <div>
-                    <div className="font-medium text-green-800">
-                      Phone Verified
-                    </div>
-                    <div className="text-sm text-green-600">
-                      +91{formData.phone}
-                    </div>
-                  </div>
-                  <Check className="h-5 w-5 text-green-600 ml-auto" />
-                </div>
-              </div>
-            )}
-
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-fixly-text mb-2">
@@ -1021,11 +721,6 @@ export default function SignupPage() {
                     </div>
                   )}
                 </div>
-                {authMethod === 'google' && (
-                  <p className="text-xs text-fixly-text-light mt-1">
-                    From your Google account
-                  </p>
-                )}
                 {errors.name && (
                   <p className="text-red-500 text-sm mt-1">{errors.name}</p>
                 )}
@@ -1040,7 +735,13 @@ export default function SignupPage() {
                   <input
                     type="text"
                     value={formData.username}
-                    onChange={(e) => handleInputChange('username', e.target.value.toLowerCase())}
+                    onChange={(e) => {
+                      let value = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                      if (value.startsWith('_')) value = value.substring(1);
+                      value = value.replace(/__+/g, '_');
+                      if (value.length > 20) value = value.substring(0, 20);
+                      handleInputChange('username', value);
+                    }}
                     placeholder="Choose a unique username"
                     className="input-field pl-10 pr-10"
                   />
@@ -1065,11 +766,6 @@ export default function SignupPage() {
               <div>
                 <label className="block text-sm font-medium text-fixly-text mb-2">
                   Email Address
-                  {authMethod === 'google' && (
-                    <span className="text-xs text-fixly-text-light ml-2">
-                      (from Google account)
-                    </span>
-                  )}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
@@ -1084,7 +780,6 @@ export default function SignupPage() {
                         : ''
                     }`}
                     disabled={authMethod === 'google'}
-                    readOnly={authMethod === 'google'}
                   />
                   {authMethod === 'google' && (
                     <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -1092,61 +787,33 @@ export default function SignupPage() {
                     </div>
                   )}
                 </div>
-                {authMethod === 'google' && (
-                  <p className="text-xs text-fixly-text-light mt-1">
-                    This email is verified through Google
-                  </p>
-                )}
                 {errors.email && (
                   <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                 )}
               </div>
 
-              {authMethod === 'email' && (
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="Enter your phone number"
-                      className="input-field pl-10"
-                    />
-                  </div>
-                  {errors.phone && (
-                    <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
-                  )}
+              {/* Phone for both email and Google users */}
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-2">
+                  Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                  <input
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => {
+                      const cleanPhone = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
+                      handleInputChange('phone', cleanPhone);
+                    }}
+                    placeholder="Enter your phone number"
+                    className="input-field pl-10"
+                  />
                 </div>
-              )}
-
-              {/* Phone number for Google users */}
-              {authMethod === 'google' && (
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Phone Number
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => handlePhoneChange(e.target.value)}
-                      placeholder="Enter your phone number"
-                      className="input-field pl-10"
-                    />
-                  </div>
-                  <p className="text-xs text-fixly-text-light mt-1">
-                    Required for account verification and notifications
-                  </p>
-                  {errors.phone && (
-                    <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
-                  )}
-                </div>
-              )}
+                {errors.phone && (
+                  <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
+                )}
+              </div>
             </div>
           </motion.div>
         );
@@ -1284,27 +951,6 @@ export default function SignupPage() {
                     ))}
                   </div>
 
-                  {/* Custom Skill Input */}
-                  <div className="mt-4">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={formData.customSkill}
-                        onChange={(e) => handleInputChange('customSkill', e.target.value)}
-                        placeholder="Add custom skill"
-                        className="input-field flex-1"
-                        onKeyPress={(e) => e.key === 'Enter' && addCustomSkill()}
-                      />
-                      <button
-                        onClick={addCustomSkill}
-                        disabled={!formData.customSkill.trim()}
-                        className="btn-secondary px-4"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-
                   {errors.skills && (
                     <p className="text-red-500 text-sm mt-1">{errors.skills}</p>
                   )}
@@ -1350,10 +996,10 @@ export default function SignupPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-fixly-text mb-2">
-            Join Fixly as a {role === 'hirer' ? 'Hirer' : 'Fixer'}
+            Join Fixly as a {urlRole === 'hirer' ? 'Hirer' : 'Fixer'}
           </h1>
           <p className="text-fixly-text-light">
-            {role === 'hirer' 
+            {urlRole === 'hirer' 
               ? 'Post jobs and hire skilled professionals' 
               : 'Find work opportunities and grow your business'
             }
@@ -1396,6 +1042,7 @@ export default function SignupPage() {
               <button
                 onClick={handlePrevStep}
                 className="btn-ghost flex items-center"
+                disabled={loading}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Previous
@@ -1406,41 +1053,24 @@ export default function SignupPage() {
               {currentStep < 4 ? (
                 <button
                   onClick={() => {
-                    if (currentStep === 1 && authMethod) {
-                      handleNextStep();
-                    } else if (currentStep === 2 && authMethod === 'google') {
-                      handleGoogleAuth();
-                    } else if (currentStep === 2 && authMethod === 'phone' && !otpSent) {
-                      handleSendOTP();
-                    } else if (currentStep === 2 && authMethod === 'phone' && otpSent && !phoneVerified) {
-                      handleVerifyOTP();
-                    } else if (currentStep === 2 && authMethod === 'email') {
-                      handleNextStep();
-                    } else if (currentStep === 2 && phoneVerified) {
-                      handleNextStep();
+                    if (currentStep === 1) {
+                      if (authMethod === 'google') {
+                        handleGoogleAuth();
+                      } else if (authMethod === 'email') {
+                        handleNextStep();
+                      }
                     } else {
                       handleNextStep();
                     }
                   }}
-                  disabled={
-                    loading || 
-                    (currentStep === 1 && !authMethod) ||
-                    (currentStep === 1 && authMethod === 'phone' && !isReady) ||
-                    (currentStep === 2 && authMethod === 'phone' && otpSent && !phoneVerified && otp.length !== 6)
-                  }
+                  disabled={loading || (currentStep === 1 && !authMethod)}
                   className="btn-primary flex items-center"
                 >
                   {loading ? (
                     <Loader className="animate-spin h-4 w-4 mr-2" />
                   ) : null}
                   {currentStep === 1 
-                    ? 'Next'
-                    : currentStep === 2 && authMethod === 'google' 
-                    ? 'Continue with Google'
-                    : currentStep === 2 && authMethod === 'phone' && !otpSent 
-                    ? 'Send OTP'
-                    : currentStep === 2 && authMethod === 'phone' && otpSent && !phoneVerified
-                    ? 'Verify OTP'
+                    ? (authMethod === 'google' ? 'Continue with Google' : 'Next')
                     : 'Next'
                   }
                   <ArrowRight className="h-4 w-4 ml-2" />
@@ -1466,12 +1096,54 @@ export default function SignupPage() {
           <p className="text-fixly-text-light">
             Already have an account?{' '}
             <button
-              onClick={() => router.push('/auth/signin')}
+              onClick={() => router.push(`/auth/signin?role=${formData.role}`)}
               className="text-fixly-accent hover:text-fixly-accent-dark font-medium"
+              disabled={loading}
             >
               Sign In
             </button>
           </p>
+        </div>
+
+        {/* Footer Navigation */}
+        <div className="text-center mt-8 pt-6 border-t border-fixly-border space-y-3">
+          <div>
+            <a 
+              href="/"
+              className="text-fixly-text-light hover:text-fixly-accent text-sm transition-colors"
+            >
+              ← Back to Home
+            </a>
+          </div>
+          <div className="flex justify-center items-center space-x-4 text-xs text-fixly-text-light">
+            <a 
+              href="/contact" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Contact Us
+            </a>
+            <span>•</span>
+            <a 
+              href="/help" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Help
+            </a>
+            <span>•</span>
+            <a 
+              href="/terms" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Terms
+            </a>
+            <span>•</span>
+            <a 
+              href="/privacy" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Privacy
+            </a>
+          </div>
         </div>
       </div>
     </div>

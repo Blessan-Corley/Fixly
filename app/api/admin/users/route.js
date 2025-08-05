@@ -6,6 +6,8 @@ import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request) {
   try {
     // Apply rate limiting

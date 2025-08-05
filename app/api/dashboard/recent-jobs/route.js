@@ -7,6 +7,8 @@ import Job from '../../../../models/Job';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
 
+export const dynamic = 'force-dynamic';
+
 // app/api/dashboard/recent-jobs/route.js - Fix to match stats API pattern
 
 export async function GET(request) {
@@ -21,33 +23,43 @@ export async function GET(request) {
     }
 
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session?.user?.id) {
+      console.log('❌ No session or user ID found for recent-jobs');
       return NextResponse.json(
         { message: 'Authentication required' },
         { status: 401 }
       );
     }
 
+    console.log('📋 Recent jobs request for user:', session.user.id);
+
     await connectDB();
 
-    // ✅ CRITICAL FIX: Get user from database (same as stats API)
     const user = await User.findById(session.user.id);
     if (!user) {
+      console.log('❌ User not found in database:', session.user.id);
       return NextResponse.json(
         { message: 'User not found' },
         { status: 404 }
       );
     }
 
-    // ✅ REMOVED: Don't get role from URL parameters
-    // const role = searchParams.get('role') || user.role;
-    // ✅ USE: Get role from database user
+    if (!user.role) {
+      console.log('❌ User has no role:', user.email);
+      return NextResponse.json(
+        { message: 'User role not set. Please complete your profile.' },
+        { status: 400 }
+      );
+    }
+
     const role = user.role;
+    console.log('✅ User found for recent jobs:', user.email, 'role:', role);
 
     // ✅ VALIDATE: Ensure role is valid
-    if (!role || !['fixer', 'hirer', 'admin'].includes(role)) {
+    if (!['fixer', 'hirer', 'admin'].includes(role)) {
+      console.log('❌ Invalid user role:', role);
       return NextResponse.json(
-        { message: 'Invalid user role' },
+        { message: `Invalid user role: ${role}` },
         { status: 400 }
       );
     }

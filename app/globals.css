@@ -6,27 +6,41 @@
 
 @layer base {
   :root {
-    /* Professional Soft Color Scheme */
-    --background: 254 254 254; /* #FEFEFE - Softest white */
-    --foreground: 31 41 55; /* #1F2937 - Rich dark gray */
+    /* Enhanced Professional Color Scheme - Light/Dark Compatible */
+    --background: 253 253 253; /* #FDFDFD - Enhanced warm white */
+    --foreground: 28 31 38; /* #1C1F26 - Rich charcoal */
     --card: 255 255 255; /* #FFFFFF - Pure white for cards */
-    --card-foreground: 31 41 55;
+    --card-foreground: 28 31 38;
     --popover: 255 255 255;
-    --popover-foreground: 31 41 55;
-    --primary: 15 118 110; /* #0F766E - Deep professional teal */
+    --popover-foreground: 28 31 38;
+    --primary: 13 148 136; /* #0D9488 - Vibrant professional teal */
     --primary-foreground: 255 255 255;
-    --secondary: 248 249 250; /* #F8F9FA - Warm light gray */
-    --secondary-foreground: 31 41 55;
-    --muted: 241 243 244; /* #F1F3F4 - Soft gray */
-    --muted-foreground: 107 114 128; /* #6B7280 - Muted text */
-    --accent: 15 118 110; /* Same as primary for consistency */
+    --secondary: 247 248 250; /* #F7F8FA - Enhanced light gray */
+    --secondary-foreground: 28 31 38;
+    --muted: 240 242 245; /* #F0F2F5 - Better contrast */
+    --muted-foreground: 113 128 150; /* #718096 - Softer muted text */
+    --accent: 13 148 136; /* Matching primary */
     --accent-foreground: 255 255 255;
-    --destructive: 220 38 38; /* #DC2626 - Muted red */
+    
+    /* Enhanced Fixly specific colors */
+    --fixly-primary: 13 148 136; /* #0D9488 - Vibrant teal */
+    --fixly-primary-light: 20 192 184; /* #14C0B8 - Brighter teal */
+    --fixly-primary-dark: 15 118 110; /* #0F766E - Deeper teal */
+    --fixly-primary-hover: 11 126 115; /* #0B7E73 - Hover state */
+    --fixly-gradient-start: 13 148 136; /* #0D9488 */
+    --fixly-gradient-end: 20 192 184; /* #14C0B8 */
+    --destructive: 220 38 38; /* #DC2626 - Professional red */
     --destructive-foreground: 255 255 255;
-    --border: 229 231 235; /* #E5E7EB - Soft border */
-    --input: 229 231 235;
-    --ring: 15 118 110; /* Matching primary */
-    --radius: 0.75rem; /* Slightly more rounded for modern look */
+    --border: 226 232 240; /* #E2E8F0 - Softer borders */
+    --input: 226 232 240;
+    --ring: 13 148 136; /* Matching enhanced primary */
+    --radius: 0.75rem; /* Modern rounded corners */
+    
+    /* Status color variables */
+    --success: 5 150 105; /* #059669 */
+    --warning: 217 119 6; /* #D97706 */
+    --error: 220 38 38; /* #DC2626 */
+    --info: 37 99 235; /* #2563EB */
   }
 }
 
@@ -47,21 +61,25 @@
 }
 
 @layer components {
-  /* Button Components - Professional and Soft */
+  /* Enhanced Button Components - Professional and Modern */
   .btn-primary {
-    @apply bg-fixly-primary hover:bg-fixly-primary text-white font-medium px-6 py-3 rounded-xl transition-all duration-200 shadow-fixly hover:shadow-fixly-hover active:scale-[0.98];
+    @apply bg-fixly-primary hover:bg-fixly-primary-hover text-white font-medium px-6 py-3 rounded-xl transition-all duration-200 shadow-fixly hover:shadow-fixly-hover active:scale-[0.98] focus:ring-2 focus:ring-fixly-primary-light focus:ring-offset-2;
   }
   
   .btn-secondary {
-    @apply bg-white hover:bg-fixly-bg-secondary text-fixly-text font-medium px-6 py-3 rounded-xl border border-fixly-border transition-all duration-200 shadow-fixly hover:shadow-fixly-md hover:border-fixly-primary-light;
+    @apply bg-white hover:bg-fixly-bg-secondary text-fixly-text font-medium px-6 py-3 rounded-xl border border-fixly-border transition-all duration-200 shadow-fixly hover:shadow-fixly-md hover:border-fixly-primary-light focus:ring-2 focus:ring-fixly-primary-light focus:ring-offset-2;
   }
   
   .btn-ghost {
-    @apply bg-transparent hover:bg-fixly-bg-secondary text-fixly-text font-medium px-6 py-3 rounded-xl transition-all duration-200 hover:shadow-fixly;
+    @apply bg-transparent hover:bg-fixly-bg-secondary text-fixly-text font-medium px-6 py-3 rounded-xl transition-all duration-200 hover:shadow-fixly focus:ring-2 focus:ring-fixly-primary-light focus:ring-offset-2;
   }
   
   .btn-soft {
-    @apply bg-fixly-primary-bg hover:bg-fixly-primary-soft text-fixly-primary font-medium px-6 py-3 rounded-xl transition-all duration-200 hover:shadow-fixly;
+    @apply bg-fixly-primary-bg hover:bg-fixly-primary-soft text-fixly-primary font-medium px-6 py-3 rounded-xl transition-all duration-200 hover:shadow-fixly focus:ring-2 focus:ring-fixly-primary-light focus:ring-offset-2;
+  }
+  
+  .btn-gradient {
+    @apply bg-gradient-to-r from-fixly-gradient-start to-fixly-gradient-end hover:from-fixly-primary-hover hover:to-fixly-primary-light text-white font-medium px-6 py-3 rounded-xl transition-all duration-200 shadow-fixly hover:shadow-fixly-hover active:scale-[0.98];
   }
   
   /* Card Components - Clean and Professional */
@@ -96,27 +114,27 @@
   }
   
   .badge-success {
-    @apply bg-fixly-success-bg text-fixly-success border border-fixly-success/20;
+    @apply bg-fixly-success-bg text-fixly-success-text border border-fixly-success/20 font-medium;
   }
   
   .badge-warning {
-    @apply bg-fixly-warning-bg text-fixly-warning border border-fixly-warning/20;
+    @apply bg-fixly-warning-bg text-fixly-warning-text border border-fixly-warning/20 font-medium;
   }
   
   .badge-error {
-    @apply bg-fixly-error-bg text-fixly-error border border-fixly-error/20;
+    @apply bg-fixly-error-bg text-fixly-error-text border border-fixly-error/20 font-medium;
   }
   
   .badge-info {
-    @apply bg-fixly-info-bg text-fixly-info border border-fixly-info/20;
+    @apply bg-fixly-info-bg text-fixly-info-text border border-fixly-info/20 font-medium;
   }
   
   .badge-primary {
-    @apply bg-fixly-primary-bg text-fixly-primary border border-fixly-primary/20;
+    @apply bg-fixly-primary-bg text-fixly-primary border border-fixly-primary/20 font-medium;
   }
   
   .badge-neutral {
-    @apply bg-fixly-secondary-bg text-fixly-secondary border border-fixly-secondary/20;
+    @apply bg-fixly-secondary-bg text-fixly-secondary border border-fixly-secondary/20 font-medium;
   }
   
   /* Skill Chips - Modern and Interactive */
@@ -235,7 +253,19 @@
   }
   
   .gradient-primary {
-    @apply bg-gradient-to-r from-fixly-primary to-fixly-primary-light;
+    @apply bg-gradient-to-r from-fixly-gradient-start to-fixly-gradient-end;
+  }
+  
+  .gradient-primary-vertical {
+    @apply bg-gradient-to-b from-fixly-gradient-start to-fixly-gradient-end;
+  }
+  
+  .gradient-secondary {
+    @apply bg-gradient-to-r from-fixly-secondary to-fixly-secondary-light;
+  }
+  
+  .gradient-surface {
+    @apply bg-gradient-to-br from-fixly-bg to-fixly-bg-secondary;
   }
   
   .glass-effect {
@@ -265,7 +295,7 @@
   
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #14B8A6 #F1F3F4;
+    scrollbar-color: #14C0B8 #F0F2F5;
   }
   
   .scrollbar-thin::-webkit-scrollbar {
@@ -273,34 +303,34 @@
   }
   
   .scrollbar-thin::-webkit-scrollbar-track {
-    background: #F1F3F4;
+    background: #F0F2F5;
     border-radius: 3px;
   }
   
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #14B8A6;
+    background-color: #14C0B8;
     border-radius: 3px;
   }
 }
 
-/* Custom Scrollbar - Professional Look */
+/* Enhanced Custom Scrollbar - Professional Look */
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #F1F3F4;
+  background: #F0F2F5;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #14B8A6;
+  background-color: #14C0B8;
   border-radius: 4px;
-  border: 1px solid #F1F3F4;
+  border: 1px solid #F0F2F5;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #0F766E;
+  background-color: #0D9488;
 }
 
 /* Smooth Transitions */

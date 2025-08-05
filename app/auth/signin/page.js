@@ -1,82 +1,69 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn, getSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import { 
-  Phone, 
   Mail, 
   Lock, 
   Eye,
   EyeOff,
-  Smartphone,
   Chrome,
   Loader,
-  ArrowRight,
   AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
-// import { PhoneAuth, RateLimiter } from '../../../lib/firebase';
-import { useFirebase } from '../../../hooks/useFirebase';
 
 export default function SignInPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
+  const message = searchParams.get('message');
+  const role = searchParams.get('role') || 'fixer';
   
   // Form states
-  const [loginMethod, setLoginMethod] = useState(''); // 'phone', 'email', 'google'
   const [formData, setFormData] = useState({
     email: '',
-    phone: '',
     password: ''
   });
   
   // UI states
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
-  
-  // Phone authentication
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState('');
-  const { firebase, loading: firebaseLoading } = useFirebase();
-  const [phoneAuth, setPhoneAuth] = useState(null);
-  const [otpCountdown, setOtpCountdown] = useState(0);
-  const recaptchaRef = useRef(null);
-  useEffect(() => {
-  if (firebase) {
-    setPhoneAuth(new firebase.PhoneAuth());
-  }
-  }, [firebase]);
-  // Countdown timer for OTP
-  useEffect(() => {
-    let timer;
-    if (otpCountdown > 0) {
-      timer = setTimeout(() => setOtpCountdown(otpCountdown - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [otpCountdown]);
 
   // Check if user is already authenticated
   useEffect(() => {
-    getSession().then((session) => {
-      if (session) {
-        router.push('/dashboard');
+    const checkAuth = async () => {
+      try {
+        const session = await getSession();
+        if (session?.user) {
+          // Check if user has completed registration
+          if (session.user.isRegistered && session.user.role && !session.user.username?.startsWith('temp_')) {
+            console.log('✅ User already signed in and registered, redirecting to dashboard');
+            router.replace('/dashboard');
+          }
+          // If user is not fully registered, let them stay on signin page to complete flow
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
       }
-    });
+    };
+
+    checkAuth();
   }, [router]);
 
-  // Handle URL errors
+  // Handle URL messages
   useEffect(() => {
     if (error) {
       switch (error) {
         case 'CredentialsSignin':
-          toast.error('Invalid credentials. Please check your details.');
+          toast.error('Invalid email or password. Please try again.');
           break;
         case 'OAuthCallback':
-          toast.error('Error with Google authentication. Please try again.');
+          toast.error('Google authentication failed. Please try again.');
           break;
         case 'AccessDenied':
           toast.error('Access denied. Your account may be suspended.');
@@ -85,7 +72,11 @@ export default function SignInPage() {
           toast.error('Authentication error. Please try again.');
       }
     }
-  }, [error]);
+
+    if (message === 'signup_complete') {
+      toast.success('Account created successfully! Please sign in.');
+    }
+  }, [error, message]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -97,444 +88,88 @@ export default function SignInPage() {
   const validateForm = () => {
     const newErrors = {};
 
-    if (loginMethod === 'email') {
-      if (!formData.email) {
-        newErrors.email = 'Email is required';
-      } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-        newErrors.email = 'Please enter a valid email address';
-      }
-      
-      if (!formData.password) {
-        newErrors.password = 'Password is required';
-      }
+    if (!formData.email) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
     }
-
-    if (loginMethod === 'phone') {
-      if (!formData.phone) {
-        newErrors.phone = 'Phone number is required';
-      } else if (!/^[6-9]\d{9}$/.test(formData.phone.replace(/\D/g, ''))) {
-        newErrors.phone = 'Please enter a valid 10-digit phone number';
-      }
+    
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleGoogleSignIn = async () => {
-    setLoading(true);
-    try {
-      const result = await signIn('google', { 
-        callbackUrl: '/dashboard',
-        redirect: false 
-      });
-      
-      if (result?.error) {
-        toast.error('Google authentication failed');
-      } else if (result?.url) {
-        router.push(result.url);
-      }
-    } catch (error) {
-      console.error('Google auth error:', error);
-      toast.error('Authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEmailSignIn = async () => {
+  const handleEmailSignIn = async (e) => {
+    e.preventDefault();
     if (!validateForm()) return;
 
     setLoading(true);
     try {
+      console.log('🔄 Starting email signin for:', formData.email);
+
       const result = await signIn('credentials', {
-        email: formData.email,
+        email: formData.email.toLowerCase().trim(),
         password: formData.password,
         loginMethod: 'email',
         redirect: false
       });
 
+      console.log('📋 Signin result:', result);
+
       if (result?.error) {
-        toast.error(result.error);
-      } else {
-        toast.success('Login successful!');
-        router.push('/dashboard');
-      }
-    } catch (error) {
-      console.error('Email login error:', error);
-      toast.error('Login failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSendOTP = async () => {
-    if (!firebase || !phoneAuth) {
-      toast.error('Firebase not loaded yet');
-      return;
-    }
-  
-    if (!validateForm()) return;
-
-    const rateCheck = firebase.RateLimiter.canSendOTP(formData.phone);
-    if (!rateCheck.allowed) {
-      toast.error(rateCheck.message);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await phoneAuth.sendOTP(formData.phone, 'recaptcha-container');
-      
-      if (result.success) {
-        setOtpSent(true);
-        setOtpCountdown(60);
-        firebase?.RateLimiter.recordOTPAttempt(formData.phone);
-        toast.success('OTP sent successfully');
-      } else {
-        toast.error(result.error);
-      }
-    } catch (error) {
-      console.error('OTP send error:', error);
-      toast.error('Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async () => {
-    if (!otp || otp.length !== 6) {
-      toast.error('Please enter a valid 6-digit OTP');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await phoneAuth.verifyOTP(otp);
-      
-      if (result.success) {
-        // Now sign in with NextAuth
-        const signInResult = await signIn('credentials', {
-          phone: formData.phone,
-          loginMethod: 'phone',
-          redirect: false
-        });
-
-        if (signInResult?.error) {
-          toast.error(signInResult.error);
+        console.error('❌ Signin error:', result.error);
+        
+        if (result.error.includes('Google login')) {
+          toast.error('This email uses Google login. Please use "Continue with Google" instead.');
+        } else if (result.error.includes('complete your registration')) {
+          toast.error('Please complete your registration first.');
+          router.push(`/auth/signup?role=${role}`);
+        } else if (result.error.includes('Invalid email or password')) {
+          toast.error('Invalid email or password. If you forgot your password, click "Forgot Password" below.');
+        } else if (result.error.includes('Too many login attempts')) {
+          toast.error('Too many failed attempts. Please wait 15 minutes or reset your password.');
         } else {
-          toast.success('Login successful!');
-          router.push('/dashboard');
+          toast.error(result.error || 'Login failed. Please check your credentials.');
         }
       } else {
-        toast.error(result.error);
+        // Success - check session and redirect
+        console.log('✅ Email signin successful');
+        toast.success('Welcome back!');
+        
+        // Small delay to ensure session is set
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 500);
       }
     } catch (error) {
-      console.error('OTP verify error:', error);
-      toast.error('OTP verification failed');
+      console.error('💥 Email signin error:', error);
+      toast.error('Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const renderLoginMethodSelection = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-4"
-    >
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-fixly-text mb-2">
-          Choose Sign In Method
-        </h2>
-        <p className="text-fixly-text-light">
-          How would you like to sign in?
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <button
-          onClick={() => setLoginMethod('google')}
-          className="w-full p-4 rounded-xl border-2 border-fixly-border hover:border-fixly-accent transition-colors duration-200"
-        >
-          <div className="flex items-center">
-            <Chrome className="h-6 w-6 text-fixly-accent mr-3" />
-            <div className="text-left">
-              <div className="font-semibold text-fixly-text">Continue with Google</div>
-              <div className="text-sm text-fixly-text-light">Quick and secure</div>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setLoginMethod('phone')}
-          className="w-full p-4 rounded-xl border-2 border-fixly-border hover:border-fixly-accent transition-colors duration-200"
-        >
-          <div className="flex items-center">
-            <Smartphone className="h-6 w-6 text-fixly-accent mr-3" />
-            <div className="text-left">
-              <div className="font-semibold text-fixly-text">Continue with Phone</div>
-              <div className="text-sm text-fixly-text-light">Verify with OTP</div>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setLoginMethod('email')}
-          className="w-full p-4 rounded-xl border-2 border-fixly-border hover:border-fixly-accent transition-colors duration-200"
-        >
-          <div className="flex items-center">
-            <Mail className="h-6 w-6 text-fixly-accent mr-3" />
-            <div className="text-left">
-              <div className="font-semibold text-fixly-text">Continue with Email</div>
-              <div className="text-sm text-fixly-text-light">Use email and password</div>
-            </div>
-          </div>
-        </button>
-      </div>
-    </motion.div>
-  );
-
-  const renderGoogleAuth = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="text-center space-y-6"
-    >
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-fixly-text mb-2">
-          Sign in with Google
-        </h2>
-        <p className="text-fixly-text-light">
-          Click below to continue with your Google account
-        </p>
-      </div>
-
-      <button
-        onClick={handleGoogleSignIn}
-        disabled={loading}
-        className="btn-primary w-full py-4 text-lg"
-      >
-        {loading ? (
-          <Loader className="animate-spin h-5 w-5 mr-2" />
-        ) : (
-          <Chrome className="h-5 w-5 mr-2" />
-        )}
-        Continue with Google
-      </button>
-
-      <button
-        onClick={() => setLoginMethod('')}
-        className="btn-ghost w-full"
-      >
-        Back to options
-      </button>
-    </motion.div>
-  );
-
-  const renderEmailAuth = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-fixly-text mb-2">
-          Sign in with Email
-        </h2>
-        <p className="text-fixly-text-light">
-          Enter your email and password
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Email Address
-          </label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              placeholder="Enter your email"
-              className="input-field pl-10"
-            />
-          </div>
-          {errors.email && (
-            <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Password
-          </label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={formData.password}
-              onChange={(e) => handleInputChange('password', e.target.value)}
-              placeholder="Enter your password"
-              className="input-field pl-10 pr-10"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2"
-            >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5 text-fixly-text-muted" />
-              ) : (
-                <Eye className="h-5 w-5 text-fixly-text-muted" />
-              )}
-            </button>
-          </div>
-          {errors.password && (
-            <p className="text-red-500 text-sm mt-1">{errors.password}</p>
-          )}
-        </div>
-
-        <button
-          onClick={handleEmailSignIn}
-          disabled={loading}
-          className="btn-primary w-full"
-        >
-          {loading ? (
-            <Loader className="animate-spin h-5 w-5 mr-2" />
-          ) : null}
-          Sign In
-        </button>
-
-        <div className="text-center">
-          <a href="#" className="text-fixly-accent hover:text-fixly-accent-dark text-sm">
-            Forgot your password?
-          </a>
-        </div>
-      </div>
-
-      <button
-        onClick={() => setLoginMethod('')}
-        className="btn-ghost w-full"
-      >
-        Back to options
-      </button>
-    </motion.div>
-  );
-
-  const renderPhoneAuth = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-fixly-text mb-2">
-          Sign in with Phone
-        </h2>
-        <p className="text-fixly-text-light">
-          We'll send you a verification code
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Phone Number
-          </label>
-          <div className="relative">
-            <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => handleInputChange('phone', e.target.value)}
-              placeholder="Enter 10-digit phone number"
-              className="input-field pl-10"
-              disabled={otpSent}
-            />
-          </div>
-          {errors.phone && (
-            <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
-          )}
-        </div>
-
-        {!otpSent ? (
-          <button
-            onClick={handleSendOTP}
-            disabled={loading}
-            className="btn-primary w-full"
-          >
-            {loading ? (
-              <Loader className="animate-spin h-5 w-5 mr-2" />
-            ) : null}
-            Send OTP
-          </button>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-fixly-text mb-2">
-                Enter OTP
-              </label>
-              <input
-                type="text"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter 6-digit OTP"
-                className="input-field text-center text-lg tracking-widest"
-                maxLength={6}
-              />
-            </div>
-
-            <button
-              onClick={handleVerifyOTP}
-              disabled={loading || otp.length !== 6}
-              className="btn-primary w-full"
-            >
-              {loading ? (
-                <Loader className="animate-spin h-5 w-5 mr-2" />
-              ) : null}
-              Verify OTP
-            </button>
-
-            {otpCountdown > 0 ? (
-              <p className="text-center text-fixly-text-muted">
-                Resend OTP in {otpCountdown}s
-              </p>
-            ) : (
-              <button
-                onClick={handleSendOTP}
-                className="w-full text-fixly-accent hover:text-fixly-accent-dark"
-              >
-                Resend OTP
-              </button>
-            )}
-          </div>
-        )}
-
-        <div ref={recaptchaRef} id="recaptcha-container"></div>
-      </div>
-
-      <button
-        onClick={() => {
-          setLoginMethod('');
-          setOtpSent(false);
-          setOtp('');
-          phoneAuth.cleanup();
-        }}
-        className="btn-ghost w-full"
-      >
-        Back to options
-      </button>
-    </motion.div>
-  );
-
-  const renderContent = () => {
-    if (loginMethod === 'google') return renderGoogleAuth();
-    if (loginMethod === 'email') return renderEmailAuth();
-    if (loginMethod === 'phone') return renderPhoneAuth();
-    return renderLoginMethodSelection();
+  const handleGoogleSignIn = async () => {
+    if (googleLoading) return;
+    
+    setGoogleLoading(true);
+    try {
+      console.log('🔄 Starting Google signin...');
+      
+      // Use NextAuth's signIn with proper redirect
+      await signIn('google', { 
+        callbackUrl: '/dashboard'
+      });
+      
+      // This will redirect, so we don't need to handle the response
+    } catch (error) {
+      console.error('💥 Google signin error:', error);
+      toast.error('Google authentication failed. Please try again.');
+      setGoogleLoading(false);
+    }
   };
 
   return (
@@ -564,7 +199,117 @@ export default function SignInPage() {
 
         {/* Form Card */}
         <div className="card">
-          {renderContent()}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            {/* Google Sign In */}
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading || loading}
+              className="w-full p-4 rounded-xl border-2 border-fixly-border hover:border-fixly-accent transition-colors duration-200 disabled:opacity-50"
+            >
+              <div className="flex items-center justify-center">
+                {googleLoading ? (
+                  <Loader className="animate-spin h-5 w-5 mr-2" />
+                ) : (
+                  <Chrome className="h-5 w-5 mr-2 text-fixly-accent" />
+                )}
+                <span className="font-semibold text-fixly-text">
+                  Continue with Google
+                </span>
+              </div>
+            </button>
+
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-fixly-border" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-fixly-card text-fixly-text-muted">
+                  Or continue with email
+                </span>
+              </div>
+            </div>
+
+            {/* Email Form */}
+            <form onSubmit={handleEmailSignIn} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    placeholder="Enter your email"
+                    className="input-field pl-10"
+                    disabled={loading || googleLoading}
+                  />
+                </div>
+                {errors.email && (
+                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    placeholder="Enter your password"
+                    className="input-field pl-10 pr-10"
+                    disabled={loading || googleLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                    disabled={loading || googleLoading}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5 text-fixly-text-muted" />
+                    ) : (
+                      <Eye className="h-5 w-5 text-fixly-text-muted" />
+                    )}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="text-red-500 text-sm mt-1">{errors.password}</p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || googleLoading}
+                className="btn-primary w-full"
+              >
+                {loading ? (
+                  <Loader className="animate-spin h-5 w-5 mr-2" />
+                ) : null}
+                Sign In
+              </button>
+            </form>
+
+            {/* Forgot Password */}
+            <div className="text-center">
+              <a 
+                href="/auth/forgot-password" 
+                className="text-fixly-accent hover:text-fixly-accent-dark text-sm"
+              >
+                Forgot your password?
+              </a>
+            </div>
+          </motion.div>
         </div>
 
         {/* Sign Up Link */}
@@ -572,12 +317,54 @@ export default function SignInPage() {
           <p className="text-fixly-text-light">
             Don't have an account?{' '}
             <button
-              onClick={() => router.push('/auth/signup')}
+              onClick={() => router.push(`/auth/signup?role=${role}`)}
               className="text-fixly-accent hover:text-fixly-accent-dark font-medium"
+              disabled={loading || googleLoading}
             >
               Sign Up
             </button>
           </p>
+        </div>
+
+        {/* Footer Navigation */}
+        <div className="text-center mt-8 pt-6 border-t border-fixly-border space-y-3">
+          <div>
+            <a 
+              href="/"
+              className="text-fixly-text-light hover:text-fixly-accent text-sm transition-colors"
+            >
+              ← Back to Home
+            </a>
+          </div>
+          <div className="flex justify-center items-center space-x-4 text-xs text-fixly-text-light">
+            <a 
+              href="/contact" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Contact Us
+            </a>
+            <span>•</span>
+            <a 
+              href="/help" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Help
+            </a>
+            <span>•</span>
+            <a 
+              href="/terms" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Terms
+            </a>
+            <span>•</span>
+            <a 
+              href="/privacy" 
+              className="hover:text-fixly-accent transition-colors"
+            >
+              Privacy
+            </a>
+          </div>
         </div>
       </div>
     </div>

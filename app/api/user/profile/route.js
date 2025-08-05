@@ -6,6 +6,8 @@ import connectDB from '@/lib/db';
 import User from '@/models/User';
 import { rateLimit } from '@/utils/rateLimiting';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request) {
   try {
     // Apply rate limiting
@@ -25,10 +27,44 @@ export async function GET(request) {
       );
     }
 
+    // ✅ CRITICAL FIX: Handle temporary session IDs and missing user data
+    const userId = session.user?.id;
+    if (!userId) {
+      console.log('⚠️ No user ID in session:', session.user);
+      return NextResponse.json(
+        { 
+          message: 'Invalid session. Please sign in again.',
+          needsReauth: true
+        },
+        { status: 401 }
+      );
+    }
+    
+    if (userId.startsWith('temp_')) {
+      console.log('⚠️ Temporary session detected:', userId);
+      return NextResponse.json(
+        { 
+          message: 'Session not properly established. Please complete signup.',
+          needsReauth: true,
+          needsSignup: true
+        },
+        { status: 401 }
+      );
+    }
+
     await connectDB();
 
+    // ✅ CRITICAL FIX: Validate ObjectId format
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('❌ Invalid user ID format:', userId);
+      return NextResponse.json(
+        { message: 'Invalid user session. Please sign in again.' },
+        { status: 400 }
+      );
+    }
+
     // Find user with all necessary fields
-    const user = await User.findById(session.user.id).select(`
+    const user = await User.findById(userId).select(`
       name
       username
       email
@@ -51,10 +87,10 @@ export async function GET(request) {
       emailVerified
       phoneVerified
       googleId
-      firebaseUid
     `);
 
     if (!user) {
+      console.error('❌ User not found for ID:', userId);
       return NextResponse.json(
         { message: 'User not found' },
         { status: 404 }
@@ -81,6 +117,7 @@ export async function GET(request) {
 
     // Prepare response data
     const profileData = {
+      _id: user._id,
       id: user._id,
       name: user.name,
       username: user.username,
@@ -127,13 +164,15 @@ export async function GET(request) {
       hasPhoneAuth: !!user.firebaseUid,
     };
 
+    console.log('✅ User profile fetched successfully:', profileData.email);
+
     return NextResponse.json({
       success: true,
       user: profileData
     });
 
   } catch (error) {
-    console.error('User profile fetch error:', error);
+    console.error('❌ User profile fetch error:', error);
     
     // Check for specific database errors
     if (error.name === 'CastError') {
@@ -179,9 +218,42 @@ export async function PUT(request) {
       );
     }
 
+    // ✅ CRITICAL FIX: Handle temporary session IDs and missing user data
+    const userId = session.user?.id;
+    if (!userId) {
+      console.log('⚠️ No user ID in session for PUT:', session.user);
+      return NextResponse.json(
+        { 
+          message: 'Invalid session. Please sign in again.',
+          needsReauth: true
+        },
+        { status: 401 }
+      );
+    }
+    
+    if (userId.startsWith('temp_')) {
+      console.log('⚠️ Temporary session detected for PUT:', userId);
+      return NextResponse.json(
+        { 
+          message: 'Session not properly established. Please complete signup.',
+          needsReauth: true,
+          needsSignup: true
+        },
+        { status: 401 }
+      );
+    }
+
     await connectDB();
 
-    const user = await User.findById(session.user.id);
+    // ✅ CRITICAL FIX: Validate ObjectId format
+    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
+      return NextResponse.json(
+        { message: 'Invalid user session. Please sign in again.' },
+        { status: 400 }
+      );
+    }
+
+    const user = await User.findById(userId);
     if (!user) {
       return NextResponse.json(
         { message: 'User not found' },

@@ -1,151 +1,266 @@
-// utils/rateLimiting.js
-// Remove the import of headers from next/headers
+// utils/rateLimiting.js - Enhanced rate limiting with better error handling
+import { NextResponse } from 'next/server';
 
 // In-memory store for rate limiting (in production, use Redis)
-const requestStore = new Map();
+const rateLimitStore = new Map();
 
-// Clean up old entries every 10 minutes
-setInterval(() => {
+// Rate limit configuration
+const rateLimitConfig = {
+  // Login attempts
+  login_attempts: {
+    maxAttempts: 5,
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    blockDuration: 30 * 60 * 1000 // 30 minutes block
+  },
+  // Job posting
+  job_posting: {
+    maxAttempts: 5,
+    windowMs: 60 * 60 * 1000, // 1 hour
+    blockDuration: 6 * 60 * 60 * 1000 // 6 hours block
+  },
+  // API requests
+  api_requests: {
+    maxAttempts: 100,
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    blockDuration: 60 * 60 * 1000 // 1 hour block
+  },
+  // Password reset
+  password_reset: {
+    maxAttempts: 3,
+    windowMs: 60 * 60 * 1000, // 1 hour
+    blockDuration: 24 * 60 * 60 * 1000 // 24 hours block
+  },
+  // Email verification
+  email_verification: {
+    maxAttempts: 5,
+    windowMs: 60 * 60 * 1000, // 1 hour
+    blockDuration: 24 * 60 * 60 * 1000 // 24 hours block
+  },
+  // File upload
+  file_upload: {
+    maxAttempts: 20,
+    windowMs: 60 * 60 * 1000, // 1 hour
+    blockDuration: 6 * 60 * 60 * 1000 // 6 hours block
+  }
+};
+
+// Get client IP address
+function getClientIP(request) {
+  const forwarded = request.headers.get('x-forwarded-for');
+  const realIP = request.headers.get('x-real-ip');
+  const cfConnectingIP = request.headers.get('cf-connecting-ip');
+  
+  if (forwarded) {
+    return forwarded.split(',')[0].trim();
+  }
+  
+  if (realIP) {
+    return realIP;
+  }
+  
+  if (cfConnectingIP) {
+    return cfConnectingIP;
+  }
+  
+  // Fallback for development
+  return '127.0.0.1';
+}
+
+// Clean up expired entries
+function cleanupExpiredEntries() {
   const now = Date.now();
-  for (const [key, data] of requestStore.entries()) {
-    if (now - data.resetTime > data.windowMs) {
-      requestStore.delete(key);
+  
+  for (const [key, data] of rateLimitStore.entries()) {
+    if (data.expiresAt < now) {
+      rateLimitStore.delete(key);
     }
   }
-}, 10 * 60 * 1000);
+}
 
-export async function rateLimit(request, identifier, maxRequests = 100, windowMs = 60 * 1000) {
+// Enhanced rate limiting function
+export async function rateLimit(request, type, maxAttempts = 5, windowMs = 15 * 60 * 1000) {
   try {
-    // Get client IP from request object
-    let clientIP = 'unknown';
-    
-    if (request) {
-      // Try different ways to get IP from the request
-      if (request.ip) {
-        clientIP = request.ip;
-      } else if (request.headers) {
-        // Use request.headers directly (not headers() function)
-        const forwardedFor = request.headers.get('x-forwarded-for');
-        const realIP = request.headers.get('x-real-ip');
-        clientIP = forwardedFor?.split(',')[0] || realIP || 'unknown';
-      }
+    // Clean up expired entries periodically
+    if (Math.random() < 0.1) { // 10% chance to cleanup
+      cleanupExpiredEntries();
     }
-
-    const key = `${identifier}_${clientIP}`;
+    
+    const clientIP = getClientIP(request);
+    const key = `${type}:${clientIP}`;
     const now = Date.now();
-
-    // Get or create rate limit data
-    let rateLimitData = requestStore.get(key);
     
-    if (!rateLimitData) {
-      rateLimitData = {
-        count: 0,
-        resetTime: now + windowMs,
-        windowMs: windowMs
-      };
-      requestStore.set(key, rateLimitData);
-    }
-
-    // Reset if window has passed
-    if (now > rateLimitData.resetTime) {
-      rateLimitData.count = 0;
-      rateLimitData.resetTime = now + windowMs;
-    }
-
-    // Increment count
-    rateLimitData.count++;
-
-    // Check if limit exceeded
-    if (rateLimitData.count > maxRequests) {
-      const resetIn = Math.ceil((rateLimitData.resetTime - now) / 1000);
-      return {
-        success: false,
-        limit: maxRequests,
-        remaining: 0,
-        resetTime: rateLimitData.resetTime,
-        resetIn: resetIn
-      };
-    }
-
-    return {
-      success: true,
-      limit: maxRequests,
-      remaining: maxRequests - rateLimitData.count,
-      resetTime: rateLimitData.resetTime,
-      resetIn: Math.ceil((rateLimitData.resetTime - now) / 1000)
+    // Get rate limit configuration
+    const config = rateLimitConfig[type] || {
+      maxAttempts,
+      windowMs,
+      blockDuration: windowMs * 2
     };
-
+    
+    // Get existing rate limit data
+    const existingData = rateLimitStore.get(key);
+    
+    if (existingData) {
+      // Check if user is blocked
+      if (existingData.blockedUntil && existingData.blockedUntil > now) {
+        const remainingBlockTime = Math.ceil((existingData.blockedUntil - now) / 1000 / 60);
+        return {
+          success: false,
+          message: `Too many attempts. Please try again in ${remainingBlockTime} minutes.`,
+          remainingTime: existingData.blockedUntil - now,
+          isBlocked: true
+        };
+      }
+      
+      // Check if window has expired
+      if (existingData.windowStart + config.windowMs < now) {
+        // Reset window
+        rateLimitStore.set(key, {
+          attempts: 1,
+          windowStart: now,
+          blockedUntil: null,
+          expiresAt: now + config.windowMs
+        });
+        
+        return {
+          success: true,
+          remainingAttempts: config.maxAttempts - 1,
+          resetTime: now + config.windowMs
+        };
+      }
+      
+      // Check if max attempts reached
+      if (existingData.attempts >= config.maxAttempts) {
+        // Block user
+        const blockedUntil = now + config.blockDuration;
+        rateLimitStore.set(key, {
+          ...existingData,
+          blockedUntil,
+          expiresAt: blockedUntil
+        });
+        
+        return {
+          success: false,
+          message: `Too many attempts. Please try again in ${Math.ceil(config.blockDuration / 1000 / 60)} minutes.`,
+          remainingTime: config.blockDuration,
+          isBlocked: true
+        };
+      }
+      
+      // Increment attempts
+      existingData.attempts += 1;
+      rateLimitStore.set(key, existingData);
+      
+      return {
+        success: true,
+        remainingAttempts: config.maxAttempts - existingData.attempts,
+        resetTime: existingData.windowStart + config.windowMs
+      };
+    } else {
+      // First attempt
+      rateLimitStore.set(key, {
+        attempts: 1,
+        windowStart: now,
+        blockedUntil: null,
+        expiresAt: now + config.windowMs
+      });
+      
+      return {
+        success: true,
+        remainingAttempts: config.maxAttempts - 1,
+        resetTime: now + config.windowMs
+      };
+    }
   } catch (error) {
     console.error('Rate limiting error:', error);
-    // On error, allow the request
+    // Allow request to proceed if rate limiting fails
     return {
       success: true,
-      limit: maxRequests,
-      remaining: maxRequests - 1,
-      resetTime: Date.now() + windowMs,
-      resetIn: Math.ceil(windowMs / 1000)
+      remainingAttempts: 999,
+      resetTime: Date.now() + 15 * 60 * 1000
     };
   }
 }
 
 // Middleware for API routes
-export function withRateLimit(handler, options = {}) {
-  const {
-    maxRequests = 100,
-    windowMs = 60 * 1000,
-    identifier = 'default',
-    skipSuccessfulRequests = false,
-    skipFailedRequests = false
-  } = options;
-
-  return async (request, context) => {
-    const rateLimitResult = await rateLimit(request, identifier, maxRequests, windowMs);
+export function withRateLimit(type, maxAttempts, windowMs) {
+  return async function rateLimitMiddleware(request) {
+    const result = await rateLimit(request, type, maxAttempts, windowMs);
     
-    if (!rateLimitResult.success) {
-      return new Response(
-        JSON.stringify({
-          error: 'Too Many Requests',
-          message: `Rate limit exceeded. Try again in ${rateLimitResult.resetIn} seconds.`,
-          retryAfter: rateLimitResult.resetIn
-        }),
-        {
+    if (!result.success) {
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          message: result.message,
+          remainingTime: result.remainingTime
+        },
+        { 
           status: 429,
           headers: {
-            'Content-Type': 'application/json',
-            'X-RateLimit-Limit': rateLimitResult.limit.toString(),
-            'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-            'X-RateLimit-Reset': rateLimitResult.resetTime.toString(),
-            'Retry-After': rateLimitResult.resetIn.toString()
+            'X-RateLimit-Limit': maxAttempts.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': new Date(Date.now() + result.remainingTime).toISOString(),
+            'Retry-After': Math.ceil(result.remainingTime / 1000).toString()
           }
         }
       );
     }
-
-    // Add rate limit headers to response
-    const response = await handler(request, context);
     
-    if (response instanceof Response) {
-      response.headers.set('X-RateLimit-Limit', rateLimitResult.limit.toString());
-      response.headers.set('X-RateLimit-Remaining', rateLimitResult.remaining.toString());
-      response.headers.set('X-RateLimit-Reset', rateLimitResult.resetTime.toString());
-    }
-
-    return response;
+    return null; // Continue to next middleware/handler
   };
 }
 
-// Special rate limiter for authentication attempts
-export async function authRateLimit(identifier, maxAttempts = 5, windowMs = 15 * 60 * 1000) {
-  return rateLimit(null, `auth_${identifier}`, maxAttempts, windowMs);
+// Get rate limit info for a client
+export function getRateLimitInfo(request, type) {
+  const clientIP = getClientIP(request);
+  const key = `${type}:${clientIP}`;
+  const data = rateLimitStore.get(key);
+  
+  if (!data) {
+    return {
+      attempts: 0,
+      remainingAttempts: rateLimitConfig[type]?.maxAttempts || 5,
+      resetTime: null,
+      isBlocked: false
+    };
+  }
+  
+  const config = rateLimitConfig[type] || { maxAttempts: 5 };
+  const now = Date.now();
+  
+  return {
+    attempts: data.attempts,
+    remainingAttempts: Math.max(0, config.maxAttempts - data.attempts),
+    resetTime: data.windowStart + (rateLimitConfig[type]?.windowMs || 15 * 60 * 1000),
+    isBlocked: data.blockedUntil && data.blockedUntil > now,
+    blockedUntil: data.blockedUntil
+  };
 }
 
-// Rate limiter for job applications
-export async function applicationRateLimit(userId, maxApplications = 10, windowMs = 60 * 60 * 1000) {
-  return rateLimit(null, `applications_${userId}`, maxApplications, windowMs);
+// Reset rate limit for a client (admin function)
+export function resetRateLimit(clientIP, type) {
+  const key = `${type}:${clientIP}`;
+  rateLimitStore.delete(key);
+  return true;
 }
 
-// Rate limiter for job posting (6-hour limit)
-export async function jobPostingRateLimit(userId) {
-  const sixHours = 6 * 60 * 60 * 1000;
-  return rateLimit(null, `job_posting_${userId}`, 1, sixHours);
+// Get all rate limit data (admin function)
+export function getAllRateLimitData() {
+  const data = {};
+  
+  for (const [key, value] of rateLimitStore.entries()) {
+    data[key] = {
+      attempts: value.attempts,
+      windowStart: value.windowStart,
+      blockedUntil: value.blockedUntil,
+      expiresAt: value.expiresAt
+    };
+  }
+  
+  return data;
+}
+
+// Clean up all rate limit data (admin function)
+export function clearAllRateLimitData() {
+  rateLimitStore.clear();
+  return true;
 }
