@@ -330,4 +330,4 @@ For support and questions:
 
 ---
 
-**Built with ❤️ using Next.js, MongoDB, and modern web technologies** 
+**Built with ❤️ using Next.js, MongoDB, and modern web technologies** "Testing correct profile" 
