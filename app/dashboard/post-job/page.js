@@ -256,6 +256,12 @@ function PostJobContent() {
   const handleNext = () => {
     if (validateStep(currentStep)) {
       setCurrentStep(prev => Math.min(prev + 1, totalSteps));
+    } else {
+      // Show a toast indicating which fields need to be filled
+      const errorMessages = Object.values(errors).filter(msg => msg);
+      if (errorMessages.length > 0) {
+        toast.error(`Please fill in all required fields: ${errorMessages.length} error(s) found`);
+      }
     }
   };
 
@@ -264,7 +270,14 @@ function PostJobContent() {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(currentStep)) return;
+    if (!validateStep(currentStep)) {
+      // Show validation errors
+      const errorMessages = Object.values(errors).filter(msg => msg);
+      if (errorMessages.length > 0) {
+        toast.error(`Please fill in all required fields: ${errorMessages.length} error(s) found`);
+      }
+      return;
+    }
 
     setLoading(true);
     try {
@@ -323,7 +336,7 @@ function PostJobContent() {
           value={formData.title}
           onChange={(e) => handleInputChange('title', e.target.value)}
           placeholder="e.g., Fix kitchen sink leak"
-          className="input-field"
+          className={`input-field ${errors.title ? 'border-red-500 focus:border-red-500' : ''}`}
           maxLength={100}
         />
         <div className="flex justify-between mt-1">
@@ -344,7 +357,7 @@ function PostJobContent() {
           value={formData.description}
           onChange={(e) => handleInputChange('description', e.target.value)}
           placeholder="Describe the work in detail. Include what needs to be done, any specific requirements, and what materials are needed..."
-          className="textarea-field h-32"
+          className={`textarea-field h-32 ${errors.description ? 'border-red-500 focus:border-red-500' : ''}`}
           maxLength={2000}
         />
         <div className="flex justify-between mt-1">

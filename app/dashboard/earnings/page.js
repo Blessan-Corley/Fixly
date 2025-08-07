@@ -70,13 +70,13 @@ function EarningsContent() {
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setEarnings({
-          total: user?.totalEarnings || 0,
+          total: statsData.totalEarnings || 0,
           thisMonth: statsData.monthlyEarnings || 0,
           lastMonth: statsData.lastMonthEarnings || 0,
           thisWeek: statsData.weeklyEarnings || 0,
           pendingPayments: statsData.pendingPayments || 0,
-          completedJobs: user?.jobsCompleted || 0,
-          averageJobValue: statsData.averageJobValue || 0,
+          completedJobs: statsData.jobsCompleted || 0,
+          averageJobValue: statsData.jobsCompleted > 0 ? Math.round(statsData.totalEarnings / statsData.jobsCompleted) : 0,
           topJobCategory: statsData.topJobCategory || 'General',
           growth: {
             monthly: calculateGrowth(statsData.monthlyEarnings, statsData.lastMonthEarnings),
@@ -365,7 +365,7 @@ function EarningsContent() {
                   <span className="text-fixly-text-muted">Response Time</span>
                 </div>
                 <span className="font-medium text-fixly-text">
-                  &lt; 2 hours
+                  {'< 2 hours'}
                 </span>
               </div>
               

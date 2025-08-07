@@ -58,13 +58,35 @@ export default function JobDetailsPage({ params }) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingData, setRatingData] = useState({
+    rating: 0,
+    review: '',
+    categories: {
+      communication: 0,
+      quality: 0,
+      timeliness: 0,
+      professionalism: 0
+    }
+  });
+  
+  // Instagram-style comment states
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [submittingReply, setSubmittingReply] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
   
   // Application form
   const [applicationData, setApplicationData] = useState({
     proposedAmount: '',
     timeEstimate: { value: '', unit: 'hours' },
     materialsList: [],
-    coverLetter: ''
+    coverLetter: '',
+    workPlan: '',
+    materialsIncluded: false,
+    requirements: '',
+    specialNotes: ''
   });
 
   useEffect(() => {
@@ -140,13 +162,22 @@ export default function JobDetailsPage({ params }) {
       return;
     }
 
+    // Show confirmation modal first
+    setShowConfirmModal(true);
+  };
+
+  const confirmApplication = async () => {
     setApplying(true);
+    setShowConfirmModal(false);
+    
     try {
+      const defaultAmount = job.budget.type === 'negotiable' ? 1000 : job.budget.amount || 1000;
+      
       const response = await fetch(`/api/jobs/${jobId}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          proposedAmount: job.budget.amount || 1000,
+          proposedAmount: defaultAmount,
           coverLetter: 'I am interested in this job and would like to discuss the details.'
         })
       });
@@ -154,9 +185,14 @@ export default function JobDetailsPage({ params }) {
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Quick application sent! Complete your proposal to increase your chances.');
+        toast.success('Application sent successfully!');
         setJob(prev => ({ ...prev, hasApplied: true }));
-        setShowApplicationModal(true);
+        fetchApplications(); // Refresh applications
+        
+        // Refresh user data to update credits
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.reload();
+        }
       } else {
         if (data.needsUpgrade) {
           router.push('/dashboard/subscription');
@@ -172,8 +208,13 @@ export default function JobDetailsPage({ params }) {
   };
 
   const handleDetailedApplication = async () => {
-    if (!applicationData.proposedAmount || !applicationData.coverLetter) {
-      toast.error('Please fill in all required fields');
+    if (!applicationData.proposedAmount || !applicationData.coverLetter || !applicationData.workPlan) {
+      toast.error('Please fill in all required fields: Amount, Work Plan, and Cover Letter');
+      return;
+    }
+
+    if (job.budget.type === 'negotiable' && applicationData.workPlan.length < 100) {
+      toast.error('For negotiable jobs, please provide a detailed work plan (at least 100 characters)');
       return;
     }
 
@@ -192,6 +233,11 @@ export default function JobDetailsPage({ params }) {
         setJob(prev => ({ ...prev, hasApplied: true }));
         setShowApplicationModal(false);
         fetchApplications();
+        
+        // Refresh user data to update credits
+        if (typeof window !== 'undefined' && window.location) {
+          window.location.reload();
+        }
       } else {
         toast.error(data.message || 'Failed to submit application');
       }
@@ -228,9 +274,124 @@ export default function JobDetailsPage({ params }) {
     }
   };
 
+  const handleJobAction = async (action) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: action,
+          data: {}
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        let message = '';
+        switch (action) {
+          case 'mark_in_progress':
+            message = 'Job marked as in progress';
+            break;
+          case 'mark_completed':
+            message = 'Job marked as completed';
+            break;
+          case 'confirm_completion':
+            message = 'Job completion confirmed';
+            // Show rating modal for completed jobs
+            if (action === 'confirm_completion') {
+              setShowRatingModal(true);
+            }
+            break;
+          case 'confirm_progress':
+            message = 'Progress confirmed';
+            break;
+          default:
+            message = 'Action completed successfully';
+        }
+        toast.success(message);
+        fetchJobDetails();
+      } else {
+        toast.error(data.message || 'Failed to update job status');
+      }
+    } catch (error) {
+      console.error('Error updating job:', error);
+      toast.error('Failed to update job status');
+    }
+  };
+
+  // Enhanced sensitive information detection
+  const containsSensitiveInfo = (text) => {
+    if (!text) return false;
+    
+    // Phone number patterns (Indian and international)
+    const phoneRegex = /(\+\d{1,3}[-.\s]?)?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}|\b\d{10}\b|\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b|call me|contact me|phone|mobile|whatsapp|wa\.me/gi;
+    
+    // Email patterns
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|email|mail me|gmail|yahoo|outlook/gi;
+    
+    // Address patterns
+    const addressRegex = /address|location|meet me|come to|visit|house number|building|street|road|pin code|pincode|landmark/gi;
+    
+    // Social media and external contact
+    const socialRegex = /instagram|facebook|twitter|telegram|discord|skype|zoom|meet\.google|teams/gi;
+    
+    // Direct meeting attempts
+    const meetingRegex = /meet outside|offline|direct contact|personal meeting|outside app|bypass|direct deal/gi;
+    
+    return phoneRegex.test(text) || emailRegex.test(text) || addressRegex.test(text) || 
+           socialRegex.test(text) || meetingRegex.test(text);
+  };
+
+  const handleSubmitRating = async () => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/rating`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rating: ratingData.rating,
+          review: ratingData.review,
+          categories: ratingData.categories,
+          ratedBy: user.role // 'hirer' or 'fixer'
+        })
+      });
+
+      if (response.ok) {
+        toast.success('Rating submitted successfully!');
+        setShowRatingModal(false);
+        fetchJobDetails();
+        
+        // Reset rating data
+        setRatingData({
+          rating: 0,
+          review: '',
+          categories: {
+            communication: 0,
+            quality: 0,
+            timeliness: 0,
+            professionalism: 0
+          }
+        });
+      } else {
+        const data = await response.json();
+        toast.error(data.message || 'Failed to submit rating');
+      }
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      toast.error('Failed to submit rating');
+    }
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
+    
+    // Check for sensitive information
+    if (containsSensitiveInfo(newComment)) {
+      toast.error('⚠️ Sensitive information (phone, email, address, social media) is not allowed in comments. Use private messaging after job assignment instead!');
+      return;
+    }
 
+    setSubmittingComment(true);
     try {
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
         method: 'POST',
@@ -249,7 +410,123 @@ export default function JobDetailsPage({ params }) {
     } catch (error) {
       console.error('Error posting comment:', error);
       toast.error('Failed to post comment');
+    } finally {
+      setSubmittingComment(false);
     }
+  };
+
+  const handleAddReply = async (commentId) => {
+    if (!replyText.trim()) return;
+    
+    // Check for sensitive information
+    if (containsSensitiveInfo(replyText)) {
+      toast.error('⚠️ Sensitive information (phone, email, address, social media) is not allowed in replies. Use private messaging after job assignment instead!');
+      return;
+    }
+
+    setSubmittingReply(true);
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: replyText })
+      });
+
+      if (response.ok) {
+        setReplyText('');
+        setReplyingTo(null);
+        fetchComments();
+        toast.success('Reply posted');
+      } else {
+        const data = await response.json();
+        toast.error(data.message || 'Failed to post reply');
+      }
+    } catch (error) {
+      console.error('Error posting reply:', error);
+      toast.error('Failed to post reply');
+    } finally {
+      setSubmittingReply(false);
+    }
+  };
+
+  const handleLikeComment = async (commentId) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/like`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        fetchComments();
+      }
+    } catch (error) {
+      console.error('Error liking comment:', error);
+    }
+  };
+
+  const handleLikeReply = async (commentId, replyId) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/replies/${replyId}/like`, {
+        method: 'POST'
+      });
+
+      if (response.ok) {
+        fetchComments();
+      }
+    } catch (error) {
+      console.error('Error liking reply:', error);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        fetchComments();
+        toast.success('Comment deleted');
+      } else {
+        toast.error('Failed to delete comment');
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      toast.error('Failed to delete comment');
+    }
+  };
+
+  const handleDeleteReply = async (commentId, replyId) => {
+    if (!confirm('Are you sure you want to delete this reply?')) return;
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/replies/${replyId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        fetchComments();
+        toast.success('Reply deleted');
+      } else {
+        toast.error('Failed to delete reply');
+      }
+    } catch (error) {
+      console.error('Error deleting reply:', error);
+      toast.error('Failed to delete reply');
+    }
+  };
+
+  const getTimeAgo = (timestamp) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInSeconds = Math.floor((now - time) / 1000);
+
+    if (diffInSeconds < 60) return `${diffInSeconds}s`;
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d`;
+    return time.toLocaleDateString();
   };
 
   const getUrgencyColor = (urgency) => {
@@ -450,46 +727,98 @@ export default function JobDetailsPage({ params }) {
 
         {/* Actions */}
         {user?.role === 'fixer' && job.status === 'open' && (
-          <div className="flex space-x-3">
-            {job.hasApplied ? (
-              <div className="flex items-center text-green-600">
-                <CheckCircle className="h-5 w-5 mr-2" />
-                Application Sent
+          <div className="space-y-3">
+            {/* Credit Warning for Non-Pro Users */}
+            {user?.plan?.type !== 'pro' && (user?.plan?.creditsUsed || 0) >= 3 && (
+              <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <AlertCircle className="h-5 w-5 text-orange-600 mr-2" />
+                  <div>
+                    <p className="font-medium text-orange-800">No Free Credits Left</p>
+                    <p className="text-sm text-orange-700">
+                      You've used all 3 free job applications. Upgrade to Pro for unlimited access.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => router.push('/dashboard/subscription')}
+                  className="mt-3 btn-primary text-sm"
+                >
+                  Upgrade to Pro - ₹99/month
+                </button>
               </div>
-            ) : (
-              <>
-                <button
-                  onClick={handleQuickApply}
-                  disabled={applying || !user?.canApplyToJob()}
-                  className="btn-primary flex items-center"
-                >
-                  {applying ? (
-                    <Loader className="animate-spin h-4 w-4 mr-2" />
+            )}
+
+            <div className="flex space-x-3">
+              {job.hasApplied ? (
+                <div className="flex items-center text-green-600">
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                  Application Sent
+                </div>
+              ) : (
+                <>
+                  {user?.canApplyToJob() ? (
+                    <>
+                      <button
+                        onClick={handleQuickApply}
+                        disabled={applying}
+                        className="btn-primary flex items-center"
+                      >
+                        {applying ? (
+                          <Loader className="animate-spin h-4 w-4 mr-2" />
+                        ) : (
+                          <Zap className="h-4 w-4 mr-2" />
+                        )}
+                        Apply
+                      </button>
+                      
+                      <button
+                        onClick={() => setShowApplicationModal(true)}
+                        className="btn-secondary flex items-center"
+                      >
+                        <Briefcase className="h-4 w-4 mr-2" />
+                        Detailed Application
+                      </button>
+                    </>
                   ) : (
-                    <Zap className="h-4 w-4 mr-2" />
+                    <>
+                      <button
+                        disabled
+                        className="btn-disabled flex items-center opacity-50 cursor-not-allowed"
+                        title="No credits left - upgrade to Pro"
+                      >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Apply (No Credits)
+                      </button>
+                      
+                      <button
+                        onClick={() => router.push('/dashboard/subscription')}
+                        className="btn-primary flex items-center"
+                      >
+                        <Star className="h-4 w-4 mr-2" />
+                        Upgrade to Apply
+                      </button>
+                    </>
                   )}
-                  Quick Apply
-                </button>
-                
+                </>
+              )}
+              
+              {job.canMessage && user?.canApplyToJob() && (
                 <button
-                  onClick={() => setShowApplicationModal(true)}
-                  className="btn-secondary flex items-center"
+                  onClick={() => router.push(`/dashboard/jobs/${jobId}/messages`)}
+                  className="btn-ghost flex items-center"
                 >
-                  <Briefcase className="h-4 w-4 mr-2" />
-                  Detailed Application
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Message Hirer
                 </button>
-              </>
-            )}
-            
-            {job.canMessage && (
-              <button
-                onClick={() => router.push(`/dashboard/jobs/${jobId}/messages`)}
-                className="btn-ghost flex items-center"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Message Hirer
-              </button>
-            )}
+              )}
+              
+              {!user?.canApplyToJob() && (
+                <div className="text-sm text-fixly-text-muted italic">
+                  Messaging disabled - upgrade to Pro to message hirers
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -507,13 +836,187 @@ export default function JobDetailsPage({ params }) {
             )}
             
             {job.status === 'in_progress' && (
+              <>
+                <button
+                  onClick={() => router.push(`/dashboard/jobs/${jobId}/messages`)}
+                  className="btn-secondary flex items-center"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Message Fixer
+                </button>
+                
+                <button
+                  onClick={() => handleJobAction('confirm_progress')}
+                  className="btn-ghost flex items-center text-green-600"
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Confirm Progress
+                </button>
+              </>
+            )}
+            
+            {job.status === 'completed' && !job.completion?.confirmedBy && (
+              <button
+                onClick={() => handleJobAction('confirm_completion')}
+                className="btn-primary flex items-center"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Mark as Completed
+              </button>
+            )}
+            
+            {job.status === 'completed' && job.completion?.confirmedBy && (
+              <div className="space-y-2">
+                {!job.completion?.hirerRating && (
+                  <button
+                    onClick={() => setShowRatingModal(true)}
+                    className="btn-secondary flex items-center"
+                  >
+                    <Star className="h-4 w-4 mr-2" />
+                    Rate Fixer
+                  </button>
+                )}
+                
+                {job.completion?.hirerRating && (
+                  <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
+                    <div className="flex items-center text-green-700 text-sm">
+                      <Star className="h-4 w-4 mr-1" />
+                      <span>You rated this fixer {job.completion.hirerRating.rating}⭐</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Actions for Assigned Fixer */}
+        {isAssignedFixer && (
+          <div className="space-y-3">
+            {/* Job Status Display */}
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-blue-900">Job Status</h4>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  job.status === 'in_progress' ? 'bg-blue-100 text-blue-800' : 
+                  job.status === 'completed' ? 'bg-green-100 text-green-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {job.status.replace('_', ' ').toUpperCase()}
+                </span>
+              </div>
+              
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span>Assigned:</span>
+                  <span className="text-green-600">✓ Job assigned to you</span>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span>Arrival:</span>
+                  {job.progress?.arrivedAt ? (
+                    <span className="text-green-600">✓ Arrived at {new Date(job.progress.arrivedAt).toLocaleString()}</span>
+                  ) : (
+                    <span className="text-gray-500">Not marked</span>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span>Progress:</span>
+                  {job.progress?.startedAt ? (
+                    <span className="text-green-600">✓ Work started at {new Date(job.progress.startedAt).toLocaleString()}</span>
+                  ) : (
+                    <span className="text-gray-500">Not started</span>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span>Completion:</span>
+                  {job.progress?.completedAt ? (
+                    <span className="text-green-600">✓ Completed at {new Date(job.progress.completedAt).toLocaleString()}</span>
+                  ) : (
+                    <span className="text-gray-500">Not completed</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
               <button
                 onClick={() => router.push(`/dashboard/jobs/${jobId}/messages`)}
                 className="btn-secondary flex items-center"
               >
                 <MessageSquare className="h-4 w-4 mr-2" />
-                Message Fixer
+                Message Client
               </button>
+              
+              {job.status === 'in_progress' && (
+                <>
+                  {!job.progress?.arrivedAt && (
+                    <button
+                      onClick={() => handleJobAction('mark_arrived')}
+                      className="btn-ghost flex items-center text-green-600"
+                    >
+                      <MapPin className="h-4 w-4 mr-2" />
+                      I've Arrived
+                    </button>
+                  )}
+                  
+                  {job.progress?.arrivedAt && !job.progress?.startedAt && (
+                    <button
+                      onClick={() => handleJobAction('mark_in_progress')}
+                      className="btn-ghost flex items-center text-blue-600"
+                    >
+                      <Clock className="h-4 w-4 mr-2" />
+                      Start Work
+                    </button>
+                  )}
+                  
+                  {job.progress?.startedAt && (
+                    <button
+                      onClick={() => handleJobAction('mark_completed')}
+                      className="btn-primary flex items-center"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Mark as Done
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {job.status === 'completed' && !job.completion?.confirmedBy && (
+              <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
+                <div className="flex items-center text-green-700">
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                  <span className="text-sm">
+                    Work completed! Waiting for client confirmation.
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {job.status === 'completed' && job.completion?.confirmedBy && (
+              <div className="space-y-2">
+                {!job.completion?.fixerRating && (
+                  <button
+                    onClick={() => setShowRatingModal(true)}
+                    className="btn-secondary flex items-center"
+                  >
+                    <Star className="h-4 w-4 mr-2" />
+                    Rate Client
+                  </button>
+                )}
+                
+                {job.completion?.fixerRating && (
+                  <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
+                    <div className="flex items-center text-green-700 text-sm">
+                      <Star className="h-4 w-4 mr-1" />
+                      <span>You rated this client {job.completion.fixerRating.rating}⭐</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -722,6 +1225,50 @@ export default function JobDetailsPage({ params }) {
                   </div>
                 </div>
 
+                {/* Credit Status for Fixers */}
+                {user?.role === 'fixer' && (
+                  <div className="card">
+                    <h3 className="font-semibold text-fixly-text mb-4">Your Credits</h3>
+                    {user.plan?.type === 'pro' && user.plan?.status === 'active' ? (
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-green-600 mb-2">∞</div>
+                        <p className="text-sm text-fixly-text">Unlimited Applications</p>
+                        <div className="bg-green-50 border border-green-200 p-2 rounded-lg mt-3">
+                          <p className="text-xs text-green-800">Pro Member</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-fixly-accent mb-2">
+                          {Math.max(0, 3 - ((user.plan?.creditsUsed || 0)))}
+                        </div>
+                        <p className="text-sm text-fixly-text-muted">Free Applications Left</p>
+                        
+                        {(user.plan?.creditsUsed || 0) >= 3 ? (
+                          <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg mt-3">
+                            <p className="text-xs text-orange-800 mb-2">No credits left!</p>
+                            <button
+                              onClick={() => router.push('/dashboard/subscription')}
+                              className="btn-primary text-xs w-full"
+                            >
+                              Upgrade to Pro
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="bg-blue-50 border border-blue-200 p-2 rounded-lg mt-3">
+                            <p className="text-xs text-blue-800">
+                              Used {user.plan?.creditsUsed || 0} of 3 free applications
+                            </p>
+                            <p className="text-xs text-blue-600 mt-1">
+                              ⚠️ Credits deducted only when jobs are assigned to you
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Job Stats */}
                 <div className="card">
                   <h3 className="font-semibold text-fixly-text mb-4">Job Stats</h3>
@@ -805,10 +1352,70 @@ export default function JobDetailsPage({ params }) {
                         </div>
                       </div>
 
-                      {/* Cover Letter */}
-                      <p className="text-fixly-text mt-4 whitespace-pre-wrap">
-                        {application.coverLetter}
-                      </p>
+                      {/* Application Details */}
+                      <div className="mt-4 space-y-4">
+                        {/* Work Plan */}
+                        {application.workPlan && (
+                          <div>
+                            <h5 className="font-medium text-fixly-text mb-2">Work Plan & Approach</h5>
+                            <p className="text-fixly-text-light whitespace-pre-wrap bg-fixly-bg p-3 rounded-lg">
+                              {application.workPlan}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Cover Letter */}
+                        {application.coverLetter && (
+                          <div>
+                            <h5 className="font-medium text-fixly-text mb-2">Why Choose This Fixer</h5>
+                            <p className="text-fixly-text-light whitespace-pre-wrap">
+                              {application.coverLetter}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Materials & Pricing Info */}
+                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-blue-900">Materials:</span>
+                            <span className={`text-sm ${application.materialsIncluded ? 'text-green-600' : 'text-blue-600'}`}>
+                              {application.materialsIncluded ? 'Included in price' : 'Additional cost'}
+                            </span>
+                          </div>
+                          
+                          {application.materialsList && application.materialsList.length > 0 && (
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-blue-900 mb-1">Materials List:</p>
+                              {application.materialsList.map((material, idx) => (
+                                <div key={idx} className="text-xs text-blue-800 flex justify-between">
+                                  <span>{material.item} (x{material.quantity})</span>
+                                  <span>₹{material.estimatedCost}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Requirements from Client */}
+                        {application.requirements && (
+                          <div>
+                            <h5 className="font-medium text-fixly-text mb-2">What They Need from You</h5>
+                            <p className="text-fixly-text-light whitespace-pre-wrap bg-orange-50 border border-orange-200 p-3 rounded-lg">
+                              {application.requirements}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Special Notes */}
+                        {application.specialNotes && (
+                          <div>
+                            <h5 className="font-medium text-fixly-text mb-2">Special Notes & Conditions</h5>
+                            <p className="text-fixly-text-light whitespace-pre-wrap bg-green-50 border border-green-200 p-3 rounded-lg">
+                              {application.specialNotes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
 
                       {/* Action Buttons */}
                       {isJobCreator && job.status === 'open' && (
@@ -837,25 +1444,143 @@ export default function JobDetailsPage({ params }) {
           {/* Comments Tab */}
           {activeTab === 'comments' && (
             <div className="space-y-6">
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {comments.map((comment) => (
-                  <div key={comment._id} className="card">
-                    <div className="flex items-start">
+                  <div key={comment._id}>
+                    {/* Main Comment */}
+                    <div className="flex items-start space-x-3">
                       <img
-                        src={comment.user.profilePhoto || '/default-avatar.png'}
-                        alt={comment.user.name}
-                        className="h-10 w-10 rounded-full object-cover mr-4"
+                        src={comment.author?.photoURL || '/default-avatar.png'}
+                        alt={comment.author?.name || 'User'}
+                        className="h-8 w-8 rounded-full object-cover flex-shrink-0"
                       />
-                      <div>
-                        <p className="font-semibold text-fixly-text">
-                          {comment.user.name}
-                        </p>
-                        <p className="text-sm text-fixly-text-muted">
-                          {new Date(comment.createdAt).toLocaleString()}
-                        </p>
-                        <p className="mt-2 text-fixly-text">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <p className="font-semibold text-fixly-text text-sm">
+                            {comment.author?.name || 'Anonymous'}
+                          </p>
+                          <p className="text-xs text-fixly-text-muted">
+                            {getTimeAgo(comment.createdAt)}
+                          </p>
+                        </div>
+                        <p className="text-fixly-text text-sm break-words">
                           {comment.message}
                         </p>
+                        
+                        {/* Comment Actions */}
+                        <div className="flex items-center space-x-4 mt-2">
+                          <button
+                            onClick={() => handleLikeComment(comment._id)}
+                            className={`text-xs hover:text-fixly-accent transition-colors ${
+                              comment.likes?.includes(user?._id) ? 'text-fixly-accent font-medium' : 'text-fixly-text-muted'
+                            }`}
+                          >
+                            {comment.likes?.length || 0} likes
+                          </button>
+                          <button
+                            onClick={() => setReplyingTo(comment._id)}
+                            className="text-xs text-fixly-text-muted hover:text-fixly-accent transition-colors"
+                          >
+                            Reply
+                          </button>
+                          {comment.author?._id === user?._id && (
+                            <button
+                              onClick={() => handleDeleteComment(comment._id)}
+                              className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                        
+                        {/* Reply Input */}
+                        {replyingTo === comment._id && (
+                          <div className="mt-3 flex items-start space-x-2">
+                            <img
+                              src={user?.photoURL || '/default-avatar.png'}
+                              alt="You"
+                              className="h-6 w-6 rounded-full object-cover flex-shrink-0"
+                            />
+                            <div className="flex-1">
+                              <input
+                                type="text"
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder={`Reply to ${comment.author?.name || 'Anonymous'}...`}
+                                className="w-full text-sm border-0 border-b border-fixly-border bg-transparent p-2 focus:outline-none focus:border-fixly-accent"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleAddReply(comment._id);
+                                  }
+                                }}
+                              />
+                              <div className="flex items-center space-x-2 mt-2">
+                                <button
+                                  onClick={() => handleAddReply(comment._id)}
+                                  disabled={!replyText.trim() || submittingReply}
+                                  className="text-xs btn-primary px-3 py-1"
+                                >
+                                  {submittingReply ? 'Posting...' : 'Post'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setReplyingTo(null);
+                                    setReplyText('');
+                                  }}
+                                  className="text-xs text-fixly-text-muted hover:text-fixly-text"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Replies */}
+                        {comment.replies && comment.replies.length > 0 && (
+                          <div className="mt-3 space-y-3">
+                            {comment.replies.map((reply) => (
+                              <div key={reply._id} className="flex items-start space-x-2">
+                                <img
+                                  src={reply.author?.photoURL || '/default-avatar.png'}
+                                  alt={reply.author?.name || 'User'}
+                                  className="h-6 w-6 rounded-full object-cover flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <p className="font-semibold text-fixly-text text-xs">
+                                      {reply.author?.name || 'Anonymous'}
+                                    </p>
+                                    <p className="text-xs text-fixly-text-muted">
+                                      {getTimeAgo(reply.createdAt)}
+                                    </p>
+                                  </div>
+                                  <p className="text-fixly-text text-xs break-words">
+                                    {reply.message}
+                                  </p>
+                                  <div className="flex items-center space-x-3 mt-1">
+                                    <button
+                                      onClick={() => handleLikeReply(comment._id, reply._id)}
+                                      className={`text-xs hover:text-fixly-accent transition-colors ${
+                                        reply.likes?.includes(user?._id) ? 'text-fixly-accent font-medium' : 'text-fixly-text-muted'
+                                      }`}
+                                    >
+                                      {reply.likes?.length || 0} likes
+                                    </button>
+                                    {reply.author?._id === user?._id && (
+                                      <button
+                                        onClick={() => handleDeleteReply(comment._id, reply._id)}
+                                        className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                                      >
+                                        Delete
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -866,25 +1591,646 @@ export default function JobDetailsPage({ params }) {
               {user && (
                 <div className="card">
                   <h4 className="font-semibold text-fixly-text mb-2">Add a Comment</h4>
+                  
+                  {/* Credit Restriction for Fixers */}
+                  {user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied && (
+                    <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg mb-3">
+                      <div className="flex items-center text-orange-800 text-sm">
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        <span>
+                          Comments are restricted. Upgrade to Pro or have credits to comment on jobs.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
                   <textarea
                     rows={3}
                     className="w-full border border-fixly-border rounded-lg p-2 mb-2"
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Type your comment here..."
+                    placeholder={
+                      user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied 
+                        ? "Upgrade to Pro to comment on jobs..." 
+                        : "Type your comment here..."
+                    }
+                    disabled={user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied}
                   />
                   <button
                     onClick={handleAddComment}
                     className="btn-primary"
+                    disabled={user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied}
                   >
-                    Post Comment
+                    {user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied 
+                      ? 'Upgrade to Comment' 
+                      : 'Post Comment'
+                    }
                   </button>
+                  
+                  {user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied && (
+                    <button
+                      onClick={() => router.push('/dashboard/subscription')}
+                      className="ml-2 btn-secondary text-sm"
+                    >
+                      Upgrade Now
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {showConfirmModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-lg p-6 w-full max-w-md"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-fixly-text">
+                  Confirm Application
+                </h2>
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="text-fixly-text-muted hover:text-fixly-text"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Job Summary */}
+                <div className="bg-fixly-bg p-4 rounded-lg">
+                  <h3 className="font-medium text-fixly-text mb-2">{job.title}</h3>
+                  <div className="text-sm text-fixly-text-muted space-y-1">
+                    <p>Budget: {job.budget.type === 'negotiable' ? 'Negotiable' : `₹${job.budget.amount?.toLocaleString()}`}</p>
+                    <p>Location: {job.location.city}, {job.location.state}</p>
+                    <p>Deadline: {getTimeRemaining(job.deadline)}</p>
+                    {job.budget.type === 'negotiable' && (
+                      <p className="text-fixly-accent font-medium">This job requires price negotiation</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Application Details */}
+                <div className="space-y-2">
+                  <h4 className="font-medium text-fixly-text">You're applying with:</h4>
+                  <div className="text-sm text-fixly-text-muted space-y-1">
+                    <p>Proposed Amount: ₹{(job.budget.type === 'negotiable' ? 1000 : job.budget.amount || 1000).toLocaleString()}</p>
+                    <p>Cover Letter: "I am interested in this job and would like to discuss the details."</p>
+                  </div>
+                </div>
+
+                {/* Credit Usage Warning */}
+                {user?.plan?.type !== 'pro' && (
+                  <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg">
+                    <div className="flex items-center text-orange-800">
+                      <AlertCircle className="h-4 w-4 mr-2" />
+                      <span className="text-sm">
+                        This will use 1 of your {3 - (user?.plan?.creditsUsed || 0)} remaining free applications.
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => setShowConfirmModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setShowApplicationModal(true);
+                  }}
+                  className="btn-ghost flex-1"
+                >
+                  Customize
+                </button>
+                <button
+                  onClick={confirmApplication}
+                  disabled={applying}
+                  className="btn-primary flex-1"
+                >
+                  {applying ? (
+                    <>
+                      <Loader className="animate-spin h-4 w-4 mr-2" />
+                      Applying...
+                    </>
+                  ) : (
+                    'Confirm Apply'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Application Modal */}
+      <AnimatePresence>
+        {showApplicationModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-fixly-text">
+                  Apply for Job
+                </h2>
+                <button
+                  onClick={() => setShowApplicationModal(false)}
+                  className="text-fixly-text-muted hover:text-fixly-text"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Job Summary */}
+                <div className="bg-fixly-bg p-4 rounded-lg">
+                  <h3 className="font-medium text-fixly-text mb-2">{job.title}</h3>
+                  <div className="text-sm text-fixly-text-muted space-y-1">
+                    <p>Budget: {job.budget.type === 'negotiable' ? 'Negotiable' : `₹${job.budget.amount?.toLocaleString()}`}</p>
+                    <p>Location: {job.location.city}, {job.location.state}</p>
+                    <p>Deadline: {new Date(job.deadline).toLocaleDateString()}</p>
+                  </div>
+                </div>
+
+                {/* Proposed Amount */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Your Proposed Amount *
+                    {job.budget.type === 'negotiable' && (
+                      <span className="text-green-600 ml-2">(Negotiable - Propose your price)</span>
+                    )}
+                    {job.budget.type === 'fixed' && (
+                      <span className="text-blue-600 ml-2">(Fixed - Match or propose alternative)</span>
+                    )}
+                    {job.budget.type === 'hourly' && (
+                      <span className="text-purple-600 ml-2">(Hourly - Your rate per hour)</span>
+                    )}
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted">₹</span>
+                    <input
+                      type="number"
+                      value={applicationData.proposedAmount}
+                      onChange={(e) => setApplicationData(prev => ({
+                        ...prev,
+                        proposedAmount: e.target.value
+                      }))}
+                      className="input pl-8"
+                      placeholder={
+                        job.budget.type === 'negotiable' ? "Enter your price" : 
+                        job.budget.type === 'hourly' ? "Your hourly rate" :
+                        job.budget.amount?.toString()
+                      }
+                      min="100"
+                      max="1000000"
+                      required
+                    />
+                  </div>
+                  {job.budget.type === 'fixed' && job.budget.amount && (
+                    <p className="text-xs text-fixly-text-muted mt-1">
+                      Client's budget: ₹{job.budget.amount.toLocaleString()} 
+                      {parseInt(applicationData.proposedAmount) !== job.budget.amount && applicationData.proposedAmount && (
+                        <span className="text-orange-600 ml-2">
+                          (Your proposal: ₹{parseInt(applicationData.proposedAmount).toLocaleString()})
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {/* Materials Inclusion Toggle */}
+                <div>
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={applicationData.materialsIncluded}
+                      onChange={(e) => setApplicationData(prev => ({
+                        ...prev,
+                        materialsIncluded: e.target.checked
+                      }))}
+                      className="rounded border-fixly-border text-fixly-accent focus:border-fixly-accent focus:ring-fixly-accent"
+                    />
+                    <span className="text-sm font-medium text-fixly-text">
+                      Materials are included in my price
+                    </span>
+                  </label>
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    Check this if your quoted price includes all materials and supplies needed
+                  </p>
+                </div>
+
+                {/* Time Estimate */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Time Estimate
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="number"
+                      value={applicationData.timeEstimate.value}
+                      onChange={(e) => setApplicationData(prev => ({
+                        ...prev,
+                        timeEstimate: { ...prev.timeEstimate, value: e.target.value }
+                      }))}
+                      className="input flex-1"
+                      placeholder="Duration"
+                      min="1"
+                    />
+                    <select
+                      value={applicationData.timeEstimate.unit}
+                      onChange={(e) => setApplicationData(prev => ({
+                        ...prev,
+                        timeEstimate: { ...prev.timeEstimate, unit: e.target.value }
+                      }))}
+                      className="input w-24"
+                    >
+                      <option value="hours">Hours</option>
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Work Plan */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Work Plan & Approach *
+                    {job.budget.type === 'negotiable' && (
+                      <span className="text-green-600 ml-1">(Detailed plan required for negotiable jobs)</span>
+                    )}
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={applicationData.workPlan}
+                    onChange={(e) => setApplicationData(prev => ({
+                      ...prev,
+                      workPlan: e.target.value
+                    }))}
+                    className="input"
+                    placeholder={
+                      job.budget.type === 'negotiable' 
+                        ? "Describe your detailed plan: How will you approach this job? What steps will you take? What's your methodology?"
+                        : "Explain your approach to completing this job. What steps will you take?"
+                    }
+                    maxLength={1500}
+                    required
+                  />
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    {applicationData.workPlan.length}/1500 characters
+                  </p>
+                </div>
+
+                {/* Cover Letter */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Why Choose You? *
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={applicationData.coverLetter}
+                    onChange={(e) => setApplicationData(prev => ({
+                      ...prev,
+                      coverLetter: e.target.value
+                    }))}
+                    className="input"
+                    placeholder="Why are you the best fit for this job? Highlight your relevant experience and skills."
+                    maxLength={800}
+                    required
+                  />
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    {applicationData.coverLetter.length}/800 characters
+                  </p>
+                </div>
+
+                {/* Requirements from Hirer */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    What You Need from the Client
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={applicationData.requirements}
+                    onChange={(e) => setApplicationData(prev => ({
+                      ...prev,
+                      requirements: e.target.value
+                    }))}
+                    className="input"
+                    placeholder="List anything you need from the client: access, information, permissions, preparations, etc."
+                    maxLength={500}
+                  />
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    {applicationData.requirements.length}/500 characters
+                  </p>
+                </div>
+
+                {/* Special Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Special Notes & Conditions
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={applicationData.specialNotes}
+                    onChange={(e) => setApplicationData(prev => ({
+                      ...prev,
+                      specialNotes: e.target.value
+                    }))}
+                    className="input"
+                    placeholder="Any special conditions, warranties, follow-up services, or important notes?"
+                    maxLength={300}
+                  />
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    {applicationData.specialNotes.length}/300 characters
+                  </p>
+                </div>
+
+                {/* Materials List (Optional) */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Materials Needed (Optional)
+                  </label>
+                  {applicationData.materialsList.map((material, index) => (
+                    <div key={index} className="flex space-x-2 mb-2">
+                      <input
+                        type="text"
+                        value={material.item}
+                        onChange={(e) => {
+                          const newMaterials = [...applicationData.materialsList];
+                          newMaterials[index].item = e.target.value;
+                          setApplicationData(prev => ({ ...prev, materialsList: newMaterials }));
+                        }}
+                        className="input flex-1"
+                        placeholder="Material/Tool name"
+                      />
+                      <input
+                        type="number"
+                        value={material.quantity}
+                        onChange={(e) => {
+                          const newMaterials = [...applicationData.materialsList];
+                          newMaterials[index].quantity = parseInt(e.target.value) || 1;
+                          setApplicationData(prev => ({ ...prev, materialsList: newMaterials }));
+                        }}
+                        className="input w-20"
+                        placeholder="Qty"
+                        min="1"
+                      />
+                      <input
+                        type="number"
+                        value={material.estimatedCost}
+                        onChange={(e) => {
+                          const newMaterials = [...applicationData.materialsList];
+                          newMaterials[index].estimatedCost = parseFloat(e.target.value) || 0;
+                          setApplicationData(prev => ({ ...prev, materialsList: newMaterials }));
+                        }}
+                        className="input w-24"
+                        placeholder="Cost"
+                        min="0"
+                      />
+                      <button
+                        onClick={() => {
+                          const newMaterials = applicationData.materialsList.filter((_, i) => i !== index);
+                          setApplicationData(prev => ({ ...prev, materialsList: newMaterials }));
+                        }}
+                        className="btn-ghost text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setApplicationData(prev => ({
+                        ...prev,
+                        materialsList: [...prev.materialsList, { item: '', quantity: 1, estimatedCost: 0 }]
+                      }));
+                    }}
+                    className="btn-ghost text-fixly-accent"
+                  >
+                    + Add Material
+                  </button>
+                </div>
+
+                {/* Total Calculation */}
+                <div className="bg-fixly-bg p-4 rounded-lg">
+                  <h4 className="font-medium text-fixly-text mb-3">Proposal Summary</h4>
+                  
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Service Charge:</span>
+                      <span className="font-medium">₹{parseInt(applicationData.proposedAmount || 0).toLocaleString()}</span>
+                    </div>
+                    
+                    {applicationData.materialsList.length > 0 && !applicationData.materialsIncluded && (
+                      <div className="flex justify-between">
+                        <span>Additional Materials:</span>
+                        <span>₹{applicationData.materialsList.reduce((total, material) => total + (material.estimatedCost || 0), 0).toLocaleString()}</span>
+                      </div>
+                    )}
+                    
+                    {applicationData.materialsIncluded && (
+                      <div className="flex justify-between text-green-600">
+                        <span>Materials:</span>
+                        <span>Included in service</span>
+                      </div>
+                    )}
+                    
+                    <hr className="my-2" />
+                    
+                    <div className="flex justify-between font-semibold text-base">
+                      <span>Total Estimate:</span>
+                      <span className="text-fixly-accent">
+                        ₹{(
+                          parseInt(applicationData.proposedAmount || 0) + 
+                          (applicationData.materialsIncluded ? 0 : 
+                            applicationData.materialsList.reduce((total, material) => total + (material.estimatedCost || 0), 0)
+                          )
+                        ).toLocaleString()}
+                      </span>
+                    </div>
+                    
+                    <div className="text-xs text-fixly-text-muted mt-2">
+                      <p>• Price includes: {applicationData.materialsIncluded ? 'Service + Materials' : 'Service only'}</p>
+                      {applicationData.timeEstimate.value && (
+                        <p>• Estimated time: {applicationData.timeEstimate.value} {applicationData.timeEstimate.unit}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => setShowApplicationModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDetailedApplication}
+                  disabled={applying || !applicationData.proposedAmount || !applicationData.coverLetter || !applicationData.workPlan}
+                  className="btn-primary flex-1"
+                >
+                  {applying ? (
+                    <>
+                      <Loader className="animate-spin h-4 w-4 mr-2" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Application'
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Rating Modal */}
+      <AnimatePresence>
+        {showRatingModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-lg p-6 w-full max-w-md"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-fixly-text">
+                  Rate {user?.role === 'hirer' ? 'Fixer' : 'Client'}
+                </h2>
+                <button
+                  onClick={() => setShowRatingModal(false)}
+                  className="text-fixly-text-muted hover:text-fixly-text"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Overall Rating */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Overall Rating *
+                  </label>
+                  <div className="flex space-x-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => setRatingData(prev => ({ ...prev, rating: star }))}
+                        className={`text-2xl ${
+                          star <= ratingData.rating ? 'text-yellow-500' : 'text-gray-300'
+                        } hover:text-yellow-400 transition-colors`}
+                      >
+                        ⭐
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    {ratingData.rating === 0 && 'Select a rating'}
+                    {ratingData.rating === 1 && 'Poor'}
+                    {ratingData.rating === 2 && 'Fair'}
+                    {ratingData.rating === 3 && 'Good'}
+                    {ratingData.rating === 4 && 'Very Good'}
+                    {ratingData.rating === 5 && 'Excellent'}
+                  </p>
+                </div>
+
+                {/* Category Ratings */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-3">
+                    Detailed Ratings
+                  </label>
+                  
+                  {Object.entries({
+                    communication: 'Communication',
+                    quality: user?.role === 'hirer' ? 'Work Quality' : 'Clarity of Requirements',
+                    timeliness: 'Timeliness',
+                    professionalism: 'Professionalism'
+                  }).map(([key, label]) => (
+                    <div key={key} className="mb-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm text-fixly-text">{label}</span>
+                        <span className="text-xs text-fixly-text-muted">
+                          {ratingData.categories[key] || 0}/5
+                        </span>
+                      </div>
+                      <div className="flex space-x-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            onClick={() => setRatingData(prev => ({
+                              ...prev,
+                              categories: { ...prev.categories, [key]: star }
+                            }))}
+                            className={`text-lg ${
+                              star <= ratingData.categories[key] ? 'text-yellow-500' : 'text-gray-300'
+                            } hover:text-yellow-400 transition-colors`}
+                          >
+                            ⭐
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Written Review */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Written Review (Optional)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={ratingData.review}
+                    onChange={(e) => setRatingData(prev => ({ ...prev, review: e.target.value }))}
+                    className="input"
+                    placeholder={`Share your experience with this ${user?.role === 'hirer' ? 'fixer' : 'client'}...`}
+                    maxLength={500}
+                  />
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    {ratingData.review.length}/500 characters
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex space-x-3 mt-6">
+                <button
+                  onClick={() => setShowRatingModal(false)}
+                  className="btn-secondary flex-1"
+                >
+                  Skip for Now
+                </button>
+                <button
+                  onClick={handleSubmitRating}
+                  disabled={ratingData.rating === 0}
+                  className="btn-primary flex-1"
+                >
+                  Submit Rating
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

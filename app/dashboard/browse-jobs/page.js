@@ -62,9 +62,22 @@ function BrowseJobsContent() {
 
   // Application state
   const [applyingJobs, setApplyingJobs] = useState(new Set());
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
-    fetchJobs(true);
+    // Show loading state when user is typing
+    setSearchLoading(true);
+    
+    // Debounce the search to avoid excessive API calls
+    const debounceTimer = setTimeout(() => {
+      fetchJobs(true);
+      setSearchLoading(false);
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => {
+      clearTimeout(debounceTimer);
+      setSearchLoading(false);
+    };
   }, [filters]);
 
   const fetchJobs = async (reset = false) => {
@@ -138,8 +151,18 @@ function BrowseJobsContent() {
     }
   };
 
+  const canUserApplyToJob = (user) => {
+    if (!user || user.role !== 'fixer') return false;
+    if (user.banned) return false;
+    if (user.plan?.type === 'pro' && user.plan?.status === 'active') return true;
+    
+    // For free users, check application limits
+    const applicationsUsed = user.plan?.creditsUsed || 0;
+    return applicationsUsed < 3; // Free users get 3 applications
+  };
+
   const handleQuickApply = async (jobId) => {
-    if (!user.canApplyToJob()) {
+    if (!canUserApplyToJob(user)) {
       toast.error('You have used all free applications. Upgrade to Pro for unlimited access.');
       router.push('/dashboard/subscription');
       return;
@@ -148,11 +171,15 @@ function BrowseJobsContent() {
     setApplyingJobs(prev => new Set([...prev, jobId]));
     
     try {
+      // Find the job to get its budget
+      const job = jobs.find(j => j._id === jobId);
+      const suggestedAmount = job?.budget?.amount || 1000; // Default to 1000 if no budget
+      
       const response = await fetch(`/api/jobs/${jobId}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          proposedAmount: 0, // Will be filled in detailed application
+          proposedAmount: suggestedAmount, // Use job budget or default amount
           coverLetter: 'I am interested in this job. Let me know if you would like to discuss details.'
         })
       });
@@ -284,8 +311,11 @@ function BrowseJobsContent() {
                 value={filters.search}
                 onChange={(e) => handleFilterChange('search', e.target.value)}
                 placeholder="Search jobs by title, description, or location..."
-                className="input-field pl-10"
+                className="input-field pl-10 pr-10"
               />
+              {searchLoading && (
+                <Loader className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-fixly-accent" />
+              )}
             </div>
           </div>
           
@@ -554,7 +584,7 @@ function BrowseJobsContent() {
                 ) : (
                   <button
                     onClick={() => handleQuickApply(job._id)}
-                    disabled={applyingJobs.has(job._id) || !user?.canApplyToJob()}
+                    disabled={applyingJobs.has(job._id) || !canUserApplyToJob(user)}
                     className="btn-primary flex-1"
                   >
                     {applyingJobs.has(job._id) ? (

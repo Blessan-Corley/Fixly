@@ -59,9 +59,7 @@ const validateUsername = (username) => {
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const urlRole = searchParams.get('role') || 
-                 (typeof window !== 'undefined' ? sessionStorage.getItem('selectedRole') : null) || 
-                 'hirer';
+  const [urlRole, setUrlRole] = useState('hirer');
   const method = searchParams.get('method');
   
   // Form steps
@@ -95,6 +93,20 @@ export default function SignupPage() {
   const [citySearch, setCitySearch] = useState('');
   const [cityResults, setCityResults] = useState([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+
+  // Initialize role from URL or sessionStorage (client-side only)
+  useEffect(() => {
+    const initializeRole = () => {
+      const paramRole = searchParams.get('role');
+      const storedRole = typeof window !== 'undefined' ? sessionStorage.getItem('selectedRole') : null;
+      const finalRole = paramRole || storedRole || 'hirer';
+      
+      setUrlRole(finalRole);
+      setFormData(prev => ({ ...prev, role: finalRole }));
+    };
+    
+    initializeRole();
+  }, [searchParams]);
 
   // Check for existing session and handle Google auth
   useEffect(() => {
@@ -130,10 +142,9 @@ export default function SignupPage() {
               .slice(0, 10);
             
             // Determine the correct role to use
-            let preferredRole = urlRole;
-            if (typeof window !== 'undefined' && sessionStorage.getItem('selectedRole')) {
-              preferredRole = sessionStorage.getItem('selectedRole');
-            }
+            const paramRole = searchParams.get('role');
+            const storedRole = typeof window !== 'undefined' ? sessionStorage.getItem('selectedRole') : null;
+            const preferredRole = paramRole || storedRole || session.user.role || 'fixer';
             
             setFormData(prev => ({
               ...prev,
@@ -305,6 +316,12 @@ export default function SignupPage() {
   const handleNextStep = () => {
     if (validateStep(currentStep)) {
       setCurrentStep(prev => prev + 1);
+    } else {
+      // Show validation errors with helpful message
+      const errorMessages = Object.values(errors).filter(msg => msg);
+      if (errorMessages.length > 0) {
+        toast.error(`Please fill in all required fields: ${errorMessages.length} error(s) found`);
+      }
     }
   };
 
@@ -339,7 +356,14 @@ export default function SignupPage() {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(4)) return;
+    if (!validateStep(4)) {
+      // Show validation errors
+      const errorMessages = Object.values(errors).filter(msg => msg);
+      if (errorMessages.length > 0) {
+        toast.error(`Please fill in all required fields: ${errorMessages.length} error(s) found`);
+      }
+      return;
+    }
 
     setLoading(true);
     
@@ -594,7 +618,7 @@ export default function SignupPage() {
                       value={formData.email}
                       onChange={(e) => handleInputChange('email', e.target.value)}
                       placeholder="Enter your email"
-                      className="input-field pl-10"
+                      className={`input-field pl-10 ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
                     />
                   </div>
                   {errors.email && (
@@ -613,7 +637,7 @@ export default function SignupPage() {
                       value={formData.password}
                       onChange={(e) => handleInputChange('password', e.target.value)}
                       placeholder="Create a password"
-                      className="input-field pl-10 pr-10"
+                      className={`input-field pl-10 pr-10 ${errors.password ? 'border-red-500 focus:border-red-500' : ''}`}
                     />
                     <button
                       type="button"
@@ -643,7 +667,7 @@ export default function SignupPage() {
                       value={formData.confirmPassword}
                       onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
                       placeholder="Confirm your password"
-                      className="input-field pl-10 pr-10"
+                      className={`input-field pl-10 pr-10 ${errors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
                     />
                     <button
                       type="button"
@@ -725,7 +749,7 @@ export default function SignupPage() {
                     placeholder="Enter your full name"
                     className={`input-field pl-10 ${
                       authMethod === 'google' ? 'bg-gray-50 text-gray-600' : ''
-                    }`}
+                    } ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
                     disabled={authMethod === 'google'}
                   />
                   {authMethod === 'google' && (
@@ -756,7 +780,7 @@ export default function SignupPage() {
                       handleInputChange('username', value);
                     }}
                     placeholder="Choose a unique username"
-                    className="input-field pl-10 pr-10"
+                    className={`input-field pl-10 pr-10 ${errors.username ? 'border-red-500 focus:border-red-500' : ''}`}
                   />
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                     {checkingUsername ? (
@@ -820,7 +844,7 @@ export default function SignupPage() {
                       handleInputChange('phone', cleanPhone);
                     }}
                     placeholder="Enter your phone number"
-                    className="input-field pl-10"
+                    className={`input-field pl-10 ${errors.phone ? 'border-red-500 focus:border-red-500' : ''}`}
                   />
                 </div>
                 {errors.phone && (
@@ -865,7 +889,7 @@ export default function SignupPage() {
                       }
                     }}
                     placeholder="Search for your city"
-                    className="input-field pl-10"
+                    className={`input-field pl-10 ${errors.location ? 'border-red-500 focus:border-red-500' : ''}`}
                     disabled={!!formData.location}
                   />
                   {formData.location && (

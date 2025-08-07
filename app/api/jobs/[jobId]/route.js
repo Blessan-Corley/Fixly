@@ -44,16 +44,8 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Check if fixer has credits or subscription before showing job details
-    if (user.role === 'fixer' && !user.canApplyToJob()) {
-      return NextResponse.json(
-        { 
-          message: 'You need to upgrade to Pro or have free credits to view job details',
-          needsUpgrade: true 
-        },
-        { status: 403 }
-      );
-    }
+    // Note: Allow all authenticated users to view job details
+    // Restriction on applying will be handled in the frontend based on canApplyToJob()
 
     // Fetch job with populated data
     const job = await Job.findById(jobId)
@@ -219,6 +211,18 @@ export async function PUT(request, { params }) {
       case 'update_details':
         return await updateJobDetails(job, data);
       
+      case 'mark_in_progress':
+        return await markJobInProgress(job, user);
+        
+      case 'confirm_progress':
+        return await confirmJobProgress(job, user);
+        
+      case 'confirm_completion':
+        return await confirmJobCompletion(job, user, data);
+      
+      case 'mark_arrived':
+        return await markFixerArrived(job, user);
+      
       default:
         return NextResponse.json(
           { message: 'Invalid action' },
@@ -269,13 +273,19 @@ async function acceptApplication(job, applicationId) {
 
   await job.save();
 
-  // Send notifications
+  // Send notifications and deduct credits
   const fixer = await User.findById(application.fixer);
   if (fixer) {
+    // Deduct credit for non-pro fixers when job is assigned
+    if (fixer.plan.type !== 'pro') {
+      fixer.plan.creditsUsed = (fixer.plan.creditsUsed || 0) + 1;
+      await fixer.save();
+    }
+
     await fixer.addNotification(
       'application_accepted',
       'Application Accepted! 🎉',
-      `Your application for "${job.title}" has been accepted. The work can now begin.`,
+      `Your application for "${job.title}" has been accepted. The work can now begin. ${fixer.plan.type !== 'pro' ? 'One credit has been used.' : ''}`,
       { jobId: job._id }
     );
   }
@@ -408,7 +418,19 @@ async function updateJobDetails(job, data) {
     );
   }
 
-  const allowedFields = ['title', 'description', 'budget', 'deadline', 'urgency'];
+  const allowedFields = [
+    'title', 
+    'description', 
+    'budget', 
+    'deadline', 
+    'urgency', 
+    'skillsRequired',
+    'location',
+    'type',
+    'experienceLevel',
+    'scheduledDate',
+    'estimatedDuration'
+  ];
   const updateData = {};
 
   allowedFields.forEach(field => {
@@ -417,10 +439,204 @@ async function updateJobDetails(job, data) {
     }
   });
 
+  // Validate required fields
+  if (data.title && data.title.length < 10) {
+    return NextResponse.json(
+      { message: 'Title must be at least 10 characters' },
+      { status: 400 }
+    );
+  }
+
+  if (data.description && data.description.length < 30) {
+    return NextResponse.json(
+      { message: 'Description must be at least 30 characters' },
+      { status: 400 }
+    );
+  }
+
+  if (data.deadline && new Date(data.deadline) <= new Date()) {
+    return NextResponse.json(
+      { message: 'Deadline must be in the future' },
+      { status: 400 }
+    );
+  }
+
   await Job.findByIdAndUpdate(job._id, updateData);
 
   return NextResponse.json({
     success: true,
     message: 'Job updated successfully'
+  });
+}
+
+async function markJobInProgress(job, user) {
+  // Only assigned fixer can mark as in progress
+  if (!job.assignedTo || job.assignedTo.toString() !== user._id.toString()) {
+    return NextResponse.json(
+      { message: 'Only the assigned fixer can mark job as in progress' },
+      { status: 403 }
+    );
+  }
+
+  if (job.status !== 'in_progress') {
+    return NextResponse.json(
+      { message: 'Job must be in progress status' },
+      { status: 400 }
+    );
+  }
+
+  // Update progress tracking
+  if (!job.progress.startedAt) {
+    job.progress.startedAt = new Date();
+  }
+  
+  await job.save();
+
+  // Notify the hirer
+  const hirer = await User.findById(job.createdBy);
+  if (hirer) {
+    await hirer.addNotification(
+      'job_in_progress',
+      'Work Started! 🚀',
+      `${user.name} has started working on "${job.title}". You can track progress and communicate with them.`,
+      { jobId: job._id }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Job marked as in progress'
+  });
+}
+
+async function confirmJobProgress(job, user) {
+  // Only hirer can confirm progress
+  if (job.createdBy.toString() !== user._id.toString()) {
+    return NextResponse.json(
+      { message: 'Only the job creator can confirm progress' },
+      { status: 403 }
+    );
+  }
+
+  if (job.status !== 'in_progress') {
+    return NextResponse.json(
+      { message: 'Job must be in progress' },
+      { status: 400 }
+    );
+  }
+
+  // Update progress confirmation
+  job.progress.confirmedAt = new Date();
+  await job.save();
+
+  // Notify the fixer
+  const fixer = await User.findById(job.assignedTo);
+  if (fixer) {
+    await fixer.addNotification(
+      'progress_confirmed',
+      'Progress Confirmed! ✅',
+      `The client has confirmed your progress on "${job.title}". Keep up the great work!`,
+      { jobId: job._id }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Progress confirmed successfully'
+  });
+}
+
+async function confirmJobCompletion(job, user, data) {
+  // Only hirer can confirm completion
+  if (job.createdBy.toString() !== user._id.toString()) {
+    return NextResponse.json(
+      { message: 'Only the job creator can confirm completion' },
+      { status: 403 }
+    );
+  }
+
+  if (job.status !== 'completed') {
+    return NextResponse.json(
+      { message: 'Job must be marked as completed by fixer first' },
+      { status: 400 }
+    );
+  }
+
+  // Update completion confirmation
+  job.completion.confirmedBy = user._id;
+  job.completion.confirmedAt = new Date();
+  
+  if (data.rating) {
+    job.completion.rating = data.rating;
+  }
+  
+  if (data.review) {
+    job.completion.review = data.review;
+  }
+  
+  await job.save();
+
+  // Update fixer's rating if rating was provided
+  if (data.rating && job.assignedTo) {
+    const fixer = await User.findById(job.assignedTo);
+    if (fixer) {
+      await fixer.updateRating(data.rating);
+      
+      await fixer.addNotification(
+        'job_confirmed',
+        'Job Completed & Confirmed! 🎉',
+        `Your work on "${job.title}" has been confirmed by the client. ${data.rating ? `You received a ${data.rating}-star rating!` : ''} Payment will be processed soon.`,
+        { jobId: job._id, rating: data.rating }
+      );
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Job completion confirmed successfully'
+  });
+}
+
+async function markFixerArrived(job, user) {
+  // Only assigned fixer can mark arrival
+  if (!job.assignedTo || job.assignedTo.toString() !== user._id.toString()) {
+    return NextResponse.json(
+      { message: 'Only the assigned fixer can mark arrival' },
+      { status: 403 }
+    );
+  }
+
+  if (job.status !== 'in_progress') {
+    return NextResponse.json(
+      { message: 'Job must be in progress to mark arrival' },
+      { status: 400 }
+    );
+  }
+
+  if (job.progress?.arrivedAt) {
+    return NextResponse.json(
+      { message: 'Arrival already marked' },
+      { status: 400 }
+    );
+  }
+
+  // Update arrival tracking
+  job.progress.arrivedAt = new Date();
+  await job.save();
+
+  // Notify the hirer
+  const hirer = await User.findById(job.createdBy);
+  if (hirer) {
+    await hirer.addNotification(
+      'fixer_arrived',
+      'Fixer Has Arrived! 📍',
+      `${user.name} has arrived at your location for "${job.title}". They should be starting work soon.`,
+      { jobId: job._id }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'Arrival confirmed successfully'
   });
 }

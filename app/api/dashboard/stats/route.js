@@ -132,7 +132,7 @@ async function getHirerStats(userId) {
       createdBy: userId, 
       status: { $in: ['open', 'in_progress'] } 
     }),
-    // nice one great to work in this project
+    
     // Completed jobs
     Job.countDocuments({ 
       createdBy: userId, 
@@ -263,6 +263,9 @@ async function getFixerStats(userId) {
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
   const user = await User.findById(userId);
 
@@ -277,6 +280,9 @@ async function getFixerStats(userId) {
     recentJobs,
     monthlyEarnings,
     yearlyEarnings,
+    totalEarnings,
+    weeklyEarnings,
+    lastMonthEarnings,
     successRate
   ] = await Promise.all([
     // Total applications sent
@@ -357,6 +363,41 @@ async function getFixerStats(userId) {
       },
       { $group: { _id: null, total: { $sum: '$budget.amount' } } }
     ]),
+
+    // Total lifetime earnings
+    Job.aggregate([
+      { 
+        $match: { 
+          assignedTo: userId, 
+          status: 'completed'
+        } 
+      },
+      { $group: { _id: null, total: { $sum: '$budget.amount' } } }
+    ]),
+
+    // Weekly earnings
+    Job.aggregate([
+      { 
+        $match: { 
+          assignedTo: userId, 
+          status: 'completed',
+          'progress.completedAt': { $gte: startOfWeek }
+        } 
+      },
+      { $group: { _id: null, total: { $sum: '$budget.amount' } } }
+    ]),
+
+    // Last month earnings
+    Job.aggregate([
+      { 
+        $match: { 
+          assignedTo: userId, 
+          status: 'completed',
+          'progress.completedAt': { $gte: startOfLastMonth, $lte: endOfLastMonth }
+        } 
+      },
+      { $group: { _id: null, total: { $sum: '$budget.amount' } } }
+    ]),
     
     // Success rate (accepted applications / total applications)
     Job.aggregate([
@@ -388,9 +429,11 @@ async function getFixerStats(userId) {
     applicationsThisMonth: applicationsThisMonth[0]?.thisMonth || 0,
     activeJobs,
     jobsCompleted: user.jobsCompleted || 0,
-    totalEarnings: user.totalEarnings || 0,
+    totalEarnings: totalEarnings[0]?.total || 0,
     monthlyEarnings: monthlyEarnings[0]?.total || 0,
     yearlyEarnings: yearlyEarnings[0]?.total || 0,
+    weeklyEarnings: weeklyEarnings[0]?.total || 0,
+    lastMonthEarnings: lastMonthEarnings[0]?.total || 0,
     rating: user.rating || { average: 0, count: 0 },
     successRate: calculatedSuccessRate,
     creditsUsed: user.plan?.creditsUsed || 0,

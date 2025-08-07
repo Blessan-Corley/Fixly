@@ -172,18 +172,24 @@ export async function POST(request) {
     const job = new Job(jobData);
     await job.save();
 
-    // Update user's job posting stats
-    user.lastJobPostedAt = new Date();
-    user.jobsPosted = (user.jobsPosted || 0) + 1;
-    user.lastActivityAt = new Date();
-    await user.save();
-
-    // Add notification to user
-    await user.addNotification(
-      'job_posted',
-      'Job Posted Successfully',
-      `Your job "${job.title}" has been posted and is now visible to fixers.`
-    );
+    // Update user's job posting stats and add notification
+    try {
+      user.lastJobPostedAt = new Date();
+      user.jobsPosted = (user.jobsPosted || 0) + 1;
+      user.lastActivityAt = new Date();
+      
+      // Add notification to user
+      user.addNotification(
+        'job_posted',
+        'Job Posted Successfully',
+        `Your job "${job.title}" has been posted and is now visible to fixers.`
+      );
+      
+      await user.save();
+    } catch (userUpdateError) {
+      console.error('User update error:', userUpdateError);
+      // Continue even if user update fails
+    }
 
     // Populate the created job for response
     await job.populate('createdBy', 'name username photoURL rating location');

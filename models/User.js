@@ -728,8 +728,9 @@ userSchema.methods.getNextJobPostTime = function() {
 userSchema.methods.canApplyToJob = function() {
   if (this.role !== 'fixer') return false;
   if (this.banned) return false;
-  if (this.plan.type === 'pro' && this.plan.status === 'active') return true;
-  return this.plan.creditsUsed < 3;
+  if (this.plan && this.plan.type === 'pro' && this.plan.status === 'active') return true;
+  const creditsUsed = this.plan ? (this.plan.creditsUsed || 0) : 0;
+  return creditsUsed < 3;
 };
 
 // Method to add notification

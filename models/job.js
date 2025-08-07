@@ -269,7 +269,23 @@ const jobSchema = new mongoose.Schema({
     }],
     coverLetter: {
       type: String,
-      maxlength: [1000, 'Cover letter cannot exceed 1000 characters']
+      maxlength: [800, 'Cover letter cannot exceed 800 characters']
+    },
+    workPlan: {
+      type: String,
+      maxlength: [1500, 'Work plan cannot exceed 1500 characters']
+    },
+    materialsIncluded: {
+      type: Boolean,
+      default: false
+    },
+    requirements: {
+      type: String,
+      maxlength: [500, 'Requirements cannot exceed 500 characters']
+    },
+    specialNotes: {
+      type: String,
+      maxlength: [300, 'Special notes cannot exceed 300 characters']
     },
     status: {
       type: String,
@@ -374,6 +390,7 @@ const jobSchema = new mongoose.Schema({
   
   // Progress Tracking
   progress: {
+    arrivedAt: Date,
     startedAt: Date,
     completedAt: Date,
     markedDoneAt: Date,
@@ -545,6 +562,51 @@ const jobSchema = new mongoose.Schema({
     reviewReply: {
       type: String,
       maxlength: [500, 'Review reply cannot exceed 500 characters']
+    },
+    // Dual rating system - both parties can rate each other
+    fixerRating: {
+      rating: {
+        type: Number,
+        min: [1, 'Rating must be at least 1'],
+        max: [5, 'Rating cannot exceed 5']
+      },
+      review: {
+        type: String,
+        maxlength: [500, 'Review cannot exceed 500 characters']
+      },
+      categories: {
+        communication: { type: Number, min: 1, max: 5 },
+        quality: { type: Number, min: 1, max: 5 },
+        timeliness: { type: Number, min: 1, max: 5 },
+        professionalism: { type: Number, min: 1, max: 5 }
+      },
+      ratedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      ratedAt: Date
+    },
+    hirerRating: {
+      rating: {
+        type: Number,
+        min: [1, 'Rating must be at least 1'],
+        max: [5, 'Rating cannot exceed 5']
+      },
+      review: {
+        type: String,
+        maxlength: [500, 'Review cannot exceed 500 characters']
+      },
+      categories: {
+        communication: { type: Number, min: 1, max: 5 },
+        quality: { type: Number, min: 1, max: 5 },
+        timeliness: { type: Number, min: 1, max: 5 },
+        professionalism: { type: Number, min: 1, max: 5 }
+      },
+      ratedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      ratedAt: Date
     }
   },
   

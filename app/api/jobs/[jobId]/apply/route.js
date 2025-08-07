@@ -111,7 +111,11 @@ export async function POST(request, { params }) {
       proposedAmount,
       timeEstimate,
       materialsList,
-      coverLetter
+      coverLetter,
+      workPlan,
+      materialsIncluded,
+      requirements,
+      specialNotes
     } = body;
 
     // Validation
@@ -122,9 +126,24 @@ export async function POST(request, { params }) {
       );
     }
 
-    if (coverLetter && coverLetter.length > 1000) {
+    if (coverLetter && coverLetter.length > 800) {
       return NextResponse.json(
-        { message: 'Cover letter must be less than 1000 characters' },
+        { message: 'Cover letter must be less than 800 characters' },
+        { status: 400 }
+      );
+    }
+
+    if (workPlan && workPlan.length > 1500) {
+      return NextResponse.json(
+        { message: 'Work plan must be less than 1500 characters' },
+        { status: 400 }
+      );
+    }
+
+    // For negotiable jobs, require a detailed work plan
+    if (job.budget.type === 'negotiable' && (!workPlan || workPlan.length < 100)) {
+      return NextResponse.json(
+        { message: 'Negotiable jobs require a detailed work plan (at least 100 characters)' },
         { status: 400 }
       );
     }
@@ -134,6 +153,10 @@ export async function POST(request, { params }) {
       fixer: user._id,
       proposedAmount: Number(proposedAmount),
       coverLetter: coverLetter || '',
+      workPlan: workPlan || '',
+      materialsIncluded: materialsIncluded || false,
+      requirements: requirements || '',
+      specialNotes: specialNotes || '',
       status: 'pending',
       appliedAt: new Date()
     };
@@ -157,11 +180,8 @@ export async function POST(request, { params }) {
     job.applications.push(application);
     await job.save();
 
-    // Update user's credit usage if not pro
-    if (user.plan.type !== 'pro') {
-      user.plan.creditsUsed = (user.plan.creditsUsed || 0) + 1;
-      await user.save();
-    }
+    // NOTE: Credits are NOT deducted here anymore
+    // Credits will be deducted only when the application is accepted (job assigned)
 
     // Add notification to hirer
     const hirer = job.createdBy;
@@ -207,7 +227,7 @@ export async function POST(request, { params }) {
         status: application.status,
         appliedAt: application.appliedAt
       },
-      creditsRemaining: user.plan.type === 'pro' ? 'unlimited' : Math.max(0, 3 - user.plan.creditsUsed)
+      creditsRemaining: user.plan.type === 'pro' ? 'unlimited' : Math.max(0, 3 - (user.plan.creditsUsed || 0))
     }, { status: 201 });
 
   } catch (error) {

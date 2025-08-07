@@ -125,3 +125,6 @@ storybook-static
 *.tgz
 *.tar.gz
 .cache/
+DEPLOYMENT.md
+SECURITY.md
+TESTING_CHECKLIST.md
