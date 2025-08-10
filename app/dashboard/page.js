@@ -22,6 +22,8 @@ import {
   Activity
 } from 'lucide-react';
 import { useApp } from '../providers';
+import { usePageLoading } from '../../contexts/LoadingContext';
+import { GlobalLoading } from '../../components/ui/GlobalLoading';
 import { toast } from 'sonner';
 
 export default function DashboardPage() {
@@ -30,7 +32,12 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [recentJobs, setRecentJobs] = useState([]);
   const [quickActions, setQuickActions] = useState([]);
-  const [loadingStats, setLoadingStats] = useState(true);
+  const { 
+    loading: pageLoading, 
+    showRefreshMessage, 
+    startLoading, 
+    stopLoading 
+  } = usePageLoading('dashboard');
 
   useEffect(() => {
     if (user) {
@@ -40,7 +47,7 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
   try {
-    setLoadingStats(true);
+    startLoading('Loading dashboard data...');
     
     // ✅ Fetch dashboard stats - API gets role from session/database
     const statsResponse = await fetch('/api/dashboard/stats');
@@ -62,8 +69,9 @@ export default function DashboardPage() {
 
   } catch (error) {
     console.error('Error fetching dashboard data:', error);
+    toast.error('Failed to load dashboard data');
   } finally {
-    setLoadingStats(false);
+    stopLoading();
   }
 };
 
@@ -370,7 +378,7 @@ export default function DashboardPage() {
   );
 
   const renderStats = () => {
-    if (loadingStats) {
+    if (pageLoading) {
       return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {[1, 2, 3, 4].map((i) => (
@@ -458,9 +466,13 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="p-6 lg:p-8 flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-fixly-accent"></div>
-      </div>
+      <GlobalLoading 
+        loading={true}
+        showRefreshMessage={showRefreshMessage}
+        message="Loading dashboard..."
+        fullScreen={false}
+        className="min-h-[60vh]"
+      />
     );
   }
 

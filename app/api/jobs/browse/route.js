@@ -132,12 +132,48 @@ export async function GET(request) {
       Job.countDocuments(query)
     ]);
 
+    // Check if fixer can view full job details (has credits or is pro)
+    const canViewFullDetails = user.role !== 'fixer' || 
+                               user.plan?.type === 'pro' || 
+                               (user.plan?.creditsUsed || 0) < 3;
+
     // Enhance jobs with additional data for the user
     const enhancedJobs = jobs.map(job => {
       // Check if user has applied
       const hasApplied = job.applications?.some(
         app => app.fixer?.toString() === user._id.toString() && app.status !== 'withdrawn'
       ) || false;
+
+      // If fixer without credits, return limited data
+      if (user.role === 'fixer' && !canViewFullDetails && !hasApplied) {
+        return {
+          _id: job._id,
+          title: job.title,
+          description: job.description.substring(0, 150) + '...', // Limited description
+          skillsRequired: job.skillsRequired,
+          budget: job.budget.type === 'negotiable' ? { type: 'negotiable' } : {
+            type: job.budget.type,
+            amount: job.budget.amount ? '₹' + Math.floor(job.budget.amount / 1000) + 'k+' : null
+          }, // Approximated budget
+          urgency: job.urgency,
+          status: job.status,
+          location: {
+            city: job.location.city,
+            state: job.location.state
+          },
+          createdBy: {
+            name: job.createdBy.name,
+            rating: job.createdBy.rating
+          },
+          applicationCount: job.applications?.length || 0,
+          createdAt: job.createdAt,
+          hasApplied: false,
+          skillMatchPercentage: 0,
+          isLocalJob: false,
+          restrictedView: true,
+          canApply: false
+        };
+      }
 
       // Calculate skill match percentage for fixers
       let skillMatchPercentage = 0;

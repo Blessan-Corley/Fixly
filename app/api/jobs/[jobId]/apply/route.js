@@ -6,6 +6,7 @@ import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
+import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
 import nodemailer from 'nodemailer';
 
 // Email transporter
@@ -146,6 +147,35 @@ export async function POST(request, { params }) {
         { message: 'Negotiable jobs require a detailed work plan (at least 100 characters)' },
         { status: 400 }
       );
+    }
+
+    // Check for sensitive content in application fields
+    const fieldsToCheck = [
+      { name: 'coverLetter', value: coverLetter },
+      { name: 'workPlan', value: workPlan },
+      { name: 'requirements', value: requirements },
+      { name: 'specialNotes', value: specialNotes }
+    ];
+
+    for (const field of fieldsToCheck) {
+      if (field.value && field.value.trim()) {
+        const moderationResult = moderateContent(field.value.trim(), {
+          allowAutoClean: false,
+          strictMode: true
+        });
+
+        if (!moderationResult.allowed) {
+          return NextResponse.json(
+            { 
+              message: `Your ${field.name.replace(/([A-Z])/g, ' $1').toLowerCase()} contains sensitive information that cannot be shared: ${moderationResult.message}`,
+              violations: moderationResult.violations,
+              type: 'sensitive_content',
+              field: field.name
+            },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // Create application

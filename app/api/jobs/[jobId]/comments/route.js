@@ -6,6 +6,7 @@ import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
+import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
 
 export async function POST(request, { params }) {
   try {
@@ -76,10 +77,27 @@ export async function POST(request, { params }) {
       );
     }
 
+    // Check for sensitive content
+    const moderationResult = moderateContent(message.trim(), {
+      allowAutoClean: false, // Don't auto-clean, require user to remove sensitive info
+      strictMode: true
+    });
+
+    if (!moderationResult.allowed) {
+      return NextResponse.json(
+        { 
+          message: moderationResult.message,
+          violations: moderationResult.violations,
+          type: 'sensitive_content'
+        },
+        { status: 400 }
+      );
+    }
+
     // Add comment to job
     const comment = {
       author: user._id,
-      message: message.trim(),
+      message: moderationResult.content,
       createdAt: new Date(),
       replies: []
     };
@@ -199,6 +217,23 @@ export async function PUT(request, { params }) {
       );
     }
 
+    // Check for sensitive content in reply
+    const moderationResult = moderateContent(message.trim(), {
+      allowAutoClean: false,
+      strictMode: true
+    });
+
+    if (!moderationResult.allowed) {
+      return NextResponse.json(
+        { 
+          message: moderationResult.message,
+          violations: moderationResult.violations,
+          type: 'sensitive_content'
+        },
+        { status: 400 }
+      );
+    }
+
     await connectDB();
 
     const user = await User.findById(session.user.id);
@@ -236,7 +271,7 @@ export async function PUT(request, { params }) {
     // Add reply
     const reply = {
       author: user._id,
-      message: message.trim(),
+      message: moderationResult.content,
       createdAt: new Date()
     };
 

@@ -72,11 +72,48 @@ export async function GET(request, { params }) {
     const isAssignedFixer = job.assignedTo && job.assignedTo._id.toString() === user._id.toString();
     const isInvolved = isJobCreator || isAssignedFixer || hasApplied;
 
+    // Check if this is for application purposes
+    const { searchParams } = new URL(request.url);
+    const forApplication = searchParams.get('forApplication') === 'true';
+    
+    // Check if fixer can view full job details (has credits or is pro)
+    // NOTE: Always allow full access for application purposes to prevent redirect loops
+    const canViewFullDetails = user.role !== 'fixer' || 
+                               user.plan?.type === 'pro' || 
+                               (user.plan?.creditsUsed || 0) < 3 ||
+                               isInvolved ||
+                               forApplication; // Always allow full access for application purposes
+
     // **SECURITY: Hide sensitive contact details from non-involved fixers**
     let jobData = { ...job };
     
-    if (user.role === 'fixer' && !isInvolved) {
-      // Hide sensitive information for fixers who haven't applied
+    if (user.role === 'fixer' && !canViewFullDetails) {
+      // Restrict details for fixers without credits
+      jobData = {
+        _id: job._id,
+        title: job.title,
+        description: job.description.substring(0, 200) + '...', // Limited description
+        skillsRequired: job.skillsRequired,
+        budget: job.budget.type === 'negotiable' ? { type: 'negotiable' } : {
+          type: job.budget.type,
+          amount: job.budget.amount ? '₹' + Math.floor(job.budget.amount / 1000) + 'k+' : null
+        }, // Approximated budget
+        urgency: job.urgency,
+        status: job.status,
+        location: {
+          city: job.location.city,
+          state: job.location.state
+        },
+        createdBy: {
+          name: job.createdBy.name,
+          rating: job.createdBy.rating
+        },
+        applicationCount: job.applications?.length || 0,
+        createdAt: job.createdAt,
+        restrictedView: true // Flag to indicate this is a restricted view
+      };
+    } else if (user.role === 'fixer' && !isInvolved) {
+      // Hide sensitive information for fixers who haven't applied but have credits
       jobData.createdBy = {
         name: job.createdBy.name,
         username: job.createdBy.username,
@@ -120,17 +157,29 @@ export async function GET(request, { params }) {
     const applicationCount = job.applications?.length || 0;
 
     // Include additional data
-    jobData = {
-      ...jobData,
-      hasApplied,
-      skillMatchPercentage,
-      isLocalJob,
-      applicationCount,
-      canMessage: isInvolved, // Only involved parties can message
-      
-      // Remove sensitive application data unless user is job creator
-      applications: isJobCreator ? job.applications : undefined
-    };
+    if (!jobData.restrictedView) {
+      jobData = {
+        ...jobData,
+        hasApplied,
+        skillMatchPercentage,
+        isLocalJob,
+        applicationCount,
+        canMessage: isInvolved, // Only involved parties can message
+        
+        // Remove sensitive application data unless user is job creator
+        applications: isJobCreator ? job.applications : undefined
+      };
+    } else {
+      // For restricted view, only add basic info
+      jobData = {
+        ...jobData,
+        hasApplied: false,
+        skillMatchPercentage: 0,
+        isLocalJob: false,
+        canMessage: false,
+        canApply: false
+      };
+    }
 
     return NextResponse.json({
       job: jobData

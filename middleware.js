@@ -27,9 +27,28 @@ export default withAuth(
 
     // Hirer-only routes
     if (pathname.startsWith('/dashboard/post-job') ||
-        pathname.startsWith('/dashboard/find-fixers') ||
-        pathname.startsWith('/dashboard/jobs')) {
+        pathname.startsWith('/dashboard/find-fixers')) {
       if (!token || token.role !== 'hirer') {
+        return NextResponse.redirect(new URL('/dashboard', req.url));
+      }
+    }
+
+    // Job routes - accessible by both hirers and fixers, but with restrictions
+    if (pathname.startsWith('/dashboard/jobs')) {
+      // Fixers can access job details and apply pages
+      if (token && token.role === 'fixer') {
+        if (pathname.includes('/apply') || pathname.match(/^\/dashboard\/jobs\/[^\/]+$/)) {
+          return NextResponse.next(); // Allow job details and apply pages
+        } else {
+          return NextResponse.redirect(new URL('/dashboard', req.url)); // Block job management pages
+        }
+      }
+      // Hirers can access all job routes
+      else if (token && token.role === 'hirer') {
+        return NextResponse.next();
+      }
+      // Block everyone else
+      else {
         return NextResponse.redirect(new URL('/dashboard', req.url));
       }
     }

@@ -19,7 +19,13 @@ import {
   RefreshCw,
   Zap,
   Target,
-  TrendingUp
+  TrendingUp,
+  MessageSquare,
+  Send,
+  Heart,
+  Reply,
+  MoreVertical,
+  Trash2
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
@@ -63,6 +69,13 @@ function BrowseJobsContent() {
   // Application state
   const [applyingJobs, setApplyingJobs] = useState(new Set());
   const [searchLoading, setSearchLoading] = useState(false);
+  const [showRefreshMessage, setShowRefreshMessage] = useState(false);
+  
+  // Comment state
+  const [expandedJobComments, setExpandedJobComments] = useState(new Set());
+  const [jobComments, setJobComments] = useState({});
+  const [newComments, setNewComments] = useState({});
+  const [submittingComments, setSubmittingComments] = useState(new Set());
 
   useEffect(() => {
     // Show loading state when user is typing
@@ -81,10 +94,18 @@ function BrowseJobsContent() {
   }, [filters]);
 
   const fetchJobs = async (reset = false) => {
+    let timeoutId;
+    
     try {
       if (reset) {
         setLoading(true);
+        setShowRefreshMessage(false);
         setPagination(prev => ({ ...prev, page: 1 }));
+        
+        // Show refresh message if loading takes too long
+        timeoutId = setTimeout(() => {
+          setShowRefreshMessage(true);
+        }, 8000); // Show message after 8 seconds for job list
       }
 
       const params = new URLSearchParams({
@@ -129,6 +150,10 @@ function BrowseJobsContent() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setShowRefreshMessage(false);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
   };
 
@@ -162,57 +187,175 @@ function BrowseJobsContent() {
   };
 
   const handleQuickApply = async (jobId) => {
+    console.log('🎯 Quick Apply clicked for job:', jobId);
+    console.log('👤 Current user:', { role: user?.role, creditsUsed: user?.plan?.creditsUsed });
+    
+    // Validate jobId
+    if (!jobId) {
+      console.error('❌ No job ID provided');
+      toast.error('Invalid job ID. Please try again.');
+      return;
+    }
+    
     if (!canUserApplyToJob(user)) {
+      console.log('❌ User cannot apply to job');
       toast.error('You have used all free applications. Upgrade to Pro for unlimited access.');
       router.push('/dashboard/subscription');
       return;
     }
 
+    // Set loading state for this specific job
     setApplyingJobs(prev => new Set([...prev, jobId]));
-    
+    console.log('⏳ Setting loading state for job:', jobId);
+
     try {
-      // Find the job to get its budget
-      const job = jobs.find(j => j._id === jobId);
-      const suggestedAmount = job?.budget?.amount || 1000; // Default to 1000 if no budget
+      const targetUrl = `/dashboard/jobs/${jobId}/apply`;
+      console.log('🚀 Navigating to:', targetUrl);
       
-      const response = await fetch(`/api/jobs/${jobId}/apply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          proposedAmount: suggestedAmount, // Use job budget or default amount
-          coverLetter: 'I am interested in this job. Let me know if you would like to discuss details.'
-        })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success('Quick application sent! Complete your proposal to increase your chances.');
-        // Update job status in local state
-        setJobs(prev => 
-          prev.map(job => 
-            job._id === jobId 
-              ? { ...job, hasApplied: true, applicationCount: job.applicationCount + 1 }
-              : job
-          )
-        );
-        router.push(`/dashboard/jobs/${jobId}/apply`);
-      } else {
-        if (data.needsUpgrade) {
-          router.push('/dashboard/subscription');
-        }
-        toast.error(data.message || 'Failed to apply');
+      // First check if the job exists by making a quick API call
+      const checkResponse = await fetch(`/api/jobs/${jobId}?forApplication=true`);
+      if (!checkResponse.ok) {
+        throw new Error(`Job not found or not accessible: ${checkResponse.status}`);
       }
+      
+      // Navigate to the application page
+      router.push(targetUrl);
+      toast.success('Opening application form...');
+      
     } catch (error) {
-      console.error('Error applying to job:', error);
-      toast.error('Failed to apply to job');
-    } finally {
+      console.error('❌ Error navigating to application page:', error);
+      toast.error(`Failed to open application form: ${error.message}`);
+      
+      // Remove loading state on error
       setApplyingJobs(prev => {
         const newSet = new Set(prev);
         newSet.delete(jobId);
         return newSet;
       });
     }
+    
+    // Remove loading state after navigation completes
+    setTimeout(() => {
+      setApplyingJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }, 3000);
+  };
+
+  // Comment functions
+  const toggleComments = async (jobId) => {
+    const isExpanded = expandedJobComments.has(jobId);
+    
+    if (isExpanded) {
+      // Collapse comments
+      setExpandedJobComments(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    } else {
+      // Expand comments and fetch them
+      setExpandedJobComments(prev => new Set([...prev, jobId]));
+      await fetchJobComments(jobId);
+    }
+  };
+
+  const fetchJobComments = async (jobId) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments`);
+      if (response.ok) {
+        const data = await response.json();
+        setJobComments(prev => ({
+          ...prev,
+          [jobId]: data.comments || []
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+      toast.error('Failed to load comments');
+    }
+  };
+
+  const handleSubmitComment = async (jobId) => {
+    const comment = newComments[jobId]?.trim();
+    if (!comment) return;
+
+    setSubmittingComments(prev => new Set([...prev, jobId]));
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: comment })
+      });
+
+      if (response.ok) {
+        setNewComments(prev => ({ ...prev, [jobId]: '' }));
+        await fetchJobComments(jobId); // Refresh comments
+        toast.success('Comment posted!');
+      } else {
+        const data = await response.json();
+        toast.error(data.message || 'Failed to post comment');
+      }
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      toast.error('Failed to post comment');
+    } finally {
+      setSubmittingComments(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleLikeComment = async (jobId, commentId) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        await fetchJobComments(jobId); // Refresh to get updated likes
+      }
+    } catch (error) {
+      console.error('Error liking comment:', error);
+    }
+  };
+
+  const handleDeleteComment = async (jobId, commentId) => {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        await fetchJobComments(jobId); // Refresh comments
+        toast.success('Comment deleted');
+      } else {
+        toast.error('Failed to delete comment');
+      }
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      toast.error('Failed to delete comment');
+    }
+  };
+
+  // Time formatting
+  const getTimeAgo = (timestamp) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInSeconds = Math.floor((now - time) / 1000);
+
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
   const clearFilters = () => {
@@ -254,8 +397,27 @@ function BrowseJobsContent() {
   if (loading && jobs.length === 0) {
     return (
       <div className="p-6 lg:p-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader className="animate-spin h-8 w-8 text-fixly-accent" />
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <Loader className="animate-spin h-8 w-8 text-fixly-accent mb-4" />
+          <p className="text-fixly-text-light mb-2">Loading jobs...</p>
+          
+          {showRefreshMessage && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 max-w-md text-center mt-4">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mx-auto mb-2" />
+              <p className="text-sm text-yellow-800 mb-3">
+                Jobs taking too long to load? Try refreshing:
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-yellow-600 text-white px-4 py-2 rounded text-sm hover:bg-yellow-700 transition-colors"
+              >
+                Refresh Page
+              </button>
+              <p className="text-xs text-yellow-700 mt-2">
+                This usually resolves loading issues
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -565,35 +727,167 @@ function BrowseJobsContent() {
               )}
 
               {/* Actions */}
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => router.push(`/dashboard/jobs/${job._id}`)}
-                  className="btn-secondary flex-1"
-                >
-                  View Details
-                </button>
-                
-                {job.hasApplied ? (
-                  <button
-                    disabled
-                    className="btn-ghost flex-1 opacity-50"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-1" />
-                    Applied
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleQuickApply(job._id)}
-                    disabled={applyingJobs.has(job._id) || !canUserApplyToJob(user)}
-                    className="btn-primary flex-1"
-                  >
-                    {applyingJobs.has(job._id) ? (
-                      <Loader className="animate-spin h-4 w-4 mr-1" />
-                    ) : (
-                      <Zap className="h-4 w-4 mr-1" />
-                    )}
-                    Quick Apply
-                  </button>
+              <div className="space-y-3">
+                <div className="flex space-x-2">
+                  {job.restrictedView ? (
+                    <>
+                      <button
+                        disabled
+                        className="btn-secondary flex-1 opacity-50"
+                      >
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        Limited View
+                      </button>
+                      <button
+                        onClick={() => router.push('/dashboard/subscription')}
+                        className="btn-primary flex-1"
+                      >
+                        <TrendingUp className="h-4 w-4 mr-1" />
+                        Upgrade to Apply
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => toggleComments(job._id)}
+                        className="flex-1 px-4 py-2 rounded-lg font-medium bg-white border-2 border-fixly-accent text-fixly-accent hover:bg-fixly-accent hover:text-white transition-colors"
+                      >
+                        <MessageSquare className="h-4 w-4 mr-1" />
+                        {expandedJobComments.has(job._id) ? 'Hide Comments' : 'View Comments'}
+                        {jobComments[job._id] && jobComments[job._id].length > 0 && (
+                          <span className="ml-1 text-xs bg-fixly-accent text-white rounded-full px-1">
+                            {jobComments[job._id].length}
+                          </span>
+                        )}
+                      </button>
+                      
+                      {job.hasApplied ? (
+                        <button
+                          disabled
+                          className="btn-ghost flex-1 opacity-50"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Applied
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleQuickApply(job._id)}
+                          disabled={applyingJobs.has(job._id) || !canUserApplyToJob(user)}
+                          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                            applyingJobs.has(job._id) || !canUserApplyToJob(user)
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-fixly-accent text-white hover:bg-fixly-accent-dark'
+                          }`}
+                          title={!canUserApplyToJob(user) ? 'You have reached your application limit' : 'Apply to this job'}
+                        >
+                          {applyingJobs.has(job._id) ? (
+                            <Loader className="animate-spin h-4 w-4 mr-1" />
+                          ) : (
+                            <Zap className="h-4 w-4 mr-1" />
+                          )}
+                          Quick Apply
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Instagram-style Comments Section */}
+                {expandedJobComments.has(job._id) && (
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                    {/* Comments List */}
+                    <div className="max-h-60 overflow-y-auto space-y-3">
+                      {jobComments[job._id] && jobComments[job._id].length > 0 ? (
+                        jobComments[job._id].map((comment) => (
+                          <div key={comment._id} className="flex space-x-2">
+                            <img
+                              src={comment.author?.photoURL || '/default-avatar.png'}
+                              alt={comment.author?.name || 'User'}
+                              className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="bg-white rounded-lg px-3 py-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium text-sm text-fixly-text">
+                                    {comment.author?.name || 'Anonymous'}
+                                  </span>
+                                  <span className="text-xs text-fixly-text-muted">
+                                    {getTimeAgo(comment.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-fixly-text mt-1">{comment.message}</p>
+                              </div>
+                              
+                              {/* Comment Actions */}
+                              <div className="flex items-center space-x-4 mt-1 px-3">
+                                <button
+                                  onClick={() => handleLikeComment(job._id, comment._id)}
+                                  className={`flex items-center space-x-1 text-xs ${
+                                    comment.likes?.includes(user?._id) 
+                                      ? 'text-red-500 font-medium' 
+                                      : 'text-fixly-text-muted hover:text-red-500'
+                                  } transition-colors`}
+                                >
+                                  <Heart className={`h-3 w-3 ${comment.likes?.includes(user?._id) ? 'fill-current' : ''}`} />
+                                  <span>{comment.likes?.length || 0}</span>
+                                </button>
+                                
+                                {comment.author?._id === user?._id && (
+                                  <button
+                                    onClick={() => handleDeleteComment(job._id, comment._id)}
+                                    className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-fixly-text-muted text-center py-4">
+                          No comments yet. Be the first to comment!
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Add Comment */}
+                    <div className="flex space-x-2 pt-2 border-t">
+                      <img
+                        src={user?.photoURL || '/default-avatar.png'}
+                        alt="You"
+                        className="h-8 w-8 rounded-full object-cover flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={newComments[job._id] || ''}
+                          onChange={(e) => setNewComments(prev => ({
+                            ...prev,
+                            [job._id]: e.target.value
+                          }))}
+                          placeholder="Add a comment..."
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-fixly-accent focus:border-transparent"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSubmitComment(job._id);
+                            }
+                          }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleSubmitComment(job._id)}
+                        disabled={!newComments[job._id]?.trim() || submittingComments.has(job._id)}
+                        className="px-3 py-2 bg-fixly-accent text-white rounded-full hover:bg-fixly-accent-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {submittingComments.has(job._id) ? (
+                          <Loader className="animate-spin h-4 w-4" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </motion.div>
