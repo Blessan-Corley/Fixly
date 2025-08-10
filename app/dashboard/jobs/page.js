@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
+import { usePageLoading } from '../../../contexts/LoadingContext';
+import { GlobalLoading } from '../../../components/ui/GlobalLoading';
 import { Briefcase } from 'lucide-react';
 
 export default function JobsPage() {
@@ -36,6 +38,12 @@ export default function JobsPage() {
 function JobsContent() {
   const { user } = useApp();
   const router = useRouter();
+  const { 
+    loading: pageLoading, 
+    showRefreshMessage, 
+    startLoading, 
+    stopLoading 
+  } = usePageLoading('jobs');
 
   // Jobs data
   const [jobs, setJobs] = useState([]);
@@ -63,6 +71,7 @@ function JobsContent() {
     try {
       if (reset) {
         setLoading(true);
+        startLoading('Loading jobs...');
         setPagination(prev => ({ ...prev, page: 1 }));
       }
 
@@ -100,6 +109,7 @@ function JobsContent() {
       toast.error('Failed to fetch jobs');
     } finally {
       setLoading(false);
+      stopLoading();
     }
   };
 
@@ -144,9 +154,13 @@ function JobsContent() {
   if (loading && jobs.length === 0) {
     return (
       <div className="p-6 lg:p-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader className="animate-spin h-8 w-8 text-fixly-accent" />
-        </div>
+        <GlobalLoading 
+          loading={pageLoading || loading}
+          showRefreshMessage={showRefreshMessage}
+          message="Loading your jobs..."
+          fullScreen={false}
+          className="min-h-[400px]"
+        />
       </div>
     );
   }

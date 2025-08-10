@@ -249,30 +249,6 @@ export default function JobDetailsPage({ params }) {
     }
   };
 
-  const handleApplicationAction = async (applicationId, action) => {
-    try {
-      const response = await fetch(`/api/jobs/${jobId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: action === 'accept' ? 'accept_application' : 'reject_application',
-          data: { applicationId }
-        })
-      });
-
-      if (response.ok) {
-        toast.success(`Application ${action}ed successfully`);
-        fetchJobDetails();
-        fetchApplications();
-      } else {
-        const data = await response.json();
-        toast.error(data.message || `Failed to ${action} application`);
-      }
-    } catch (error) {
-      console.error(`Error ${action}ing application:`, error);
-      toast.error(`Failed to ${action} application`);
-    }
-  };
 
   const handleJobAction = async (action) => {
     try {
@@ -341,6 +317,33 @@ export default function JobDetailsPage({ params }) {
     
     return phoneRegex.test(text) || emailRegex.test(text) || addressRegex.test(text) || 
            socialRegex.test(text) || meetingRegex.test(text);
+  };
+
+  // Check if user can comment on job
+  const canUserComment = (user, job) => {
+    if (!user) return false;
+    
+    // Both fixers and hirers can comment on jobs
+    if (user.role === 'hirer') {
+      // Hirers can always comment on their own jobs or jobs they're involved with
+      return true;
+    }
+    
+    if (user.role === 'fixer') {
+      // Pro fixers can always comment
+      if (user.plan?.type === 'pro' && user.plan?.status === 'active') {
+        return true;
+      }
+      
+      // Free fixers can comment if they have applications left or have already applied to this job
+      const applicationsUsed = user.plan?.creditsUsed || 0;
+      const hasCredits = applicationsUsed < 3;
+      const hasAppliedToJob = job?.hasApplied || false;
+      
+      return hasCredits || hasAppliedToJob;
+    }
+    
+    return false;
   };
 
   const handleSubmitRating = async () => {
@@ -515,6 +518,70 @@ export default function JobDetailsPage({ params }) {
       console.error('Error deleting reply:', error);
       toast.error('Failed to delete reply');
     }
+  };
+
+  // Application management functions
+  const handleAcceptApplication = async (applicationId) => {
+    if (!confirm('Are you sure you want to accept this application? This will assign the job to this fixer and reject all other applications.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'accept_application',
+          data: { applicationId }
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast.success('Application accepted successfully!');
+        fetchJobDetails(); // Refresh job details
+        fetchApplications(); // Refresh applications
+      } else {
+        toast.error(result.message || 'Failed to accept application');
+      }
+    } catch (error) {
+      console.error('Error accepting application:', error);
+      toast.error('Failed to accept application');
+    }
+  };
+
+  const handleRejectApplication = async (applicationId) => {
+    if (!confirm('Are you sure you want to reject this application?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reject_application',
+          data: { applicationId }
+        })
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast.success('Application rejected');
+        fetchApplications(); // Refresh applications
+      } else {
+        toast.error(result.message || 'Failed to reject application');
+      }
+    } catch (error) {
+      console.error('Error rejecting application:', error);
+      toast.error('Failed to reject application');
+    }
+  };
+
+  const handleMessageFixer = (fixerId) => {
+    router.push(`/dashboard/messages?user=${fixerId}`);
   };
 
   const getTimeAgo = (timestamp) => {
@@ -1418,22 +1485,52 @@ export default function JobDetailsPage({ params }) {
                       </div>
 
                       {/* Action Buttons */}
-                      {isJobCreator && job.status === 'open' && (
-                        <div className="mt-4 flex space-x-3">
-                          <button
-                            onClick={() => handleApplicationAction(application._id, 'accept')}
-                            className="btn-primary"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleApplicationAction(application._id, 'reject')}
-                            className="btn-secondary"
-                          >
-                            Reject
-                          </button>
+                      <div className="flex items-center justify-between pt-4 border-t border-fixly-border mt-4">
+                        <div className="text-sm text-fixly-text-muted">
+                          Applied {getTimeAgo(application.appliedAt)}
                         </div>
-                      )}
+                        
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleMessageFixer(application.fixer._id)}
+                            className="btn-ghost text-sm flex items-center"
+                          >
+                            <MessageSquare className="h-3 w-3 mr-1" />
+                            Message
+                          </button>
+                          
+                          {/* Show action buttons only if job is still open and application is pending */}
+                          {job.status === 'open' && application.status === 'pending' && isJobCreator && (
+                            <>
+                              <button
+                                onClick={() => handleRejectApplication(application._id)}
+                                className="btn-ghost text-red-600 hover:bg-red-50 text-sm flex items-center"
+                              >
+                                <X className="h-3 w-3 mr-1" />
+                                Decline
+                              </button>
+                              <button
+                                onClick={() => handleAcceptApplication(application._id)}
+                                className="btn-primary text-sm flex items-center"
+                              >
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Accept & Hire
+                              </button>
+                            </>
+                          )}
+                          
+                          {/* Show status if not pending */}
+                          {application.status !== 'pending' && (
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              application.status === 'accepted' 
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-red-50 text-red-700 border border-red-200'
+                            }`}>
+                              {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1477,12 +1574,14 @@ export default function JobDetailsPage({ params }) {
                           >
                             {comment.likes?.length || 0} likes
                           </button>
-                          <button
-                            onClick={() => setReplyingTo(comment._id)}
-                            className="text-xs text-fixly-text-muted hover:text-fixly-accent transition-colors"
-                          >
-                            Reply
-                          </button>
+                          {canUserComment(user, job) && (
+                            <button
+                              onClick={() => setReplyingTo(comment._id)}
+                              className="text-xs text-fixly-text-muted hover:text-fixly-accent transition-colors"
+                            >
+                              Reply
+                            </button>
+                          )}
                           {comment.author?._id === user?._id && (
                             <button
                               onClick={() => handleDeleteComment(comment._id)}
@@ -1494,7 +1593,7 @@ export default function JobDetailsPage({ params }) {
                         </div>
                         
                         {/* Reply Input */}
-                        {replyingTo === comment._id && (
+                        {replyingTo === comment._id && canUserComment(user, job) && (
                           <div className="mt-3 flex items-start space-x-2">
                             <img
                               src={user?.photoURL || '/default-avatar.png'}
@@ -1592,13 +1691,16 @@ export default function JobDetailsPage({ params }) {
                 <div className="card">
                   <h4 className="font-semibold text-fixly-text mb-2">Add a Comment</h4>
                   
-                  {/* Credit Restriction for Fixers */}
-                  {user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied && (
+                  {/* Comment Restrictions */}
+                  {!canUserComment(user, job) && (
                     <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg mb-3">
                       <div className="flex items-center text-orange-800 text-sm">
                         <AlertCircle className="h-4 w-4 mr-2" />
                         <span>
-                          Comments are restricted. Upgrade to Pro or have credits to comment on jobs.
+                          {user?.role === 'fixer' 
+                            ? 'Comments are restricted. Upgrade to Pro or have credits to comment on jobs.'
+                            : 'You must be signed in to comment on jobs.'
+                          }
                         </span>
                       </div>
                     </div>
@@ -1610,21 +1712,29 @@ export default function JobDetailsPage({ params }) {
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     placeholder={
-                      user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied 
-                        ? "Upgrade to Pro to comment on jobs..." 
+                      !canUserComment(user, job)
+                        ? "Sign in and meet requirements to comment..." 
                         : "Type your comment here..."
                     }
-                    disabled={user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied}
+                    disabled={!canUserComment(user, job)}
                   />
                   <button
                     onClick={handleAddComment}
-                    className="btn-primary"
-                    disabled={user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      !canUserComment(user, job) 
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-fixly-accent text-white hover:bg-fixly-accent-dark'
+                    }`}
+                    disabled={!canUserComment(user, job) || submittingComment}
                   >
-                    {user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied 
-                      ? 'Upgrade to Comment' 
-                      : 'Post Comment'
-                    }
+                    {submittingComment ? (
+                      <>
+                        <Loader className="animate-spin h-4 w-4 mr-2 inline" />
+                        Posting...
+                      </>
+                    ) : (
+                      !canUserComment(user, job) ? 'Cannot Comment' : 'Post Comment'
+                    )}
                   </button>
                   
                   {user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied && (

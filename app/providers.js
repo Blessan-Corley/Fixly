@@ -4,6 +4,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { SessionProvider, useSession } from 'next-auth/react';
 import { Toaster } from 'sonner';
+import { LoadingProvider } from '../contexts/LoadingContext';
 
 // App Context
 const AppContext = createContext();
@@ -256,34 +257,36 @@ export function Providers({ children }) {
       refetchInterval={0} // ✅ CRITICAL: Disable automatic session refetching
       refetchOnWindowFocus={false} // ✅ CRITICAL: Disable refetch on window focus
     >
-      <AppProviderContent>
-        {children}
-        <Toaster 
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#ffffff',
-              border: '1px solid #e1e3e0',
-              color: '#374650',
-            },
-            success: {
+      <LoadingProvider>
+        <AppProviderContent>
+          {children}
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
               style: {
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                color: '#166534',
+                background: '#ffffff',
+                border: '1px solid #e1e3e0',
+                color: '#374650',
               },
-            },
-            error: {
-              style: {
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
-                color: '#dc2626',
+              success: {
+                style: {
+                  background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  color: '#166534',
+                },
               },
-            },
-          }}
-        />
-      </AppProviderContent>
+              error: {
+                style: {
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  color: '#dc2626',
+                },
+              },
+            }}
+          />
+        </AppProviderContent>
+      </LoadingProvider>
     </SessionProvider>
   );
 }

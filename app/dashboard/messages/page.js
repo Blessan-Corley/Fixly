@@ -34,6 +34,8 @@ import {
   Settings
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePageLoading } from '../../../contexts/LoadingContext';
+import { GlobalLoading } from '../../../components/ui/GlobalLoading';
 
 export default function MessagesPage() {
   const { data: session } = useSession();
@@ -52,6 +54,12 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const { 
+    loading: pageLoading, 
+    showRefreshMessage, 
+    startLoading, 
+    stopLoading 
+  } = usePageLoading('messages');
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -82,6 +90,7 @@ export default function MessagesPage() {
   // Fetch conversations
   const fetchConversations = async () => {
     try {
+      startLoading('Loading conversations...');
       const response = await fetch('/api/messages');
       const data = await response.json();
       
@@ -101,6 +110,7 @@ export default function MessagesPage() {
       toast.error('Failed to load conversations');
     } finally {
       setLoading(false);
+      stopLoading();
     }
   };
 
@@ -315,9 +325,13 @@ export default function MessagesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader className="h-8 w-8 animate-spin text-fixly-accent" />
-      </div>
+      <GlobalLoading 
+        loading={pageLoading || loading}
+        showRefreshMessage={showRefreshMessage}
+        message="Loading messages..."
+        fullScreen={false}
+        className="h-full"
+      />
     );
   }
 

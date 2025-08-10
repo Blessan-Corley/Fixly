@@ -22,10 +22,18 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../providers';
 import { toast } from 'sonner';
+import { usePageLoading } from '../../../contexts/LoadingContext';
+import { GlobalLoading } from '../../../components/ui/GlobalLoading';
 import { searchCities, skillCategories } from '../../../data/cities';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
+  const { 
+    loading: pageLoading, 
+    showRefreshMessage, 
+    startLoading, 
+    stopLoading 
+  } = usePageLoading('profile');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -162,6 +170,7 @@ export default function ProfilePage() {
 
   const handleSave = async () => {
     setLoading(true);
+    startLoading('Saving profile changes...');
     try {
       const response = await fetch('/api/user/profile', {
         method: 'PUT',
@@ -183,6 +192,7 @@ export default function ProfilePage() {
       toast.error('Failed to update profile');
     } finally {
       setLoading(false);
+      stopLoading();
     }
   };
 

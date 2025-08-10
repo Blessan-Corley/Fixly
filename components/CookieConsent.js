@@ -4,22 +4,51 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Cookie, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useLoading } from '../contexts/LoadingContext';
 
 export default function CookieConsent() {
   const [showConsent, setShowConsent] = useState(false);
   const router = useRouter();
+  const { isAnyLoading } = useLoading();
 
   useEffect(() => {
     // Check if user has already given consent
     const hasConsent = localStorage.getItem('fixly-cookie-consent');
     if (!hasConsent) {
-      // Show consent popup after a short delay
-      const timer = setTimeout(() => {
-        setShowConsent(true);
-      }, 2000);
-      return () => clearTimeout(timer);
+      // Wait for all loading to finish, then show popup after additional delay
+      const checkAndShow = () => {
+        if (!isAnyLoading()) {
+          // Show consent popup after page loads properly (3 seconds after loading stops)
+          const timer = setTimeout(() => {
+            setShowConsent(true);
+          }, 3000);
+          return timer;
+        }
+        return null;
+      };
+
+      // Check immediately
+      const initialTimer = checkAndShow();
+      
+      // Also check periodically until loading stops
+      const intervalId = setInterval(() => {
+        if (!isAnyLoading()) {
+          clearInterval(intervalId);
+          if (!showConsent) {
+            const timer = setTimeout(() => {
+              setShowConsent(true);
+            }, 3000);
+            return () => clearTimeout(timer);
+          }
+        }
+      }, 500);
+
+      return () => {
+        if (initialTimer) clearTimeout(initialTimer);
+        clearInterval(intervalId);
+      };
     }
-  }, []);
+  }, [isAnyLoading, showConsent]);
 
   const handleAccept = () => {
     localStorage.setItem('fixly-cookie-consent', 'accepted');
