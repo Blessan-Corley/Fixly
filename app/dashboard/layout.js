@@ -248,7 +248,7 @@ function DashboardContent({ children }) {
                     ? 'bg-fixly-accent text-fixly-text' 
                     : 'bg-orange-100 text-orange-800'
                 }`}>
-                  {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (Number(user?.plan?.creditsUsed) || 0))} free credits left`}
+                  {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (parseInt(user?.plan?.creditsUsed) || 0))} free credits left`}
                 </div>
               </div>
             )}

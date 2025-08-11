@@ -134,8 +134,22 @@ export async function POST(request, { params }) {
 
   } catch (error) {
     console.error('Post comment error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    // Return more specific error information
     return NextResponse.json(
-      { message: 'Failed to post comment' },
+      { 
+        message: 'Failed to post comment',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        details: process.env.NODE_ENV === 'development' ? {
+          name: error.name,
+          stack: error.stack
+        } : undefined
+      },
       { status: 500 }
     );
   }
@@ -172,8 +186,17 @@ export async function GET(request, { params }) {
 
   } catch (error) {
     console.error('Get comments error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
     return NextResponse.json(
-      { message: 'Failed to fetch comments' },
+      { 
+        message: 'Failed to fetch comments',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }
@@ -308,8 +331,98 @@ export async function PUT(request, { params }) {
 
   } catch (error) {
     console.error('Post reply error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
     return NextResponse.json(
-      { message: 'Failed to post reply' },
+      { 
+        message: 'Failed to post reply',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Delete comment or reply
+export async function DELETE(request, { params }) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { message: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const { jobId } = params;
+    const body = await request.json();
+    const { commentId, replyId } = body;
+
+    if (!jobId || !commentId) {
+      return NextResponse.json(
+        { message: 'Job ID and comment ID are required' },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const user = await User.findById(session.user.id);
+    if (!user) {
+      return NextResponse.json(
+        { message: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    const job = await Job.findById(jobId);
+    if (!job) {
+      return NextResponse.json(
+        { message: 'Job not found' },
+        { status: 404 }
+      );
+    }
+
+    let result;
+    if (replyId) {
+      // Delete reply
+      result = job.deleteReply(commentId, replyId, user._id);
+    } else {
+      // Delete comment
+      result = job.deleteComment(commentId, user._id);
+    }
+
+    if (!result.success) {
+      return NextResponse.json(
+        { message: result.message },
+        { status: 403 }
+      );
+    }
+
+    await job.save();
+
+    return NextResponse.json({
+      success: true,
+      message: result.message
+    });
+
+  } catch (error) {
+    console.error('Delete comment error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    return NextResponse.json(
+      { 
+        message: 'Failed to delete comment',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

@@ -15,7 +15,7 @@ import {
   Loader
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { searchCities, skillCategories } from '../../../data/cities';
+import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -442,56 +442,148 @@ export default function OnboardingPage() {
           )}
         </div>
 
-        {/* Skills Selection for Fixers */}
+        {/* Smart Skills Selection for Fixers */}
         {userData.role === 'fixer' && (
           <div>
             <label className="block text-sm font-medium text-fixly-text mb-2">
-              Skills & Services
+              Skills & Services <span className="text-red-500">*</span>
             </label>
+            <p className="text-xs text-fixly-text-light mb-4">
+              Select at least one skill that matches your expertise. We'll suggest related skills to help you get discovered.
+            </p>
             
             {/* Selected Skills */}
             {userData.skills.length > 0 && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {userData.skills.map((skill, index) => (
-                  <span
-                    key={index}
-                    className="skill-chip skill-chip-selected"
-                  >
-                    {skill}
-                    <button
-                      onClick={() => removeSkill(skill)}
-                      className="ml-2 hover:text-fixly-text"
+              <div className="mb-4">
+                <h4 className="text-sm font-medium text-fixly-text mb-2">Your Selected Skills ({userData.skills.length})</h4>
+                <div className="flex flex-wrap gap-2">
+                  {userData.skills.map((skill, index) => (
+                    <span
+                      key={index}
+                      className="skill-chip skill-chip-selected"
                     >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
+                      {skill}
+                      <button
+                        onClick={() => removeSkill(skill)}
+                        className="ml-2 hover:text-fixly-text"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Skill Categories */}
-            <div className="space-y-4 max-h-60 overflow-y-auto">
-              {skillCategories.map((category, categoryIndex) => (
-                <div key={categoryIndex}>
-                  <h4 className="font-medium text-fixly-text mb-2">{category.category}</h4>
+            {/* Progressive Skill Suggestions */}
+            <div className="space-y-4">
+              {userData.skills.length === 0 ? (
+                // Initial category view for first-time users
+                <div>
+                  <h4 className="font-medium text-fixly-text mb-3">
+                    Popular Categories
+                    {errors.skills && (
+                      <span className="text-xs text-red-500 ml-2 font-normal">
+                        (Please select at least one skill)
+                      </span>
+                    )}
+                  </h4>
+                  <div className={`grid grid-cols-2 gap-3 ${errors.skills ? 'ring-2 ring-red-200 rounded-lg p-2' : ''}`}>
+                    {getInitialSkillCategories().map((category, index) => (
+                      <div key={index} className="p-3 border border-fixly-border rounded-lg hover:border-fixly-accent/50 transition-colors">
+                        <div className="flex items-center mb-2">
+                          <span className="text-lg mr-2">{category.icon}</span>
+                          <span className="text-sm font-medium text-fixly-text">{category.name}</span>
+                        </div>
+                        <div className="space-y-1">
+                          {category.topSkills.map((skill, skillIndex) => (
+                            <button
+                              key={skillIndex}
+                              onClick={() => addSkill(skill)}
+                              className="block w-full text-left text-xs text-fixly-text-light hover:text-fixly-accent transition-colors"
+                            >
+                              + {skill}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // Smart suggestions based on selected skills
+                <div>
+                  <h4 className="font-medium text-fixly-text mb-3">
+                    Recommended for you
+                    <span className="text-xs text-fixly-text-light font-normal ml-2">
+                      Based on your selected skills
+                    </span>
+                  </h4>
                   <div className="flex flex-wrap gap-2">
-                    {category.skills.map((skill, skillIndex) => (
+                    {getSkillSuggestions(userData.skills, 8).map((skill, index) => (
                       <button
-                        key={skillIndex}
+                        key={index}
                         onClick={() => addSkill(skill)}
                         disabled={userData.skills.includes(skill)}
-                        className={`skill-chip ${
-                          userData.skills.includes(skill)
-                            ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-fixly-accent/30'
-                        }`}
+                        className="skill-chip hover:bg-fixly-accent/30 text-sm"
                       >
                         {skill}
                       </button>
                     ))}
                   </div>
+                  
+                  {/* Show more options button */}
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Toggle showing all categories
+                        const skillsContainer = document.querySelector('.all-skills-container-onboard');
+                        if (skillsContainer) {
+                          skillsContainer.style.display = skillsContainer.style.display === 'none' ? 'block' : 'none';
+                        }
+                      }}
+                      className="text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
+                    >
+                      Browse all skills →
+                    </button>
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* All Skills (collapsed by default when suggestions are shown) */}
+              {userData.skills.length > 0 && (
+                <div className="all-skills-container-onboard" style={{ display: 'none' }}>
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                    {skillCategories.slice(0, 6).map((category, categoryIndex) => (
+                      <div key={categoryIndex}>
+                        <h4 className="font-medium text-fixly-text mb-2 text-sm">{category.category}</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {category.skills.slice(0, 8).map((skill, skillIndex) => (
+                            <button
+                              key={skillIndex}
+                              onClick={() => addSkill(skill)}
+                              disabled={userData.skills.includes(skill)}
+                              className={`skill-chip text-xs ${
+                                userData.skills.includes(skill)
+                                  ? 'opacity-50 cursor-not-allowed'
+                                  : 'hover:bg-fixly-accent/30'
+                              }`}
+                            >
+                              {skill}
+                            </button>
+                          ))}
+                          {category.skills.length > 8 && (
+                            <span className="text-xs text-fixly-text-muted">
+                              +{category.skills.length - 8} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {errors.skills && (

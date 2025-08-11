@@ -37,6 +37,7 @@ import {
   Scale
 } from 'lucide-react';
 import { toast } from 'sonner';
+import JobCommentButton from '../../../components/JobCommentButton';
 
 export default function JobDetailsPage() {
   const params = useParams();
@@ -276,6 +277,12 @@ export default function JobDetailsPage() {
                   <button className="p-2 text-fixly-text-light hover:text-fixly-accent hover:bg-fixly-bg rounded-lg">
                     <Heart className="h-5 w-5" />
                   </button>
+                  <JobCommentButton 
+                    jobId={jobId} 
+                    commentCount={job.comments?.length || 0}
+                    className="p-2 text-fixly-text-light hover:text-fixly-accent hover:bg-fixly-bg rounded-lg"
+                    showText={false}
+                  />
                   <button className="p-2 text-fixly-text-light hover:text-fixly-accent hover:bg-fixly-bg rounded-lg">
                     <Share2 className="h-5 w-5" />
                   </button>
@@ -303,6 +310,10 @@ export default function JobDetailsPage() {
                 <div className="flex items-center text-fixly-text-light">
                   <Users className="h-4 w-4 mr-2" />
                   <span className="text-sm">{job.applications?.length || 0} applications</span>
+                </div>
+                <div className="flex items-center text-fixly-text-light">
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  <span className="text-sm">{job.comments?.length || 0} comments</span>
                 </div>
               </div>
 
@@ -758,6 +769,10 @@ export default function JobDetailsPage() {
                 <div className="flex justify-between">
                   <span className="text-fixly-text-light">Views</span>
                   <span className="text-fixly-text">{job.views || 0}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-fixly-text-light">Comments</span>
+                  <span className="text-fixly-text">{job.comments?.length || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-fixly-text-light">Job ID</span>

@@ -24,7 +24,7 @@ import { useApp } from '../../providers';
 import { toast } from 'sonner';
 import { usePageLoading } from '../../../contexts/LoadingContext';
 import { GlobalLoading } from '../../../components/ui/GlobalLoading';
-import { searchCities, skillCategories } from '../../../data/cities';
+import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
@@ -62,7 +62,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user) {
-      setFormData({
+      setFormData(prev => ({
         name: user.name || '',
         bio: user.bio || '',
         location: user.location || null,
@@ -75,7 +75,7 @@ export default function ProfilePage() {
           jobAlerts: user.preferences?.jobAlerts ?? true,
           marketingEmails: user.preferences?.marketingEmails ?? false
         }
-      });
+      }));
     }
   }, [user]);
 
@@ -349,9 +349,10 @@ export default function ProfilePage() {
                   </label>
                   <input
                     type="text"
-                    value={formData.name}
+                    value={formData.name || ''}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className="input-field"
+                    autoComplete="name"
                   />
                 </div>
 
@@ -360,14 +361,14 @@ export default function ProfilePage() {
                     Bio
                   </label>
                   <textarea
-                    value={formData.bio}
+                    value={formData.bio || ''}
                     onChange={(e) => handleInputChange('bio', e.target.value)}
                     placeholder="Tell others about yourself..."
                     className="textarea-field h-24"
                     maxLength={500}
                   />
                   <p className="text-xs text-fixly-text-muted mt-1">
-                    {formData.bio.length}/500 characters
+                    {(formData.bio || '').length}/500 characters
                   </p>
                 </div>
               </div>
@@ -466,26 +467,29 @@ export default function ProfilePage() {
                 <div className="space-y-4">
                   {/* Selected Skills */}
                   {formData.skills.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.skills.map((skill, index) => (
-                        <span
-                          key={index}
-                          className="skill-chip skill-chip-selected"
-                        >
-                          {skill}
-                          <button
-                            onClick={() => removeSkill(skill)}
-                            className="ml-2 hover:text-fixly-text"
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-fixly-text mb-2">Your Skills ({formData.skills.length})</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.skills.map((skill, index) => (
+                          <span
+                            key={index}
+                            className="skill-chip skill-chip-selected"
                           >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
+                            {skill}
+                            <button
+                              onClick={() => removeSkill(skill)}
+                              className="ml-2 hover:text-fixly-text"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
 
                   {/* Add Custom Skill */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-4">
                     <input
                       type="text"
                       value={customSkill}
@@ -503,31 +507,106 @@ export default function ProfilePage() {
                     </button>
                   </div>
 
-                  {/* Skill Categories */}
-                  <div className="space-y-3">
-                    {skillCategories.map((category, categoryIndex) => (
-                      <div key={categoryIndex}>
-                        <h4 className="font-medium text-fixly-text mb-2 text-sm">
-                          {category.category}
+                  {/* Smart Skill Suggestions */}
+                  <div className="space-y-4">
+                    {formData.skills.length === 0 ? (
+                      // Initial category view for users with no skills
+                      <div>
+                        <h4 className="font-medium text-fixly-text mb-3">Popular Categories</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          {getInitialSkillCategories().map((category, index) => (
+                            <div key={index} className="p-3 border border-fixly-border rounded-lg hover:border-fixly-accent/50 transition-colors">
+                              <div className="flex items-center mb-2">
+                                <span className="text-lg mr-2">{category.icon}</span>
+                                <span className="text-sm font-medium text-fixly-text">{category.name}</span>
+                              </div>
+                              <div className="space-y-1">
+                                {category.topSkills.map((skill, skillIndex) => (
+                                  <button
+                                    key={skillIndex}
+                                    onClick={() => addSkill(skill)}
+                                    className="block w-full text-left text-xs text-fixly-text-light hover:text-fixly-accent transition-colors"
+                                  >
+                                    + {skill}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      // Smart suggestions for users with existing skills
+                      <div>
+                        <h4 className="font-medium text-fixly-text mb-3">
+                          Recommended Skills
+                          <span className="text-xs text-fixly-text-light font-normal ml-2">
+                            Based on your current skills
+                          </span>
                         </h4>
-                        <div className="flex flex-wrap gap-1">
-                          {category.skills.slice(0, 5).map((skill, skillIndex) => (
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {getSkillSuggestions(formData.skills, 8).map((skill, index) => (
                             <button
-                              key={skillIndex}
+                              key={index}
                               onClick={() => addSkill(skill)}
                               disabled={formData.skills.includes(skill)}
-                              className={`skill-chip text-xs ${
-                                formData.skills.includes(skill)
-                                  ? 'opacity-50 cursor-not-allowed'
-                                  : 'hover:bg-fixly-accent/30'
-                              }`}
+                              className="skill-chip hover:bg-fixly-accent/30 text-sm"
                             >
                               {skill}
                             </button>
                           ))}
                         </div>
                       </div>
-                    ))}
+                    )}
+
+                    {/* Browse All Skills - Collapsed by default */}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const container = document.querySelector('.all-skills-container-profile');
+                          if (container) {
+                            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+                          }
+                        }}
+                        className="text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
+                      >
+                        Browse all categories →
+                      </button>
+                      
+                      <div className="all-skills-container-profile mt-3" style={{ display: 'none' }}>
+                        <div className="space-y-3 max-h-48 overflow-y-auto">
+                          {skillCategories.slice(0, 8).map((category, categoryIndex) => (
+                            <div key={categoryIndex}>
+                              <h4 className="font-medium text-fixly-text mb-2 text-sm">
+                                {category.category}
+                              </h4>
+                              <div className="flex flex-wrap gap-1">
+                                {category.skills.slice(0, 6).map((skill, skillIndex) => (
+                                  <button
+                                    key={skillIndex}
+                                    onClick={() => addSkill(skill)}
+                                    disabled={formData.skills.includes(skill)}
+                                    className={`skill-chip text-xs ${
+                                      formData.skills.includes(skill)
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : 'hover:bg-fixly-accent/30'
+                                    }`}
+                                  >
+                                    {skill}
+                                  </button>
+                                ))}
+                                {category.skills.length > 6 && (
+                                  <span className="text-xs text-fixly-text-muted">
+                                    +{category.skills.length - 6} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Availability */}
@@ -558,7 +637,7 @@ export default function ProfilePage() {
                         type="range"
                         min="1"
                         max="50"
-                        value={formData.serviceRadius}
+                        value={formData.serviceRadius || 10}
                         onChange={(e) => handleInputChange('serviceRadius', parseInt(e.target.value))}
                         className="w-full"
                       />
