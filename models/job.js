@@ -364,6 +364,17 @@ const jobSchema = new mongoose.Schema({
       minlength: [1, 'Comment cannot be empty'],
       maxlength: [500, 'Comment cannot exceed 500 characters']
     },
+    likes: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: [true, 'Like user is required']
+      },
+      likedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
     replies: [{
       author: {
         type: mongoose.Schema.Types.ObjectId,
@@ -377,6 +388,17 @@ const jobSchema = new mongoose.Schema({
         minlength: [1, 'Reply cannot be empty'],
         maxlength: [500, 'Reply cannot exceed 500 characters']
       },
+      likes: [{
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: [true, 'Like user is required']
+        },
+        likedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }],
       createdAt: {
         type: Date,
         default: Date.now
@@ -610,6 +632,19 @@ const jobSchema = new mongoose.Schema({
     }
   },
   
+  // Likes
+  likes: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: [true, 'Like user is required']
+    },
+    likedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  
   // Cancellation
   cancellation: {
     cancelled: {
@@ -655,6 +690,7 @@ jobSchema.index({ 'completion.rating': -1 }); // NEW: For rating-based sorting
 jobSchema.index({ views: -1, status: 1 }); // NEW: For popularity-based queries
 jobSchema.index({ 'progress.startedAt': 1, status: 1 }); // NEW: For progress tracking
 jobSchema.index({ 'cancellation.cancelled': 1 }); // NEW: For cancellation queries
+jobSchema.index({ 'likes.user': 1 }); // NEW: For likes queries
 
 // Compound indexes for complex queries
 jobSchema.index({ 'location.city': 1, skillsRequired: 1, status: 1 }); // For location + skills
@@ -870,6 +906,112 @@ jobSchema.methods.completeMilestone = function(milestoneId) {
   milestone.completedAt = new Date();
   
   return this.save();
+};
+
+// NEW: Method to toggle like on job
+jobSchema.methods.toggleLike = function(userId) {
+  const existingLikeIndex = this.likes.findIndex(
+    like => like.user.toString() === userId.toString()
+  );
+  
+  if (existingLikeIndex > -1) {
+    // Unlike: remove the existing like
+    this.likes.splice(existingLikeIndex, 1);
+    return { liked: false, likeCount: this.likes.length };
+  } else {
+    // Like: add a new like
+    this.likes.push({ user: userId });
+    return { liked: true, likeCount: this.likes.length };
+  }
+};
+
+// NEW: Method to check if user liked the job
+jobSchema.methods.isLikedBy = function(userId) {
+  if (!userId) return false;
+  return this.likes.some(like => like.user.toString() === userId.toString());
+};
+
+// Virtual for like count
+jobSchema.virtual('likeCount').get(function() {
+  return this.likes.length;
+});
+
+// NEW: Method to toggle like on comment
+jobSchema.methods.toggleCommentLike = function(commentId, userId) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return null;
+  
+  const existingLikeIndex = comment.likes.findIndex(
+    like => like.user.toString() === userId.toString()
+  );
+  
+  if (existingLikeIndex > -1) {
+    // Unlike: remove the existing like
+    comment.likes.splice(existingLikeIndex, 1);
+    return { liked: false, likeCount: comment.likes.length };
+  } else {
+    // Like: add a new like
+    comment.likes.push({ user: userId });
+    return { liked: true, likeCount: comment.likes.length };
+  }
+};
+
+// NEW: Method to toggle like on reply
+jobSchema.methods.toggleReplyLike = function(commentId, replyId, userId) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return null;
+  
+  const reply = comment.replies.id(replyId);
+  if (!reply) return null;
+  
+  const existingLikeIndex = reply.likes.findIndex(
+    like => like.user.toString() === userId.toString()
+  );
+  
+  if (existingLikeIndex > -1) {
+    // Unlike: remove the existing like
+    reply.likes.splice(existingLikeIndex, 1);
+    return { liked: false, likeCount: reply.likes.length };
+  } else {
+    // Like: add a new like
+    reply.likes.push({ user: userId });
+    return { liked: true, likeCount: reply.likes.length };
+  }
+};
+
+// NEW: Method to delete comment (only by author or job creator)
+jobSchema.methods.deleteComment = function(commentId, userId) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return { success: false, message: 'Comment not found' };
+  
+  const isAuthor = comment.author.toString() === userId.toString();
+  const isJobCreator = this.createdBy.toString() === userId.toString();
+  
+  if (!isAuthor && !isJobCreator) {
+    return { success: false, message: 'Unauthorized to delete this comment' };
+  }
+  
+  comment.deleteOne();
+  return { success: true, message: 'Comment deleted successfully' };
+};
+
+// NEW: Method to delete reply (only by author or job creator)
+jobSchema.methods.deleteReply = function(commentId, replyId, userId) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return { success: false, message: 'Comment not found' };
+  
+  const reply = comment.replies.id(replyId);
+  if (!reply) return { success: false, message: 'Reply not found' };
+  
+  const isAuthor = reply.author.toString() === userId.toString();
+  const isJobCreator = this.createdBy.toString() === userId.toString();
+  
+  if (!isAuthor && !isJobCreator) {
+    return { success: false, message: 'Unauthorized to delete this reply' };
+  }
+  
+  reply.deleteOne();
+  return { success: true, message: 'Reply deleted successfully' };
 };
 
 // Static method to find jobs by filters

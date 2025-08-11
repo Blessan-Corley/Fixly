@@ -20,7 +20,8 @@ import {
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { searchCities, skillCategories } from '../../../data/cities';
+import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
+import SkillSelectionModal from '../../../components/SkillSelectionModal';
 
 // Username validation
 const validateUsername = (username) => {
@@ -51,6 +52,73 @@ const validateUsername = (username) => {
   const reserved = ['admin', 'root', 'fixly', 'api', 'dashboard'];
   if (reserved.includes(username)) {
     return { valid: false, error: 'This username is reserved' };
+  }
+  
+  return { valid: true };
+};
+
+// Strong password validation
+const validatePassword = (password) => {
+  if (!password || password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters long' };
+  }
+  
+  if (password.length > 128) {
+    return { valid: false, error: 'Password cannot exceed 128 characters' };
+  }
+  
+  // Check for at least one uppercase letter
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one uppercase letter' };
+  }
+  
+  // Check for at least one lowercase letter
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one lowercase letter' };
+  }
+  
+  // Check for at least one number
+  if (!/\d/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one number' };
+  }
+  
+  // Check for at least one special character
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return { valid: false, error: 'Password must contain at least one special character (!@#$%^&*...)' };
+  }
+  
+  // Check for common weak passwords
+  const weakPasswords = [
+    '12345678', '123456789', '1234567890', 'password', 'password123', 'Password123',
+    'qwerty123', 'Qwerty123', 'abc123456', 'Abc123456', '11111111', '00000000',
+    'admin123', 'Admin123', 'welcome123', 'Welcome123', 'fixly123', 'Fixly123'
+  ];
+  
+  if (weakPasswords.includes(password)) {
+    return { valid: false, error: 'This password is too common. Please choose a stronger password.' };
+  }
+  
+  // Check for repeated characters (more than 3 in a row)
+  if (/(.)\1{3,}/.test(password)) {
+    return { valid: false, error: 'Password cannot contain more than 3 repeated characters in a row' };
+  }
+  
+  // Check for sequential characters (more than 3 in a row)
+  const sequences = [
+    'abcdefghijklmnopqrstuvwxyz',
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    '0123456789',
+    'qwertyuiop',
+    'asdfghjkl',
+    'zxcvbnm'
+  ];
+  
+  for (const seq of sequences) {
+    for (let i = 0; i <= seq.length - 4; i++) {
+      if (password.includes(seq.substring(i, i + 4))) {
+        return { valid: false, error: 'Password cannot contain sequential characters (e.g., abcd, 1234)' };
+      }
+    }
   }
   
   return { valid: true };
@@ -88,6 +156,7 @@ export default function SignupPage() {
   const [usernameAvailable, setUsernameAvailable] = useState(null);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [googleUser, setGoogleUser] = useState(null);
+  const [showSkillModal, setShowSkillModal] = useState(false);
   
   // Search states
   const [citySearch, setCitySearch] = useState('');
@@ -259,8 +328,11 @@ export default function SignupPage() {
           
           if (!formData.password) {
             newErrors.password = 'Password is required';
-          } else if (formData.password.length < 6) {
-            newErrors.password = 'Password must be at least 6 characters';
+          } else {
+            const passwordValidation = validatePassword(formData.password);
+            if (!passwordValidation.valid) {
+              newErrors.password = passwordValidation.error;
+            }
           }
           
           if (formData.password !== formData.confirmPassword) {
@@ -654,6 +726,11 @@ export default function SignupPage() {
                   {errors.password && (
                     <p className="text-red-500 text-sm mt-1">{errors.password}</p>
                   )}
+                  {!errors.password && (
+                    <p className="text-xs text-fixly-text-muted mt-1">
+                      Password must be 8+ characters with uppercase, lowercase, number, and special character
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -936,56 +1013,148 @@ export default function SignupPage() {
                 )}
               </div>
 
-              {/* Skills Selection for Fixers */}
+              {/* Smart Skills Selection for Fixers */}
               {formData.role === 'fixer' && (
                 <div>
                   <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Skills & Services
+                    Skills & Services <span className="text-red-500">*</span>
                   </label>
+                  <p className="text-xs text-fixly-text-light mb-4">
+                    Select at least one skill that matches your expertise. We'll suggest related skills to help you get discovered.
+                  </p>
                   
                   {/* Selected Skills */}
                   {formData.skills.length > 0 && (
-                    <div className="mb-4 flex flex-wrap gap-2">
-                      {formData.skills.map((skill, index) => (
-                        <span
-                          key={index}
-                          className="skill-chip skill-chip-selected"
-                        >
-                          {skill}
-                          <button
-                            onClick={() => removeSkill(skill)}
-                            className="ml-2 hover:text-fixly-text"
+                    <div className="mb-4">
+                      <h4 className="text-sm font-medium text-fixly-text mb-2">Your Selected Skills ({formData.skills.length})</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {formData.skills.map((skill, index) => (
+                          <span
+                            key={index}
+                            className="skill-chip skill-chip-selected"
                           >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
+                            {skill}
+                            <button
+                              onClick={() => removeSkill(skill)}
+                              className="ml-2 hover:text-fixly-text"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
 
-                  {/* Skill Categories */}
+                  {/* Progressive Skill Suggestions */}
                   <div className="space-y-4">
-                    {skillCategories.map((category, categoryIndex) => (
-                      <div key={categoryIndex}>
-                        <h4 className="font-medium text-fixly-text mb-2">{category.category}</h4>
+                    {formData.skills.length === 0 ? (
+                      // Initial category view for first-time users
+                      <div>
+                        <h4 className="font-medium text-fixly-text mb-3">
+                          Popular Categories
+                          {errors.skills && (
+                            <span className="text-xs text-red-500 ml-2 font-normal">
+                              (Please select at least one skill)
+                            </span>
+                          )}
+                        </h4>
+                        <div className={`grid grid-cols-2 gap-3 ${errors.skills ? 'ring-2 ring-red-200 rounded-lg p-2' : ''}`}>
+                          {getInitialSkillCategories().map((category, index) => (
+                            <div key={index} className="p-3 border border-fixly-border rounded-lg hover:border-fixly-accent/50 transition-colors">
+                              <div className="flex items-center mb-2">
+                                <span className="text-lg mr-2">{category.icon}</span>
+                                <span className="text-sm font-medium text-fixly-text">{category.name}</span>
+                              </div>
+                              <div className="space-y-1">
+                                {category.topSkills.map((skill, skillIndex) => (
+                                  <button
+                                    key={skillIndex}
+                                    onClick={() => addSkill(skill)}
+                                    className="block w-full text-left text-xs text-fixly-text-light hover:text-fixly-accent transition-colors"
+                                  >
+                                    + {skill}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      // Smart suggestions based on selected skills
+                      <div>
+                        <h4 className="font-medium text-fixly-text mb-3">
+                          Recommended for you
+                          <span className="text-xs text-fixly-text-light font-normal ml-2">
+                            Based on your selected skills
+                          </span>
+                        </h4>
                         <div className="flex flex-wrap gap-2">
-                          {category.skills.map((skill, skillIndex) => (
+                          {getSkillSuggestions(formData.skills, 8).map((skill, index) => (
                             <button
-                              key={skillIndex}
+                              key={index}
                               onClick={() => addSkill(skill)}
                               disabled={formData.skills.includes(skill)}
-                              className={`skill-chip ${
-                                formData.skills.includes(skill)
-                                  ? 'opacity-50 cursor-not-allowed'
-                                  : 'hover:bg-fixly-accent/30'
-                              }`}
+                              className="skill-chip hover:bg-fixly-accent/30 text-sm"
                             >
                               {skill}
                             </button>
                           ))}
                         </div>
+                        
+                        {/* Show more options button */}
+                        <div className="mt-4">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Toggle showing all categories
+                              const skillsContainer = document.querySelector('.all-skills-container');
+                              if (skillsContainer) {
+                                skillsContainer.style.display = skillsContainer.style.display === 'none' ? 'block' : 'none';
+                              }
+                            }}
+                            className="text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
+                          >
+                            Browse all skills →
+                          </button>
+                        </div>
                       </div>
-                    ))}
+                    )}
+
+                    {/* All Skills (collapsed by default when suggestions are shown) */}
+                    {formData.skills.length > 0 && (
+                      <div className="all-skills-container" style={{ display: 'none' }}>
+                        <div className="space-y-3 max-h-60 overflow-y-auto">
+                          {skillCategories.slice(0, 6).map((category, categoryIndex) => (
+                            <div key={categoryIndex}>
+                              <h4 className="font-medium text-fixly-text mb-2 text-sm">{category.category}</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {category.skills.slice(0, 8).map((skill, skillIndex) => (
+                                  <button
+                                    key={skillIndex}
+                                    onClick={() => addSkill(skill)}
+                                    disabled={formData.skills.includes(skill)}
+                                    className={`skill-chip text-xs ${
+                                      formData.skills.includes(skill)
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : 'hover:bg-fixly-accent/30'
+                                    }`}
+                                  >
+                                    {skill}
+                                  </button>
+                                ))}
+                                {category.skills.length > 8 && (
+                                  <span className="text-xs text-fixly-text-muted">
+                                    +{category.skills.length - 8} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {errors.skills && (

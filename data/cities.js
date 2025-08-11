@@ -758,63 +758,146 @@ export const skillCategories = [
   {
     category: 'Electrical Services',
     skills: [
-      'Electrician', 'AC Technician', 'Inverter Repair', 'Solar Panel Installer', 
-      'Washing Machine Technician', 'Refrigerator Mechanic', 'CCTV Installer', 
-      'TV Repair', 'Geyser Technician', 'Microwave Repair'
+      'Electrician', 'AC Technician', 'AC Installation', 'AC Service', 'Inverter Repair', 
+      'Solar Panel Installer', 'Solar Maintenance', 'Washing Machine Technician', 
+      'Refrigerator Mechanic', 'CCTV Installer', 'CCTV Maintenance', 'TV Repair', 
+      'Geyser Technician', 'Geyser Installation', 'Microwave Repair', 'Wiring Specialist',
+      'Switch & Socket Installation', 'Fan Installation', 'Light Fitting', 'Motor Repair',
+      'Home Automation', 'Smart Home Setup', 'Electrical Panel Work', 'Generator Technician'
     ]
   },
   {
     category: 'Plumbing Services',
     skills: [
-      'Plumber', 'Water Tank Cleaning', 'Borewell Technician', 
-      'RO Purifier Technician', 'Bathroom Fitting Specialist', 'Septic Tank Cleaning'
+      'Plumber', 'Pipe Fitting', 'Leak Repair', 'Water Tank Cleaning', 'Water Tank Installation',
+      'Borewell Technician', 'Borewell Drilling', 'RO Purifier Technician', 'RO Installation',
+      'Bathroom Fitting Specialist', 'Bathroom Renovation', 'Septic Tank Cleaning', 
+      'Drainage Cleaning', 'Toilet Installation', 'Tap & Faucet Repair', 'Shower Installation',
+      'Water Heater Installation', 'Pipeline Installation', 'Pump Installation', 'Valve Repair'
     ]
   },
   {
     category: 'Construction & Renovation',
     skills: [
-      'Mason', 'Carpenter', 'Painter', 'Welder', 'Tile Layer', 
-      'POP Ceiling Installer', 'False Ceiling Installer', 'Roofer', 
-      'Scaffolder', 'Concrete Finisher'
+      'Mason', 'Bricklayer', 'Stone Mason', 'Carpenter', 'Wood Polishing', 'Furniture Making',
+      'Painter', 'Wall Painting', 'Texture Painting', 'Welder', 'Metal Fabrication', 
+      'Tile Layer', 'Marble Fitting', 'Granite Installation', 'POP Ceiling Installer', 
+      'False Ceiling Installer', 'Gypsum Board Work', 'Roofer', 'Roof Repair', 'Waterproofing',
+      'Scaffolder', 'Concrete Finisher', 'Plastering', 'Interior Designer', 'Flooring Specialist',
+      'Demolition Work', 'Site Supervisor', 'Civil Engineer', 'Structural Work'
     ]
   },
   {
     category: 'Installation Services',
     skills: [
-      'Furniture Assembler', 'Modular Kitchen Installer', 'Curtain Rod Fitter', 
-      'Door/Window Fitter', 'Aluminium Partition Worker'
+      'Furniture Assembler', 'IKEA Assembly', 'Modular Kitchen Installer', 'Kitchen Design',
+      'Curtain Rod Fitter', 'Blind Installation', 'Door Installation', 'Window Fitter', 
+      'Aluminium Partition Worker', 'Glass Partition', 'Mirror Installation', 'Wall Mount TV',
+      'Shelf Installation', 'Wardrobe Assembly', 'Bed Assembly', 'Office Furniture Setup',
+      'Home Theater Setup', 'Appliance Installation', 'Fixture Installation'
     ]
   },
   {
     category: 'Device Repair',
     skills: [
-      'Mobile Repair Technician', 'Laptop/Computer Repair', 'Printer Mechanic', 
-      'Gas Stove Repair', 'Fan/Exhaust Repair'
+      'Mobile Repair Technician', 'iPhone Repair', 'Android Repair', 'Screen Replacement',
+      'Laptop Repair', 'Computer Repair', 'Desktop Assembly', 'Hardware Upgrade',
+      'Printer Mechanic', 'Scanner Repair', 'Gas Stove Repair', 'Induction Cooktop Repair',
+      'Fan Repair', 'Exhaust Fan Repair', 'Mixer Grinder Repair', 'Iron Box Repair',
+      'Camera Repair', 'Gaming Console Repair', 'Tablet Repair', 'Smartwatch Repair',
+      'Router Setup', 'WiFi Configuration', 'Data Recovery', 'Virus Removal'
     ]
   },
   {
     category: 'Cleaning Services',
     skills: [
-      'House Cleaner', 'Sofa/Carpet Cleaner', 'Window Cleaner', 
-      'Deep Cleaning Specialist', 'Kitchen Chimney Cleaner', 'Pest Control Technician'
+      'House Cleaner', 'Deep House Cleaning', 'Office Cleaning', 'Sofa Cleaning', 
+      'Carpet Cleaning', 'Mattress Cleaning', 'Window Cleaning', 'Glass Cleaning',
+      'Deep Cleaning Specialist', 'Move-in Cleaning', 'Kitchen Chimney Cleaning',
+      'Bathroom Deep Cleaning', 'Pest Control Technician', 'Termite Treatment',
+      'Sanitization Service', 'Disinfection Service', 'Pressure Washing', 'Floor Cleaning',
+      'Tile & Grout Cleaning', 'Upholstery Cleaning', 'Car Interior Cleaning'
     ]
   },
   {
     category: 'Automotive Services',
     skills: [
-      'Car Washer', 'Bike Mechanic', 'Car AC Mechanic', 'Denting & Painting'
+      'Car Washer', 'Car Detailing', 'Bike Mechanic', 'Car Mechanic', 'Car AC Repair',
+      'Denting & Painting', 'Car Body Work', 'Tire Repair', 'Battery Service',
+      'Oil Change', 'Car Electrical Work', 'Engine Repair', 'Brake Service',
+      'Clutch Repair', 'Suspension Work', 'Car Audio Installation', 'GPS Installation',
+      'Vehicle Inspection', 'Roadside Assistance', 'Towing Service'
     ]
   },
   {
     category: 'Gardening Services',
     skills: [
-      'Gardener', 'Lawn Maintenance', 'Plant Potting', 'Terrace Garden Setup'
+      'Gardener', 'Garden Design', 'Lawn Maintenance', 'Grass Cutting', 'Plant Potting',
+      'Plant Care', 'Terrace Garden Setup', 'Vertical Garden', 'Tree Trimming',
+      'Tree Cutting', 'Landscape Design', 'Irrigation Setup', 'Garden Cleaning',
+      'Fertilizer Application', 'Pest Control for Plants', 'Nursery Services',
+      'Indoor Plant Care', 'Garden Consultation'
     ]
   },
   {
     category: 'Moving Services',
     skills: [
-      'Packer & Mover', 'Furniture Shifting Helper', 'Tempo Driver'
+      'Packer & Mover', 'Local Shifting', 'Long Distance Moving', 'Furniture Shifting',
+      'Office Relocation', 'Tempo Driver', 'Truck Driver', 'Loading & Unloading',
+      'Packing Service', 'Unpacking Service', 'Storage Service', 'International Moving',
+      'Pet Relocation', 'Plant Moving', 'Fragile Item Packing'
+    ]
+  },
+  {
+    category: 'Beauty & Wellness',
+    skills: [
+      'Barber', 'Hair Stylist', 'Salon at Home', 'Manicure', 'Pedicure', 'Facial',
+      'Massage Therapist', 'Spa Services', 'Bridal Makeup', 'Party Makeup',
+      'Eyebrow Threading', 'Hair Color', 'Hair Cut', 'Beard Styling', 'Nail Art',
+      'Henna Artist', 'Beauty Consultant', 'Skin Care Specialist'
+    ]
+  },
+  {
+    category: 'Healthcare Services',
+    skills: [
+      'Nurse', 'Physiotherapist', 'Home Healthcare', 'Elder Care', 'Baby Care',
+      'Medical Equipment Rental', 'Lab Sample Collection', 'Vaccination at Home',
+      'Health Checkup', 'Diabetes Care', 'Blood Pressure Monitoring',
+      'Wound Care', 'Medical Attendant', 'Pharmacy Delivery'
+    ]
+  },
+  {
+    category: 'Photography & Events',
+    skills: [
+      'Wedding Photographer', 'Event Photographer', 'Portrait Photography', 
+      'Product Photography', 'Videographer', 'Event Planner', 'Decorator',
+      'DJ Services', 'Sound System Setup', 'Lighting Setup', 'Stage Decoration',
+      'Catering Service', 'Tent House', 'Photo Editing', 'Video Editing'
+    ]
+  },
+  {
+    category: 'Tutoring & Education',
+    skills: [
+      'Home Tutor', 'Math Tutor', 'Science Tutor', 'English Tutor', 'Computer Teacher',
+      'Music Teacher', 'Dance Teacher', 'Art Teacher', 'Cooking Classes',
+      'Language Teacher', 'Test Prep', 'Skill Development', 'Academic Counseling'
+    ]
+  },
+  {
+    category: 'Security Services',
+    skills: [
+      'Security Guard', 'Watchman', 'Bouncer', 'CCTV Monitoring', 'Alarm System',
+      'Access Control', 'Fire Safety', 'Security Consultation', 'Event Security',
+      'Personal Security', 'Cyber Security', 'Background Verification'
+    ]
+  },
+  {
+    category: 'Digital Services',
+    skills: [
+      'Web Developer', 'App Developer', 'Graphic Designer', 'Digital Marketing',
+      'Social Media Management', 'Content Writer', 'SEO Specialist', 'Data Entry',
+      'Virtual Assistant', 'Online Tutoring', 'E-commerce Setup', 'Website Maintenance',
+      'Logo Design', 'Video Production', 'Animation Services'
     ]
   }
 ];
@@ -847,4 +930,104 @@ export function searchSkills(query) {
   return allSkills.filter(skill => 
     skill.toLowerCase().includes(searchTerm)
   ).slice(0, 10);
+}
+
+// Smart skill suggestion system inspired by Spotify's artist suggestions
+export const skillRelations = {
+  // When someone selects these skills, suggest related ones
+  'Electrician': ['AC Technician', 'Wiring Specialist', 'Switch & Socket Installation', 'Fan Installation', 'Light Fitting'],
+  'AC Technician': ['AC Installation', 'AC Service', 'Electrician', 'Generator Technician', 'Home Automation'],
+  'Plumber': ['Pipe Fitting', 'Leak Repair', 'Bathroom Fitting Specialist', 'Toilet Installation', 'Tap & Faucet Repair'],
+  'Carpenter': ['Furniture Making', 'Wood Polishing', 'Furniture Assembler', 'Door Installation', 'Wardrobe Assembly'],
+  'Painter': ['Wall Painting', 'Texture Painting', 'Interior Designer', 'Plastering', 'Waterproofing'],
+  'Mobile Repair Technician': ['iPhone Repair', 'Android Repair', 'Screen Replacement', 'Tablet Repair', 'Smartwatch Repair'],
+  'House Cleaner': ['Deep House Cleaning', 'Office Cleaning', 'Move-in Cleaning', 'Sanitization Service', 'Window Cleaning'],
+  'Car Mechanic': ['Bike Mechanic', 'Car AC Repair', 'Engine Repair', 'Brake Service', 'Tire Repair'],
+  'Gardener': ['Garden Design', 'Lawn Maintenance', 'Plant Care', 'Tree Trimming', 'Landscape Design'],
+  'Home Tutor': ['Math Tutor', 'Science Tutor', 'English Tutor', 'Test Prep', 'Academic Counseling'],
+  'Wedding Photographer': ['Event Photographer', 'Videographer', 'Photo Editing', 'Portrait Photography', 'Event Planner'],
+  'Web Developer': ['App Developer', 'Graphic Designer', 'Digital Marketing', 'Website Maintenance', 'E-commerce Setup'],
+  'Security Guard': ['Watchman', 'CCTV Monitoring', 'Event Security', 'Personal Security', 'Access Control'],
+  'Barber': ['Hair Stylist', 'Beard Styling', 'Hair Cut', 'Salon at Home', 'Hair Color'],
+  'Nurse': ['Home Healthcare', 'Elder Care', 'Medical Attendant', 'Health Checkup', 'Wound Care'],
+  
+  // Cross-category suggestions for better discovery
+  'CCTV Installer': ['Security Guard', 'CCTV Monitoring', 'Electrician', 'Home Automation', 'Alarm System'],
+  'Solar Panel Installer': ['Electrician', 'Roofer', 'Wiring Specialist', 'Generator Technician', 'Solar Maintenance'],
+  'Kitchen Design': ['Modular Kitchen Installer', 'Plumber', 'Electrician', 'Interior Designer', 'Appliance Installation'],
+  'Interior Designer': ['Painter', 'Carpenter', 'False Ceiling Installer', 'Lighting Setup', 'Furniture Assembler'],
+  'Event Planner': ['Decorator', 'Wedding Photographer', 'Catering Service', 'DJ Services', 'Tent House']
+};
+
+// Function to get suggested skills based on already selected skills
+export function getSkillSuggestions(selectedSkills = [], maxSuggestions = 8) {
+  if (selectedSkills.length === 0) {
+    // Return popular starter skills from each category
+    return [
+      'Electrician', 'Plumber', 'Carpenter', 'Painter', 'Mobile Repair Technician',
+      'House Cleaner', 'Car Mechanic', 'Gardener'
+    ];
+  }
+
+  const suggestions = new Set();
+  const allSkills = getAllSkills();
+
+  // Get direct suggestions for each selected skill
+  selectedSkills.forEach(skill => {
+    if (skillRelations[skill]) {
+      skillRelations[skill].forEach(relatedSkill => {
+        if (!selectedSkills.includes(relatedSkill)) {
+          suggestions.add(relatedSkill);
+        }
+      });
+    }
+  });
+
+  // If we need more suggestions, get skills from same categories
+  if (suggestions.size < maxSuggestions) {
+    selectedSkills.forEach(selectedSkill => {
+      const category = skillCategories.find(cat => 
+        cat.skills.includes(selectedSkill)
+      );
+      
+      if (category) {
+        category.skills.forEach(skill => {
+          if (!selectedSkills.includes(skill) && suggestions.size < maxSuggestions * 2) {
+            suggestions.add(skill);
+          }
+        });
+      }
+    });
+  }
+
+  // Convert to array and limit results
+  const suggestionArray = Array.from(suggestions).slice(0, maxSuggestions);
+
+  // If still need more, add some popular skills
+  const popularSkills = [
+    'AC Technician', 'Deep House Cleaning', 'Car Detailing', 'Home Tutor',
+    'CCTV Installation', 'Interior Designer', 'Event Photographer', 'Hair Stylist'
+  ];
+
+  popularSkills.forEach(skill => {
+    if (suggestionArray.length < maxSuggestions && 
+        !selectedSkills.includes(skill) && 
+        !suggestionArray.includes(skill)) {
+      suggestionArray.push(skill);
+    }
+  });
+
+  return suggestionArray;
+}
+
+// Function to get initial skill categories for first-time users
+export function getInitialSkillCategories() {
+  return [
+    { name: 'Electrical Services', icon: '⚡', topSkills: ['Electrician', 'AC Technician', 'Wiring Specialist'] },
+    { name: 'Plumbing Services', icon: '🔧', topSkills: ['Plumber', 'Pipe Fitting', 'Bathroom Fitting Specialist'] },
+    { name: 'Construction & Renovation', icon: '🏗️', topSkills: ['Carpenter', 'Painter', 'Mason'] },
+    { name: 'Device Repair', icon: '📱', topSkills: ['Mobile Repair Technician', 'Laptop Repair', 'TV Repair'] },
+    { name: 'Cleaning Services', icon: '🧽', topSkills: ['House Cleaner', 'Deep House Cleaning', 'Pest Control Technician'] },
+    { name: 'Automotive Services', icon: '🚗', topSkills: ['Car Mechanic', 'Bike Mechanic', 'Car Detailing'] }
+  ];
 }
