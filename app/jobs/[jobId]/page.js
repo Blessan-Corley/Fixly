@@ -242,7 +242,7 @@ export default function JobDetailsPage() {
   return (
     <div className="min-h-screen bg-fixly-bg">
       {/* Navigation */}
-      <div className="bg-white border-b border-fixly-border">
+      <div className="bg-fixly-card border-b border-fixly-border">
         <div className="max-w-6xl mx-auto px-4 py-4">
           <button
             onClick={() => router.back()}

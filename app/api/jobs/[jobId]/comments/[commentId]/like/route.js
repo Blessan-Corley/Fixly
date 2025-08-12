@@ -2,15 +2,15 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../../../../lib/db';
-import Job from '../../../../../../../models/Job';
-import User from '../../../../../../../models/User';
-import { rateLimit } from '../../../../../../../utils/rateLimiting';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
+import { rateLimit } from '@/utils/rateLimiting';
 
 export async function POST(request, { params }) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'comment_likes', 200, 60 * 60 * 1000); // 200 likes per hour
+    // Apply rate limiting - increased limits for better UX
+    const rateLimitResult = await rateLimit(request, 'comment_likes', 500, 60 * 60 * 1000); // 500 likes per hour
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many like actions. Please try again later.' },
@@ -34,7 +34,13 @@ export async function POST(request, { params }) {
       );
     }
 
-    const body = await request.json();
+    let body = {};
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      // Empty body is fine for likes
+    }
+    
     const { replyId } = body; // Optional - if liking a reply
 
     await connectDB();
@@ -66,38 +72,48 @@ export async function POST(request, { params }) {
     let notificationTarget;
     let notificationMessage;
 
-    if (replyId) {
-      // Like/unlike reply
-      result = job.toggleReplyLike(commentId, replyId, user._id);
-      if (!result) {
-        return NextResponse.json(
-          { message: 'Reply not found' },
-          { status: 404 }
-        );
+    try {
+      if (replyId) {
+        // Like/unlike reply
+        result = job.toggleReplyLike(commentId, replyId, user._id);
+        if (!result) {
+          return NextResponse.json(
+            { message: 'Reply not found' },
+            { status: 404 }
+          );
+        }
+
+        // Get the reply author for notification
+        const comment = job.comments.id(commentId);
+        const reply = comment.replies.id(replyId);
+        notificationTarget = reply.author;
+        notificationMessage = `${user.name} ${result.liked ? 'liked' : 'unliked'} your reply.`;
+      } else {
+        // Like/unlike comment
+        result = job.toggleCommentLike(commentId, user._id);
+        if (!result) {
+          return NextResponse.json(
+            { message: 'Comment not found' },
+            { status: 404 }
+          );
+        }
+
+        // Get the comment author for notification
+        const comment = job.comments.id(commentId);
+        notificationTarget = comment.author;
+        notificationMessage = `${user.name} ${result.liked ? 'liked' : 'unliked'} your comment on "${job.title}".`;
       }
 
-      // Get the reply author for notification
-      const comment = job.comments.id(commentId);
-      const reply = comment.replies.id(replyId);
-      notificationTarget = reply.author;
-      notificationMessage = `${user.name} ${result.liked ? 'liked' : 'unliked'} your reply.`;
-    } else {
-      // Like/unlike comment
-      result = job.toggleCommentLike(commentId, user._id);
-      if (!result) {
-        return NextResponse.json(
-          { message: 'Comment not found' },
-          { status: 404 }
-        );
-      }
-
-      // Get the comment author for notification
-      const comment = job.comments.id(commentId);
-      notificationTarget = comment.author;
-      notificationMessage = `${user.name} ${result.liked ? 'liked' : 'unliked'} your comment on "${job.title}".`;
+      await job.save();
+    } catch (likeError) {
+      return NextResponse.json(
+        { 
+          message: 'Failed to process like action',
+          error: process.env.NODE_ENV === 'development' ? likeError.message : undefined
+        },
+        { status: 500 }
+      );
     }
-
-    await job.save();
 
     // Send notification only for likes (not unlikes) and not to self
     if (result.liked && notificationTarget.toString() !== user._id.toString()) {
@@ -127,13 +143,6 @@ export async function POST(request, { params }) {
     });
 
   } catch (error) {
-    console.error('Like comment error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
-    
     return NextResponse.json(
       { 
         message: 'Failed to process like action',
@@ -162,8 +171,16 @@ export async function GET(request, { params }) {
 
     const job = await Job.findById(jobId)
       .select('comments')
-      .populate('comments.likes.user', 'name username photoURL')
-      .populate('comments.replies.likes.user', 'name username photoURL')
+      .populate({
+        path: 'comments.likes.user',
+        select: 'name username photoURL',
+        options: { lean: true }
+      })
+      .populate({
+        path: 'comments.replies.likes.user',
+        select: 'name username photoURL', 
+        options: { lean: true }
+      })
       .lean();
 
     if (!job) {
@@ -210,13 +227,6 @@ export async function GET(request, { params }) {
     });
 
   } catch (error) {
-    console.error('Get comment likes error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
-    
     return NextResponse.json(
       { 
         message: 'Failed to fetch comment likes',

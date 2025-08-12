@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useApp, ProtectedRoute } from '../providers';
 import { toast } from 'sonner';
+import ThemeToggle from '../../components/ui/ThemeToggle';
 
 export default function DashboardLayout({ children }) {
   return (
@@ -39,7 +40,7 @@ export default function DashboardLayout({ children }) {
 }
 
 function DashboardContent({ children }) {
-  const { user, notifications, markNotificationRead } = useApp();
+  const { user, notifications, unreadCount, markNotificationRead } = useApp();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -319,6 +320,9 @@ function DashboardContent({ children }) {
 
             {/* Right side */}
             <div className="flex items-center space-x-4">
+              {/* Theme Toggle */}
+              <ThemeToggle variant="dropdown" />
+              
               {/* Notifications */}
               <div className="relative notification-dropdown">
                 <button
@@ -326,9 +330,9 @@ function DashboardContent({ children }) {
                   className="relative p-2 hover:bg-fixly-accent/10 rounded-lg transition-colors"
                 >
                   <Bell className="h-5 w-5 text-fixly-text" />
-                  {unreadNotifications > 0 && (
+                  {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                      {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                      {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
                 </button>

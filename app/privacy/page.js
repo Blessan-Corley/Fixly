@@ -134,7 +134,7 @@ export default function PrivacyPolicyPage() {
             uses, and protects your personal information.
           </p>
           <div className="text-sm text-fixly-text-muted">
-            Last updated: January 18, 2025
+            Last updated: May 15, 2025
           </div>
         </motion.div>
 

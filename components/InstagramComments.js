@@ -26,8 +26,11 @@ export default function InstagramComments({
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState('');
+  const [replyingToUser, setReplyingToUser] = useState('');
   const [expandedComments, setExpandedComments] = useState(new Set());
   const [showDropdown, setShowDropdown] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Fetch comments
   const fetchComments = useCallback(async () => {
@@ -40,6 +43,7 @@ export default function InstagramComments({
       
       if (response.ok) {
         setComments(data.comments || []);
+        setLastUpdated(new Date());
       } else {
         toast.error(data.message || 'Failed to load comments');
       }
@@ -58,10 +62,78 @@ export default function InstagramComments({
     }
   }, [isOpen, jobId, fetchComments]);
 
+  // Real-time updates via polling (Instagram-like speed)
+  useEffect(() => {
+    if (!isOpen || !jobId) return;
+
+    const pollComments = async () => {
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/comments`);
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        const newComments = data.comments || [];
+        
+        // Check for any changes in comments, likes, or replies
+        const hasChanges = newComments.length !== comments.length || 
+          newComments.some((comment, index) => {
+            const existingComment = comments[index];
+            if (!existingComment || comment._id !== existingComment._id) return true;
+            
+            // Check likes
+            if (comment.likes?.length !== existingComment.likes?.length) return true;
+            
+            // Check replies
+            if (comment.replies?.length !== existingComment.replies?.length) return true;
+            
+            // Check reply likes
+            if (comment.replies?.some((reply, replyIndex) => {
+              const existingReply = existingComment.replies?.[replyIndex];
+              return !existingReply || 
+                     reply._id !== existingReply._id ||
+                     reply.likes?.length !== existingReply.likes?.length;
+            })) return true;
+            
+            return false;
+          });
+
+        if (hasChanges) {
+          setIsUpdating(true);
+          console.log('📱 Comments updated in real-time');
+          setComments(newComments);
+          
+          // Show update indicator briefly
+          setTimeout(() => setIsUpdating(false), 1000);
+          
+          // Show notification for new comments (not from current user)
+          if (newComments.length > comments.length) {
+            const latestComment = newComments[newComments.length - 1];
+            if (latestComment.author?._id !== user?._id) {
+              toast.success(`${latestComment.author?.name} commented`, {
+                duration: 2000,
+                position: 'bottom-right'
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    };
+
+    // Poll every 2 seconds for instant updates
+    const pollInterval = setInterval(pollComments, 2000);
+    return () => clearInterval(pollInterval);
+  }, [isOpen, jobId, comments, user]);
+
   // Post new comment
   const handlePostComment = async () => {
     if (!newComment.trim() || !user) return;
 
+    const commentText = newComment.trim();
+    const originalComment = newComment; // Store original in case we need to restore
+    setNewComment(''); // Clear immediately for better UX
+    
     try {
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
         method: 'POST',
@@ -69,22 +141,29 @@ export default function InstagramComments({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: newComment.trim()
+          message: commentText
         }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setNewComment('');
-        fetchComments(); // Refresh comments
-        toast.success('Comment posted!');
+        // Add new comment to state immediately
+        setComments(prev => [...prev, data.comment]);
+        toast.success('Comment posted successfully!', { 
+          duration: 2000,
+          style: { 
+            background: 'green',
+            color: 'white'
+          }
+        });
       } else {
+        setNewComment(originalComment); // Restore original text on error
         toast.error(data.message || 'Failed to post comment');
       }
     } catch (error) {
-      console.error('Error posting comment:', error);
-      toast.error('Failed to post comment');
+      setNewComment(originalComment); // Restore original text on error
+      toast.error('Network error. Please try again.');
     }
   };
 
@@ -92,6 +171,12 @@ export default function InstagramComments({
   const handlePostReply = async (commentId) => {
     if (!replyText.trim() || !user) return;
 
+    const replyContent = replyText.trim();
+    const originalReply = replyText; // Store original
+    const originalReplyingTo = replyingTo;
+    setReplyText('');
+    setReplyingTo(null);
+    
     try {
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
         method: 'PUT',
@@ -100,23 +185,40 @@ export default function InstagramComments({
         },
         body: JSON.stringify({
           commentId,
-          message: replyText.trim()
+          message: replyContent
         }),
       });
 
       const data = await response.json();
+      console.log('💬 Reply response:', { status: response.status, data });
 
       if (response.ok) {
-        setReplyText('');
-        setReplyingTo(null);
-        fetchComments(); // Refresh comments
-        toast.success('Reply posted!');
+        // Update the specific comment with the new reply
+        setComments(prev => prev.map(comment => {
+          if (comment._id === commentId) {
+            return {
+              ...comment,
+              replies: data.comment.replies
+            };
+          }
+          return comment;
+        }));
+        toast.success('Reply posted successfully!', { 
+          duration: 2000,
+          style: { 
+            background: 'green',
+            color: 'white'
+          }
+        });
       } else {
+        setReplyText(originalReply);
+        setReplyingTo(originalReplyingTo);
         toast.error(data.message || 'Failed to post reply');
       }
     } catch (error) {
-      console.error('Error posting reply:', error);
-      toast.error('Failed to post reply');
+      setReplyText(originalReply);
+      setReplyingTo(originalReplyingTo);
+      toast.error('Network error. Please try again.');
     }
   };
 
@@ -125,6 +227,7 @@ export default function InstagramComments({
     if (!user) return;
 
     try {
+      console.log('❤️ Toggling like...');
       const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/like`, {
         method: 'POST',
         headers: {
@@ -134,9 +237,10 @@ export default function InstagramComments({
       });
 
       const data = await response.json();
+      console.log('❤️ Like response:', { status: response.status, data });
 
       if (response.ok) {
-        // Update local state optimistically
+        // Update the like count in the UI
         setComments(prevComments => 
           prevComments.map(comment => {
             if (comment._id === commentId) {
@@ -149,9 +253,9 @@ export default function InstagramComments({
                       const currentlyLiked = reply.likes?.some(like => like.user === user._id);
                       return {
                         ...reply,
-                        likes: currentlyLiked 
-                          ? reply.likes.filter(like => like.user !== user._id)
-                          : [...(reply.likes || []), { user: user._id, likedAt: new Date() }]
+                        likes: data.liked 
+                          ? [...(reply.likes || []), { user: user._id, likedAt: new Date() }]
+                          : reply.likes.filter(like => like.user !== user._id)
                       };
                     }
                     return reply;
@@ -162,21 +266,23 @@ export default function InstagramComments({
                 const currentlyLiked = comment.likes?.some(like => like.user === user._id);
                 return {
                   ...comment,
-                  likes: currentlyLiked 
-                    ? comment.likes.filter(like => like.user !== user._id)
-                    : [...(comment.likes || []), { user: user._id, likedAt: new Date() }]
+                  likes: data.liked 
+                    ? [...(comment.likes || []), { user: user._id, likedAt: new Date() }]
+                    : comment.likes.filter(like => like.user !== user._id)
                 };
               }
             }
             return comment;
           })
         );
+        console.log('✅ Like toggled successfully');
       } else {
+        console.error('❌ Like failed:', data);
         toast.error(data.message || 'Failed to like comment');
       }
     } catch (error) {
-      console.error('Error liking comment:', error);
-      toast.error('Failed to like comment');
+      console.error('❌ Like error:', error);
+      toast.error('Network error. Please try again.');
     }
   };
 
@@ -186,6 +292,27 @@ export default function InstagramComments({
 
     const confirmMessage = replyId ? 'Delete this reply?' : 'Delete this comment?';
     if (!confirm(confirmMessage)) return;
+
+    setShowDropdown(null);
+    
+    // Optimistic update
+    let previousComments = [...comments];
+    
+    if (replyId) {
+      // Remove reply optimistically
+      setComments(prev => prev.map(comment => {
+        if (comment._id === commentId) {
+          return {
+            ...comment,
+            replies: comment.replies.filter(reply => reply._id !== replyId)
+          };
+        }
+        return comment;
+      }));
+    } else {
+      // Remove comment optimistically
+      setComments(prev => prev.filter(comment => comment._id !== commentId));
+    }
 
     try {
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
@@ -199,14 +326,16 @@ export default function InstagramComments({
       const data = await response.json();
 
       if (response.ok) {
-        fetchComments(); // Refresh comments
         toast.success(replyId ? 'Reply deleted' : 'Comment deleted');
-        setShowDropdown(null);
       } else {
+        // Restore previous state on error
+        setComments(previousComments);
         toast.error(data.message || 'Failed to delete');
       }
     } catch (error) {
       console.error('Error deleting:', error);
+      // Restore previous state on error
+      setComments(previousComments);
       toast.error('Failed to delete');
     }
   };
@@ -239,12 +368,12 @@ export default function InstagramComments({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-2 sm:p-4">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-fixly-card rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] flex flex-col overflow-hidden"
+        className="bg-fixly-card rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden border border-fixly-border/20"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-fixly-border">
@@ -254,8 +383,16 @@ export default function InstagramComments({
           >
             <ArrowLeft className="h-5 w-5 text-fixly-text" />
           </button>
-          <h2 className="font-semibold text-fixly-text">Comments</h2>
-          <div className="w-7 h-7"></div> {/* Spacer */}
+          <h2 className="font-semibold text-fixly-text">
+            Comments {comments.length > 0 && (
+              <span className="text-fixly-text-muted">({comments.length})</span>
+            )}
+          </h2>
+          <div className="w-7 h-7 flex items-center justify-center">
+            {isUpdating && (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-fixly-accent"></div>
+            )}
+          </div>
         </div>
 
         {/* Comments List */}
@@ -272,10 +409,18 @@ export default function InstagramComments({
             </div>
           ) : (
             <div className="p-4 space-y-4">
-              {comments.map((comment) => (
-                <div key={comment._id} className="space-y-2">
-                  {/* Main Comment */}
-                  <div className="flex space-x-3">
+              <AnimatePresence>
+                {comments.map((comment) => (
+                  <motion.div 
+                    key={comment._id} 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className="space-y-2"
+                  >
+                    {/* Main Comment */}
+                    <div className="flex space-x-3">
                     <img
                       src={comment.author?.photoURL || '/default-avatar.png'}
                       alt={comment.author?.name}
@@ -309,7 +454,18 @@ export default function InstagramComments({
                             </div>
                           )}
                         </div>
-                        <p className="text-fixly-text mt-1">{comment.message}</p>
+                        <p className="text-fixly-text mt-1">
+                          {comment.message.split(' ').map((word, index) => (
+                            <span key={index}>
+                              {word.startsWith('@') ? (
+                                <span className="text-fixly-accent font-medium">{word}</span>
+                              ) : (
+                                word
+                              )}
+                              {index < comment.message.split(' ').length - 1 && ' '}
+                            </span>
+                          ))}
+                        </p>
                       </div>
                       
                       {/* Comment Actions */}
@@ -320,23 +476,33 @@ export default function InstagramComments({
                         </span>
                         <button
                           onClick={() => handleLikeComment(comment._id)}
-                          className={`flex items-center space-x-1 hover:text-red-500 transition-colors ${
+                          className={`flex items-center space-x-1 hover:text-red-500 transition-all duration-200 transform hover:scale-110 ${
                             comment.likes?.some(like => like.user === user?._id) 
                               ? 'text-red-500 font-medium' 
                               : ''
                           }`}
                         >
                           <Heart 
-                            className={`h-3 w-3 ${
+                            className={`h-3 w-3 transition-all duration-200 ${
                               comment.likes?.some(like => like.user === user?._id) 
-                                ? 'fill-current' 
+                                ? 'fill-current scale-110' 
                                 : ''
                             }`} 
                           />
                           <span>{comment.likes?.length || 0}</span>
                         </button>
                         <button
-                          onClick={() => setReplyingTo(replyingTo === comment._id ? null : comment._id)}
+                          onClick={() => {
+                            if (replyingTo === comment._id) {
+                              setReplyingTo(null);
+                              setReplyingToUser('');
+                              setReplyText('');
+                            } else {
+                              setReplyingTo(comment._id);
+                              setReplyingToUser('');
+                              setReplyText('');
+                            }
+                          }}
                           className="hover:text-fixly-accent transition-colors"
                         >
                           Reply
@@ -381,7 +547,18 @@ export default function InstagramComments({
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-fixly-text text-sm mt-1">{reply.message}</p>
+                                  <p className="text-fixly-text text-sm mt-1">
+                                    {reply.message.split(' ').map((word, index) => (
+                                      <span key={index}>
+                                        {word.startsWith('@') ? (
+                                          <span className="text-fixly-accent font-medium">{word}</span>
+                                        ) : (
+                                          word
+                                        )}
+                                        {index < reply.message.split(' ').length - 1 && ' '}
+                                      </span>
+                                    ))}
+                                  </p>
                                 </div>
                                 
                                 {/* Reply Actions */}
@@ -392,20 +569,36 @@ export default function InstagramComments({
                                   </span>
                                   <button
                                     onClick={() => handleLikeComment(comment._id, reply._id)}
-                                    className={`flex items-center space-x-1 hover:text-red-500 transition-colors ${
+                                    className={`flex items-center space-x-1 hover:text-red-500 transition-all duration-200 transform hover:scale-110 ${
                                       reply.likes?.some(like => like.user === user?._id) 
                                         ? 'text-red-500 font-medium' 
                                         : ''
                                     }`}
                                   >
                                     <Heart 
-                                      className={`h-3 w-3 ${
+                                      className={`h-3 w-3 transition-all duration-200 ${
                                         reply.likes?.some(like => like.user === user?._id) 
-                                          ? 'fill-current' 
+                                          ? 'fill-current scale-110' 
                                           : ''
                                       }`} 
                                     />
                                     <span>{reply.likes?.length || 0}</span>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (replyingTo === comment._id && replyingToUser === reply.author?.name) {
+                                        setReplyingTo(null);
+                                        setReplyingToUser('');
+                                        setReplyText('');
+                                      } else {
+                                        setReplyingTo(comment._id);
+                                        setReplyingToUser(reply.author?.name || '');
+                                        setReplyText(`@${reply.author?.name} `);
+                                      }
+                                    }}
+                                    className="hover:text-fixly-accent transition-colors text-xs"
+                                  >
+                                    Reply
                                   </button>
                                 </div>
                               </div>
@@ -428,35 +621,44 @@ export default function InstagramComments({
 
                       {/* Reply Input */}
                       {replyingTo === comment._id && (
-                        <div className="mt-2 flex space-x-2">
-                          <img
-                            src={user?.photoURL || '/default-avatar.png'}
-                            alt="You"
-                            className="h-6 w-6 rounded-full object-cover flex-shrink-0"
-                          />
-                          <div className="flex-1 flex space-x-2">
-                            <input
-                              type="text"
-                              value={replyText}
-                              onChange={(e) => setReplyText(e.target.value)}
-                              placeholder="Write a reply..."
-                              className="flex-1 text-sm bg-fixly-bg border border-fixly-border rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-fixly-accent"
-                              onKeyPress={(e) => e.key === 'Enter' && handlePostReply(comment._id)}
+                        <div className="mt-2 space-y-1">
+                          {replyingToUser && (
+                            <div className="text-xs text-fixly-text-muted ml-8">
+                              Replying to @{replyingToUser}
+                            </div>
+                          )}
+                          <div className="flex space-x-2">
+                            <img
+                              src={user?.photoURL || '/default-avatar.png'}
+                              alt="You"
+                              className="h-6 w-6 rounded-full object-cover flex-shrink-0"
                             />
-                            <button
-                              onClick={() => handlePostReply(comment._id)}
-                              disabled={!replyText.trim()}
-                              className="p-1 text-fixly-accent hover:bg-fixly-accent/10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <Send className="h-4 w-4" />
-                            </button>
+                            <div className="flex-1 flex space-x-2">
+                              <input
+                                type="text"
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder={replyingToUser ? `Reply to @${replyingToUser}...` : "Write a reply..."}
+                                className="flex-1 text-sm bg-fixly-bg border border-fixly-border rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-fixly-accent"
+                                onKeyPress={(e) => e.key === 'Enter' && handlePostReply(comment._id)}
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handlePostReply(comment._id)}
+                                disabled={!replyText.trim()}
+                                className="p-1 text-fixly-accent hover:bg-fixly-accent/10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <Send className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
-              ))}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </div>

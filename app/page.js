@@ -23,6 +23,7 @@ import {
   MessageCircle,
   Mail
 } from 'lucide-react';
+import ThemeToggle from '../components/ui/ThemeToggle';
 
 export default function HomePage() {
   const [selectedRole, setSelectedRole] = useState('');
@@ -123,6 +124,7 @@ export default function HomePage() {
               <span className="text-2xl font-bold text-fixly-text">Fixly</span>
             </div>
             <div className="flex items-center space-x-4">
+              <ThemeToggle />
               <button 
                 onClick={() => router.push('/auth/signin')}
                 className="btn-ghost"

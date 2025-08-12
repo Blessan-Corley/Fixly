@@ -248,6 +248,8 @@ const userSchema = new mongoose.Schema({
     validate: {
       validator: function(url) {
         if (!url) return true;
+        // Allow Google profile picture URLs and other valid image URLs
+        if (url.includes('googleusercontent.com') || url.includes('googleapis.com')) return true;
         const urlRegex = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i;
         return urlRegex.test(url);
       },
@@ -619,7 +621,7 @@ const userSchema = new mongoose.Schema({
     type: {
       type: String,
       enum: {
-        values: ['job_applied', 'job_accepted', 'job_completed', 'payment_due', 'review_received', 'dispute_opened', 'settings_updated', 'privacy_updated', 'welcome'],
+        values: ['job_applied', 'job_accepted', 'job_completed', 'payment_due', 'review_received', 'dispute_opened', 'settings_updated', 'privacy_updated', 'welcome', 'job_question', 'comment_reply'],
         message: 'Invalid notification type'
       }
     },

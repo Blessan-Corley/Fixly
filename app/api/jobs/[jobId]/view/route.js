@@ -2,9 +2,9 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../../lib/db';
-import Job from '../../../../../models/Job';
-import User from '../../../../../models/User';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
 
 export async function POST(request, { params }) {
   try {

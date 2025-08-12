@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { SessionProvider, useSession } from 'next-auth/react';
 import { Toaster } from 'sonner';
 import { LoadingProvider } from '../contexts/LoadingContext';
+import { ThemeProvider } from '../contexts/ThemeContext';
 
 // App Context
 const AppContext = createContext();
@@ -24,6 +25,8 @@ function AppProviderContent({ children }) {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState([]);
   const [error, setError] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const notificationPollRef = useRef(null);
 
   // ✅ CRITICAL FIX: Use refs to prevent excessive API calls
   const lastSessionId = useRef(null);
@@ -109,8 +112,11 @@ function AppProviderContent({ children }) {
 
       if (response.ok) {
         const data = await response.json();
-        setNotifications(data.notifications || []);
-        console.log('✅ Notifications fetched:', data.notifications?.length || 0);
+        const notifications = data.notifications || [];
+        setNotifications(notifications);
+        const unread = notifications.filter(n => !n.read).length;
+        setUnreadCount(unread);
+        console.log('✅ Notifications fetched:', notifications.length, 'unread:', unread);
       } else {
         console.error('❌ Failed to fetch notifications:', response.status);
       }
@@ -119,6 +125,42 @@ function AppProviderContent({ children }) {
         console.error('❌ Notifications fetch error:', error);
       }
     }
+  }, []);
+
+  // Real-time notification polling
+  const startNotificationPolling = useCallback(() => {
+    if (notificationPollRef.current) {
+      clearInterval(notificationPollRef.current);
+    }
+
+    notificationPollRef.current = setInterval(async () => {
+      try {
+        const response = await fetch('/api/user/notifications');
+        if (response.ok) {
+          const data = await response.json();
+          const newNotifications = data.notifications || [];
+          
+          // Only update if there are changes
+          if (JSON.stringify(newNotifications) !== JSON.stringify(notifications)) {
+            setNotifications(newNotifications);
+            const unread = newNotifications.filter(n => !n.read).length;
+            setUnreadCount(unread);
+          }
+        }
+      } catch (error) {
+        // Silent fail for polling
+        console.error('Notification polling error:', error);
+      }
+    }, 10000); // Poll every 10 seconds
+  }, [notifications]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (notificationPollRef.current) {
+        clearInterval(notificationPollRef.current);
+      }
+    };
   }, []);
 
   // ✅ CRITICAL FIX: Only fetch user when session ACTUALLY changes
@@ -165,6 +207,7 @@ function AppProviderContent({ children }) {
       // Debounce notifications fetch
       const timer = setTimeout(() => {
         fetchNotifications();
+        startNotificationPolling();
       }, 100);
 
       return () => clearTimeout(timer);
@@ -193,13 +236,16 @@ function AppProviderContent({ children }) {
       });
 
       if (response.ok) {
-        setNotifications(prev => 
-          prev.map(notification => 
+        setNotifications(prev => {
+          const updated = prev.map(notification => 
             notification._id === notificationId 
               ? { ...notification, read: true }
               : notification
-          )
-        );
+          );
+          const unread = updated.filter(n => !n.read).length;
+          setUnreadCount(unread);
+          return updated;
+        });
       }
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -235,6 +281,7 @@ function AppProviderContent({ children }) {
     setUser,
     loading,
     notifications,
+    unreadCount,
     markNotificationRead,
     addNotification,
     updateUser,
@@ -257,8 +304,9 @@ export function Providers({ children }) {
       refetchInterval={0} // ✅ CRITICAL: Disable automatic session refetching
       refetchOnWindowFocus={false} // ✅ CRITICAL: Disable refetch on window focus
     >
-      <LoadingProvider>
-        <AppProviderContent>
+      <ThemeProvider>
+        <LoadingProvider>
+          <AppProviderContent>
           {children}
           <Toaster 
             position="top-right"
@@ -286,7 +334,8 @@ export function Providers({ children }) {
             }}
           />
         </AppProviderContent>
-      </LoadingProvider>
+        </LoadingProvider>
+      </ThemeProvider>
     </SessionProvider>
   );
 }

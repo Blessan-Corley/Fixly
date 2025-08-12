@@ -30,6 +30,18 @@ export async function GET(request) {
 
     await connectDB();
 
+    // Mark expired jobs before fetching
+    await Job.updateMany(
+      {
+        status: 'open',
+        deadline: { $lt: new Date() },
+        applications: { $size: 0 } // Only jobs with no applications
+      },
+      {
+        $set: { status: 'expired' }
+      }
+    );
+
     const user = await User.findById(session.user.id);
     if (!user) {
       return NextResponse.json(
@@ -49,11 +61,21 @@ export async function GET(request) {
     const urgency = searchParams.get('urgency') || '';
     const sortBy = searchParams.get('sortBy') || 'newest';
 
-    // Build query
-    const query = { 
-      status: 'open',
-      deadline: { $gte: new Date() } // Only show jobs that haven't expired
-    };
+    // Build query based on user role
+    let query = {};
+    
+    if (user.role === 'hirer') {
+      // Hirers can only see their own jobs
+      query = {
+        createdBy: user._id
+      };
+    } else {
+      // Fixers can see only open jobs (not expired ones)
+      query = { 
+        status: 'open',
+        deadline: { $gte: new Date() } // Only show jobs that haven't expired
+      };
+    }
 
     // Search in title and description
     if (search) {

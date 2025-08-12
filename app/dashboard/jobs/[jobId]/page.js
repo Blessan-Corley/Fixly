@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../providers';
 import { toast } from 'sonner';
+import InstagramComments from '../../../../components/InstagramComments';
 
 export default function JobDetailsPage({ params }) {
   const { jobId } = params;
@@ -57,6 +58,7 @@ export default function JobDetailsPage({ params }) {
   const [showApplicationModal, setShowApplicationModal] = useState(false);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
+  const [showInstagramComments, setShowInstagramComments] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
@@ -429,10 +431,10 @@ export default function JobDetailsPage({ params }) {
 
     setSubmittingReply(true);
     try {
-      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/reply`, {
-        method: 'POST',
+      const response = await fetch(`/api/jobs/${jobId}/comments`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: replyText })
+        body: JSON.stringify({ commentId, message: replyText })
       });
 
       if (response.ok) {
@@ -468,8 +470,10 @@ export default function JobDetailsPage({ params }) {
 
   const handleLikeReply = async (commentId, replyId) => {
     try {
-      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/replies/${replyId}/like`, {
-        method: 'POST'
+      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replyId })
       });
 
       if (response.ok) {
@@ -504,8 +508,10 @@ export default function JobDetailsPage({ params }) {
     if (!confirm('Are you sure you want to delete this reply?')) return;
 
     try {
-      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/replies/${replyId}`, {
-        method: 'DELETE'
+      const response = await fetch(`/api/jobs/${jobId}/comments`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commentId, replyId })
       });
 
       if (response.ok) {
@@ -1100,7 +1106,13 @@ export default function JobDetailsPage({ params }) {
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (tab.id === 'comments') {
+                    setShowInstagramComments(true);
+                  } else {
+                    setActiveTab(tab.id);
+                  }
+                }}
                 className={`flex items-center px-6 py-4 text-sm font-medium border-b-2 ${
                   activeTab === tab.id
                     ? 'border-fixly-accent text-fixly-accent'
@@ -1189,6 +1201,117 @@ export default function JobDetailsPage({ params }) {
                     </div>
                   </div>
                 )}
+
+                {/* Job Timeline */}
+                <div>
+                  <h3 className="text-lg font-semibold text-fixly-text mb-4">
+                    Timeline
+                  </h3>
+                  <div className="bg-fixly-bg p-4 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Calendar className="h-4 w-4 text-fixly-accent mr-3" />
+                        <span className="text-fixly-text-muted">Posted</span>
+                      </div>
+                      <span className="font-medium text-fixly-text">
+                        {new Date(job.createdAt).toLocaleDateString('en-IN', { 
+                          day: 'numeric', 
+                          month: 'short', 
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Clock className="h-4 w-4 text-red-500 mr-3" />
+                        <span className="text-fixly-text-muted">Deadline</span>
+                      </div>
+                      <span className="font-medium text-fixly-text">
+                        {new Date(job.deadline).toLocaleDateString('en-IN', { 
+                          day: 'numeric', 
+                          month: 'short', 
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+
+                    {job.scheduledDate && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 text-blue-500 mr-3" />
+                          <span className="text-fixly-text-muted">Scheduled</span>
+                        </div>
+                        <span className="font-medium text-fixly-text">
+                          {new Date(job.scheduledDate).toLocaleDateString('en-IN', { 
+                            day: 'numeric', 
+                            month: 'short', 
+                            year: 'numeric'
+                          })}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="pt-2 border-t border-fixly-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-fixly-text-muted">Time remaining</span>
+                        <span className={`font-semibold ${
+                          getTimeRemaining(job.deadline) === 'Expired' ? 'text-red-600' : 
+                          getTimeRemaining(job.deadline).includes('h') ? 'text-orange-600' :
+                          'text-green-600'
+                        }`}>
+                          {getTimeRemaining(job.deadline)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Job Type & Category */}
+                <div>
+                  <h3 className="text-lg font-semibold text-fixly-text mb-4">
+                    Job Details
+                  </h3>
+                  <div className="bg-fixly-bg p-4 rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Briefcase className="h-4 w-4 text-fixly-accent mr-3" />
+                        <span className="text-fixly-text-muted">Job Type</span>
+                      </div>
+                      <span className="font-medium text-fixly-text capitalize">
+                        {job.type.replace('-', ' ')}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Zap className="h-4 w-4 text-fixly-accent mr-3" />
+                        <span className="text-fixly-text-muted">Urgency</span>
+                      </div>
+                      <span className={`font-medium capitalize px-2 py-1 rounded text-xs ${
+                        job.urgency === 'asap' ? 'bg-red-100 text-red-800' :
+                        job.urgency === 'scheduled' ? 'bg-blue-100 text-blue-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {job.urgency}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Eye className="h-4 w-4 text-fixly-accent mr-3" />
+                        <span className="text-fixly-text-muted">Views</span>
+                      </div>
+                      <span className="font-medium text-fixly-text">
+                        {job.views || 0} views
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Sidebar */}
@@ -1381,26 +1504,33 @@ export default function JobDetailsPage({ params }) {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {applications.map((application) => (
-                    <div key={application._id} className="card">
+                  {applications.map((application) => {
+                    const isProUser = user?.plan?.type === 'pro' && user?.plan?.status === 'active';
+                    const showFixerDetails = isProUser;
+                    
+                    return (
+                      <div key={application._id} className="card">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center">
                           <img
-                            src={application.fixer.photoURL || '/default-avatar.png'}
-                            alt={application.fixer.name}
+                            src={showFixerDetails ? (application.fixer.photoURL || '/default-avatar.png') : '/default-avatar.png'}
+                            alt={showFixerDetails ? application.fixer.name : 'Fixer'}
                             className="h-12 w-12 rounded-full object-cover mr-4"
                           />
                           <div>
                             <h4 className="font-semibold text-fixly-text">
-                              {application.fixer.name}
+                              {showFixerDetails ? application.fixer.name : 'Professional Fixer'}
                             </h4>
                             <div className="flex items-center space-x-3 text-sm text-fixly-text-muted">
                               <div className="flex items-center">
                                 <Star className="h-3 w-3 text-yellow-500 mr-1" />
-                                {application.fixer.rating?.average?.toFixed(1) || '0.0'}
+                                {showFixerDetails ? (application.fixer.rating?.average?.toFixed(1) || '0.0') : '★★★'}
                               </div>
                               <span>•</span>
-                              <span>{application.fixer.jobsCompleted || 0} jobs completed</span>
+                              <span>{showFixerDetails ? `${application.fixer.jobsCompleted || 0} jobs completed` : 'Experience available'}</span>
+                              {!showFixerDetails && (
+                                <span className="text-fixly-accent">• Upgrade to see details</span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1531,14 +1661,55 @@ export default function JobDetailsPage({ params }) {
                           )}
                         </div>
                       </div>
+
+                      {/* Upgrade Prompt for Non-Pro Users */}
+                      {!showFixerDetails && (
+                        <div className="bg-gradient-to-r from-fixly-accent/10 to-purple-500/10 border border-fixly-accent/20 rounded-lg p-4 mt-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                              <TrendingUp className="h-5 w-5 text-fixly-accent mr-2" />
+                              <div>
+                                <h5 className="font-semibold text-fixly-text">Upgrade to Pro to see fixer details</h5>
+                                <p className="text-sm text-fixly-text-muted">Get full access to fixer profiles, ratings, and contact information</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => router.push('/dashboard/subscription')}
+                              className="bg-fixly-accent hover:bg-fixly-accent-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              Upgrade Now
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Overall Upgrade Message for Non-Pro Users */}
+                  {applications.length > 0 && user?.plan?.type !== 'pro' && (
+                    <div className="text-center mt-6 p-6 bg-fixly-accent/5 rounded-lg border border-fixly-accent/20">
+                      <TrendingUp className="h-12 w-12 text-fixly-accent mx-auto mb-3" />
+                      <h3 className="text-lg font-semibold text-fixly-text mb-2">
+                        Get More from Your Job Applications
+                      </h3>
+                      <p className="text-fixly-text-muted mb-4">
+                        Upgrade to Pro to see complete fixer profiles, contact information, and make informed hiring decisions.
+                      </p>
+                      <button
+                        onClick={() => router.push('/dashboard/subscription')}
+                        className="bg-fixly-accent hover:bg-fixly-accent-dark text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                      >
+                        Upgrade to Pro - ₹199/month
+                      </button>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* Comments Tab */}
+          {/* Comments Tab - Now redirects to Instagram-style modal */}
           {activeTab === 'comments' && (
             <div className="space-y-6">
               <div className="space-y-3">
@@ -2341,6 +2512,28 @@ export default function JobDetailsPage({ params }) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Floating Comment Button */}
+      <button
+        onClick={() => setShowInstagramComments(true)}
+        className="fixed bottom-6 right-6 bg-fixly-accent hover:bg-fixly-accent-dark text-white rounded-full p-4 shadow-lg transition-all duration-200 hover:scale-110 z-40"
+        title="Open Comments"
+      >
+        <MessageSquare className="h-6 w-6" />
+        {comments.length > 0 && (
+          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            {comments.length > 99 ? '99+' : comments.length}
+          </span>
+        )}
+      </button>
+
+      {/* Instagram-Style Comments Modal */}
+      <InstagramComments
+        jobId={jobId}
+        isOpen={showInstagramComments}
+        onClose={() => setShowInstagramComments(false)}
+        initialCommentCount={comments.length}
+      />
     </div>
   );
 }

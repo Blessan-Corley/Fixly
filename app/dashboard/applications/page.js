@@ -36,14 +36,25 @@ function ApplicationsContent() {
   
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all');
   const [filters, setFilters] = useState({
     status: 'all',
     search: ''
   });
+  const [earnings, setEarnings] = useState({
+    total: 0,
+    thisMonth: 0,
+    completedJobs: 0
+  });
 
   useEffect(() => {
     fetchApplications();
+    fetchEarnings();
   }, [filters]);
+
+  useEffect(() => {
+    setFilters(prev => ({ ...prev, status: activeTab }));
+  }, [activeTab]);
 
   const fetchApplications = async () => {
     try {
@@ -66,6 +77,18 @@ function ApplicationsContent() {
       toast.error('Failed to fetch applications');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchEarnings = async () => {
+    try {
+      const response = await fetch('/api/user/earnings');
+      if (response.ok) {
+        const data = await response.json();
+        setEarnings(data.earnings);
+      }
+    } catch (error) {
+      console.error('Error fetching earnings:', error);
     }
   };
 

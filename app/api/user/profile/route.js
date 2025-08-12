@@ -268,13 +268,27 @@ export async function PUT(request) {
       );
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+      console.log('📝 Profile update request body:', body);
+    } catch (error) {
+      console.error('❌ Failed to parse request body:', error);
+      return NextResponse.json(
+        { message: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
     const allowedUpdates = [
       'name',
+      'bio',
       'location',
       'skills',
       'preferences',
-      'profilePhoto'
+      'profilePhoto',
+      'availableNow',
+      'serviceRadius'
     ];
 
     // Validate and update allowed fields
@@ -287,6 +301,18 @@ export async function PUT(request) {
         if (key === 'name' && (!value || value.trim().length < 2)) {
           return NextResponse.json(
             { message: 'Name must be at least 2 characters' },
+            { status: 400 }
+          );
+        }
+        if (key === 'bio' && value && value.length > 500) {
+          return NextResponse.json(
+            { message: 'Bio must be less than 500 characters' },
+            { status: 400 }
+          );
+        }
+        if (key === 'serviceRadius' && (value < 1 || value > 50)) {
+          return NextResponse.json(
+            { message: 'Service radius must be between 1 and 50 km' },
             { status: 400 }
           );
         }
@@ -305,23 +331,47 @@ export async function PUT(request) {
     Object.assign(user, updates);
     await user.save();
 
+    console.log('✅ Profile updated successfully for user:', user._id);
+
     return NextResponse.json({
       success: true,
       message: 'Profile updated successfully',
       user: {
         id: user._id,
         name: user.name,
+        bio: user.bio,
         location: user.location,
         skills: user.skills,
         preferences: user.preferences,
-        profilePhoto: user.profilePhoto
+        profilePhoto: user.profilePhoto,
+        availableNow: user.availableNow,
+        serviceRadius: user.serviceRadius
       }
     });
 
   } catch (error) {
-    console.error('Profile update error:', error);
+    console.error('❌ Profile update error:', error);
+    
+    // Handle specific MongoDB errors
+    if (error.name === 'ValidationError') {
+      return NextResponse.json(
+        { message: 'Invalid data provided', details: error.message },
+        { status: 400 }
+      );
+    }
+    
+    if (error.name === 'CastError') {
+      return NextResponse.json(
+        { message: 'Invalid data format' },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { message: 'Failed to update profile' },
+      { 
+        message: 'Failed to update profile',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

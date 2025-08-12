@@ -18,79 +18,74 @@ module.exports = {
       colors: {
         // Enhanced Professional Color Palette - Light/Dark Compatible
         fixly: {
-          // Backgrounds - Enhanced neutral system
-          bg: '#FDFDFD',           // Softest warm white
-          'bg-secondary': '#F7F8FA', // Light warm gray with blue undertone
-          'bg-muted': '#F0F2F5',   // Slightly darker for contrast
-          'bg-dark': '#1A1D23',    // Rich dark background
-          'bg-dark-secondary': '#252830', // Dark secondary
+          // Backgrounds - Auto-adapting based on theme
+          bg: 'rgb(var(--background))',
+          'bg-secondary': 'rgb(var(--secondary))',
+          'bg-muted': 'rgb(var(--muted))',
+          'bg-card': 'rgb(var(--card))',
           
-          // Text colors - Enhanced contrast and readability
-          text: '#1C1F26',         // Rich charcoal (better than pure black)
-          'text-secondary': '#4A5568', // Balanced medium gray
-          'text-muted': '#718096', // Softer muted text
-          'text-light': '#A0AEC0', // Light for placeholders/disabled
-          'text-dark': '#E2E8F0',  // Light text for dark backgrounds
+          // Text colors - Auto-adapting based on theme
+          text: 'rgb(var(--foreground))',
+          'text-secondary': 'rgb(var(--muted-foreground))',
+          'text-muted': 'rgb(var(--muted-foreground))',
+          'text-light': 'rgb(var(--muted-foreground))',
           
-          // Primary accent - Enhanced teal system
-          primary: '#0D9488',      // Vibrant professional teal
-          'primary-light': '#14C0B8', // Brighter teal
-          'primary-dark': '#0F766E', // Deeper teal
-          'primary-soft': '#7DD3FC', // Very light accent
-          'primary-bg': '#F0FDFA',   // Minimal background tint
-          'primary-hover': '#0B7E73', // Darker hover state
+          // Primary accent - Auto-adapting based on theme
+          primary: 'rgb(var(--primary))',
+          'primary-light': 'rgb(var(--fixly-primary-light))',
+          'primary-dark': 'rgb(var(--fixly-primary-dark))',
+          'primary-hover': 'rgb(var(--fixly-primary-hover))',
+          'primary-bg': 'hsl(var(--primary) / 0.1)',
+          'primary-soft': 'hsl(var(--primary) / 0.2)',
           
-          // Enhanced accent system
-          accent: '#0D9488',       // Matching primary
-          'accent-light': '#14C0B8',
-          'accent-dark': '#0A5D56',
-          'accent-soft': '#B2F5EA',
-          'accent-bg': '#E6FFFA',
+          // Enhanced accent system - Auto-adapting
+          accent: 'rgb(var(--accent))',
+          'accent-light': 'rgb(var(--fixly-primary-light))',
+          'accent-dark': 'rgb(var(--fixly-primary-dark))',
+          'accent-soft': 'hsl(var(--accent) / 0.2)',
+          'accent-bg': 'hsl(var(--accent) / 0.1)',
           
-          // Professional secondary colors
-          secondary: '#64748B',    // Slate gray
-          'secondary-light': '#94A3B8',
-          'secondary-dark': '#475569',
-          'secondary-soft': '#E2E8F0',
-          'secondary-bg': '#F8FAFC',
+          // Professional secondary colors - Auto-adapting
+          secondary: 'rgb(var(--secondary))',
+          'secondary-light': 'hsl(var(--secondary) / 0.8)',
+          'secondary-dark': 'hsl(var(--secondary) / 1.2)',
+          'secondary-soft': 'hsl(var(--secondary) / 0.5)',
+          'secondary-bg': 'hsl(var(--secondary) / 0.3)',
           
-          // Enhanced surface colors
-          card: '#FFFFFF',         // Pure white cards
-          'card-hover': '#FAFBFC', // Subtle hover
-          'card-dark': '#2D3748',  // Dark mode cards
-          border: '#E2E8F0',       // Softer borders
-          'border-light': '#F1F5F9', // Very light borders
-          'border-dark': '#4A5568', // Dark mode borders
+          // Enhanced surface colors - Auto-adapting
+          card: 'rgb(var(--card))',
+          'card-hover': 'hsl(var(--card) / 0.8)',
+          border: 'rgb(var(--border))',
+          'border-light': 'hsl(var(--border) / 0.5)',
           
-          // Professional status colors with better contrast
-          success: '#059669',      // Forest green
-          'success-light': '#10B981',
-          'success-dark': '#047857',
-          'success-bg': '#ECFDF5',
-          'success-text': '#065F46',
+          // Professional status colors - Auto-adapting
+          success: 'rgb(var(--success))',
+          'success-light': 'hsl(var(--success) / 0.8)',
+          'success-dark': 'hsl(var(--success) / 1.2)',
+          'success-bg': 'hsl(var(--success) / 0.1)',
+          'success-text': 'hsl(var(--success) / 1.5)',
           
-          warning: '#D97706',      // Amber
-          'warning-light': '#F59E0B',
-          'warning-dark': '#B45309',
-          'warning-bg': '#FFFBEB',
-          'warning-text': '#92400E',
+          warning: 'rgb(var(--warning))',
+          'warning-light': 'hsl(var(--warning) / 0.8)',
+          'warning-dark': 'hsl(var(--warning) / 1.2)',
+          'warning-bg': 'hsl(var(--warning) / 0.1)',
+          'warning-text': 'hsl(var(--warning) / 1.5)',
           
-          error: '#DC2626',        // Professional red
-          'error-light': '#EF4444',
-          'error-dark': '#B91C1C',
-          'error-bg': '#FEF2F2',
-          'error-text': '#991B1B',
+          error: 'rgb(var(--error))',
+          'error-light': 'hsl(var(--error) / 0.8)',
+          'error-dark': 'hsl(var(--error) / 1.2)',
+          'error-bg': 'hsl(var(--error) / 0.1)',
+          'error-text': 'hsl(var(--error) / 1.5)',
           
-          info: '#2563EB',         // Professional blue
-          'info-light': '#3B82F6',
-          'info-dark': '#1D4ED8',
-          'info-bg': '#EFF6FF',
-          'info-text': '#1E40AF',
+          info: 'rgb(var(--info))',
+          'info-light': 'hsl(var(--info) / 0.8)',
+          'info-dark': 'hsl(var(--info) / 1.2)',
+          'info-bg': 'hsl(var(--info) / 0.1)',
+          'info-text': 'hsl(var(--info) / 1.5)',
           
-          // Brand gradient colors
-          'gradient-start': '#0D9488',
-          'gradient-end': '#14C0B8',
-          'gradient-secondary': '#64748B',
+          // Brand gradient colors - Auto-adapting
+          'gradient-start': 'rgb(var(--fixly-gradient-start))',
+          'gradient-end': 'rgb(var(--fixly-gradient-end))',
         },
         
         // Keep existing shadcn colors for compatibility

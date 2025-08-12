@@ -36,7 +36,7 @@ export default function AboutUsPage() {
       social: {
         linkedin: '#',
         twitter: '#',
-        email: 'blessan@fixly.com'
+        email: 'blessancorley@gmail.com'
       }
     },
     {
@@ -50,7 +50,7 @@ export default function AboutUsPage() {
       social: {
         linkedin: '#',
         github: '#',
-        email: 'vinoth@fixly.com'
+        email: 'blessancorley@gmail.com'
       }
     },
     {
@@ -64,7 +64,7 @@ export default function AboutUsPage() {
       social: {
         linkedin: '#',
         twitter: '#',
-        email: 'dinesh@fixly.com'
+        email: 'blessancorley@gmail.com'
       }
     }
   ];
