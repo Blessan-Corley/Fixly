@@ -44,6 +44,7 @@ export default function NotificationsPage() {
     status: 'all',
     search: ''
   });
+  const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
     fetchNotifications();
@@ -197,6 +198,51 @@ export default function NotificationsPage() {
           break;
       }
     }
+  };
+
+  const getNotificationCategory = (type) => {
+    const jobTypes = ['job_applied', 'application_accepted', 'application_rejected', 'job_assigned', 'job_completed', 'job_cancelled', 'progress_confirmed', 'job_confirmed'];
+    const messageTypes = ['message_received', 'new_message'];
+    const systemTypes = ['payment_received', 'subscription_updated', 'account_verified'];
+    
+    if (jobTypes.includes(type)) return 'jobs';
+    if (messageTypes.includes(type)) return 'messages';
+    if (systemTypes.includes(type)) return 'system';
+    return 'other';
+  };
+
+  const getCategoryStats = () => {
+    const stats = {
+      all: notifications.length,
+      unread: notifications.filter(n => !n.read).length,
+      jobs: notifications.filter(n => getNotificationCategory(n.type) === 'jobs').length,
+      messages: notifications.filter(n => getNotificationCategory(n.type) === 'messages').length,
+      system: notifications.filter(n => getNotificationCategory(n.type) === 'system').length
+    };
+    return stats;
+  };
+
+  const getFilteredNotifications = () => {
+    let filtered = notifications;
+    
+    // Filter by active tab
+    if (activeTab !== 'all') {
+      if (activeTab === 'unread') {
+        filtered = filtered.filter(n => !n.read);
+      } else {
+        filtered = filtered.filter(n => getNotificationCategory(n.type) === activeTab);
+      }
+    }
+    
+    // Apply other filters
+    if (filters.search) {
+      filtered = filtered.filter(n => 
+        n.title.toLowerCase().includes(filters.search.toLowerCase()) ||
+        n.message.toLowerCase().includes(filters.search.toLowerCase())
+      );
+    }
+    
+    return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   };
 
   const getNotificationIcon = (type) => {
@@ -405,7 +451,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Notifications List */}
-      {notifications.length === 0 ? (
+      {getFilteredNotifications().length === 0 ? (
         <div className="text-center py-12">
           <Bell className="h-12 w-12 text-fixly-text-muted mx-auto mb-4" />
           <h3 className="text-lg font-medium text-fixly-text mb-2">
@@ -417,7 +463,7 @@ export default function NotificationsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {notifications.map((notification, index) => (
+          {getFilteredNotifications().map((notification, index) => (
             <motion.div
               key={notification._id}
               initial={{ opacity: 0, y: 20 }}

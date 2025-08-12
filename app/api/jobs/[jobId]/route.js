@@ -112,28 +112,59 @@ export async function GET(request, { params }) {
         createdAt: job.createdAt,
         restrictedView: true // Flag to indicate this is a restricted view
       };
-    } else if (user.role === 'fixer' && !isInvolved) {
-      // Hide sensitive information for fixers who haven't applied but have credits
+    } else if (user.role === 'fixer') {
+      // Privacy controls for fixers based on job status and involvement
+      const jobCompleted = job.status === 'completed' && job.completion?.confirmedAt;
+      const showContactInfo = isAssignedFixer && jobCompleted;
+      
+      // Hide sensitive information for fixers
       jobData.createdBy = {
         name: job.createdBy.name,
         username: job.createdBy.username,
         photoURL: job.createdBy.photoURL,
         rating: job.createdBy.rating,
         isVerified: job.createdBy.isVerified,
-        // Hide location details
         location: {
           city: job.createdBy.location?.city,
           state: job.createdBy.location?.state
-          // Don't include full address, phone, etc.
         }
       };
       
-      // Hide exact address, only show city/state
-      jobData.location = {
-        city: job.location.city,
-        state: job.location.state
-        // Hide full address, pincode, lat/lng
-      };
+      // Only show contact details after job completion and confirmation
+      if (showContactInfo) {
+        jobData.createdBy.phone = job.createdBy.phone;
+        jobData.createdBy.email = job.createdBy.email;
+        jobData.location = job.location; // Full address after completion
+      } else {
+        // Hide exact address, only show city/state
+        jobData.location = {
+          city: job.location.city,
+          state: job.location.state
+        };
+      }
+      
+      // Add privacy flag for frontend
+      jobData.contactInfoRestricted = !showContactInfo;
+    }
+    
+    // Privacy controls for hirers - hide fixer contact info until job completion
+    if (user.role === 'hirer' && isJobCreator && job.assignedTo) {
+      const jobCompleted = job.status === 'completed' && job.completion?.confirmedAt;
+      
+      if (!jobCompleted) {
+        // Hide fixer contact details until job completion
+        jobData.assignedTo = {
+          ...jobData.assignedTo,
+          phone: undefined,
+          email: undefined,
+          location: {
+            city: jobData.assignedTo.location?.city,
+            state: jobData.assignedTo.location?.state
+          }
+        };
+      }
+      
+      jobData.fixerContactInfoRestricted = !jobCompleted;
     }
 
     // Calculate skill match for fixers
@@ -688,4 +719,77 @@ async function markFixerArrived(job, user) {
     success: true,
     message: 'Arrival confirmed successfully'
   });
+}
+
+// DELETE method to delete a job
+export async function DELETE(request, { params }) {
+  try {
+    // Apply rate limiting
+    const rateLimitResult = await rateLimit(request, 'job_delete', 5, 60 * 60 * 1000); // 5 deletes per hour
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { message: 'Too many delete requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json(
+        { message: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const { jobId } = params;
+    if (!jobId) {
+      return NextResponse.json(
+        { message: 'Job ID is required' },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const user = await User.findById(session.user.id);
+    const job = await Job.findById(jobId);
+
+    if (!job) {
+      return NextResponse.json(
+        { message: 'Job not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check permissions - only job creator or admin can delete
+    if (job.createdBy.toString() !== user._id.toString() && user.role !== 'admin') {
+      return NextResponse.json(
+        { message: 'Permission denied. Only job creator can delete this job.' },
+        { status: 403 }
+      );
+    }
+
+    // Only allow deletion for certain statuses
+    if (!['open', 'expired', 'cancelled'].includes(job.status)) {
+      return NextResponse.json(
+        { message: 'Jobs in progress or completed cannot be deleted' },
+        { status: 400 }
+      );
+    }
+
+    // Delete the job
+    await Job.findByIdAndDelete(jobId);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Job deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete job error:', error);
+    return NextResponse.json(
+      { message: 'Failed to delete job' },
+      { status: 500 }
+    );
+  }
 }

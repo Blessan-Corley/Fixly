@@ -2,16 +2,16 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../../lib/db';
-import Job from '../../../../../models/Job';
-import User from '../../../../../models/User';
-import { rateLimit } from '../../../../../utils/rateLimiting';
-import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
+import { rateLimit } from '@/utils/rateLimiting';
+import { moderateContent } from '@/utils/sensitiveContentFilter';
 
 export async function POST(request, { params }) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'job_comments', 30, 60 * 60 * 1000); // 30 comments per hour
+    // Apply rate limiting - increased limits for better UX
+    const rateLimitResult = await rateLimit(request, 'job_comments', 100, 60 * 60 * 1000); // 100 comments per hour
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many comments. Please try again later.' },
@@ -20,7 +20,8 @@ export async function POST(request, { params }) {
     }
 
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.id) {
+      console.log('❌ No valid session for comment post:', session);
       return NextResponse.json(
         { message: 'Authentication required' },
         { status: 401 }
@@ -60,7 +61,16 @@ export async function POST(request, { params }) {
       );
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      return NextResponse.json(
+        { message: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
     const { message } = body;
 
     if (!message || !message.trim()) {
@@ -78,10 +88,17 @@ export async function POST(request, { params }) {
     }
 
     // Check for sensitive content
-    const moderationResult = moderateContent(message.trim(), {
-      allowAutoClean: false, // Don't auto-clean, require user to remove sensitive info
-      strictMode: true
-    });
+    let moderationResult;
+    try {
+      moderationResult = moderateContent(message.trim(), {
+        allowAutoClean: false, // Don't auto-clean, require user to remove sensitive info
+        strictMode: true
+      });
+    } catch (error) {
+      console.error('❌ Moderation error:', error);
+      // If moderation fails, allow content but log the error
+      moderationResult = { allowed: true, content: message.trim() };
+    }
 
     if (!moderationResult.allowed) {
       return NextResponse.json(
@@ -99,14 +116,32 @@ export async function POST(request, { params }) {
       author: user._id,
       message: moderationResult.content,
       createdAt: new Date(),
-      replies: []
+      replies: [],
+      likes: []
     };
 
     job.comments.push(comment);
-    await job.save();
+    
+    try {
+      await job.save();
+    } catch (saveError) {
+      return NextResponse.json(
+        { message: 'Failed to save comment to database' },
+        { status: 500 }
+      );
+    }
 
     // Populate the comment with author info for response
-    await job.populate('comments.author', 'name username photoURL');
+    try {
+      await job.populate({
+        path: 'comments.author',
+        select: 'name username photoURL role',
+        options: { lean: true }
+      });
+    } catch (populateError) {
+      console.error('❌ Failed to populate comment author:', populateError);
+    }
+    
     const newComment = job.comments[job.comments.length - 1];
 
     // Send notification to job creator (if not the commenter)
@@ -168,9 +203,17 @@ export async function GET(request, { params }) {
     await connectDB();
 
     const job = await Job.findById(jobId)
-      .select('comments')
-      .populate('comments.author', 'name username photoURL')
-      .populate('comments.replies.author', 'name username photoURL')
+      .select('comments updatedAt')
+      .populate({
+        path: 'comments.author',
+        select: 'name username photoURL',
+        options: { lean: true }
+      })
+      .populate({
+        path: 'comments.replies.author', 
+        select: 'name username photoURL',
+        options: { lean: true }
+      })
       .lean();
 
     if (!job) {
@@ -180,9 +223,15 @@ export async function GET(request, { params }) {
       );
     }
 
-    return NextResponse.json({
-      comments: job.comments || []
+    const response = NextResponse.json({
+      comments: job.comments || [],
+      lastUpdated: job.updatedAt
     });
+
+    // Add cache headers for better performance
+    response.headers.set('Cache-Control', 'private, max-age=5');
+
+    return response;
 
   } catch (error) {
     console.error('Get comments error:', error);
@@ -205,8 +254,8 @@ export async function GET(request, { params }) {
 // Reply to a comment
 export async function PUT(request, { params }) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'comment_replies', 20, 60 * 60 * 1000); // 20 replies per hour
+    // Apply rate limiting - increased limits for better UX
+    const rateLimitResult = await rateLimit(request, 'comment_replies', 200, 60 * 60 * 1000); // 200 replies per hour
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many replies. Please try again later.' },
@@ -215,7 +264,8 @@ export async function PUT(request, { params }) {
     }
 
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.id) {
+      console.log('❌ No valid session for reply post:', session);
       return NextResponse.json(
         { message: 'Authentication required' },
         { status: 401 }
@@ -223,7 +273,18 @@ export async function PUT(request, { params }) {
     }
 
     const { jobId } = params;
-    const body = await request.json();
+    
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.error('❌ Failed to parse reply request body:', error);
+      return NextResponse.json(
+        { message: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
     const { commentId, message } = body;
 
     if (!jobId || !commentId || !message) {
@@ -241,10 +302,17 @@ export async function PUT(request, { params }) {
     }
 
     // Check for sensitive content in reply
-    const moderationResult = moderateContent(message.trim(), {
-      allowAutoClean: false,
-      strictMode: true
-    });
+    let moderationResult;
+    try {
+      moderationResult = moderateContent(message.trim(), {
+        allowAutoClean: false,
+        strictMode: true
+      });
+    } catch (error) {
+      console.error('❌ Reply moderation error:', error);
+      // If moderation fails, allow content but log the error
+      moderationResult = { allowed: true, content: message.trim() };
+    }
 
     if (!moderationResult.allowed) {
       return NextResponse.json(
@@ -295,14 +363,32 @@ export async function PUT(request, { params }) {
     const reply = {
       author: user._id,
       message: moderationResult.content,
-      createdAt: new Date()
+      createdAt: new Date(),
+      likes: []
     };
 
     comment.replies.push(reply);
-    await job.save();
+    
+    try {
+      await job.save();
+    } catch (saveError) {
+      return NextResponse.json(
+        { message: 'Failed to save reply to database' },
+        { status: 500 }
+      );
+    }
 
     // Populate for response
-    await job.populate('comments.replies.author', 'name username photoURL');
+    try {
+      await job.populate({
+        path: 'comments.replies.author',
+        select: 'name username photoURL role',
+        options: { lean: true }
+      });
+    } catch (populateError) {
+      console.error('❌ Failed to populate reply author:', populateError);
+    }
+    
     const updatedComment = job.comments.id(commentId);
 
     // Send notification to original commenter (if not the replier)
@@ -351,7 +437,8 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session) {
+    if (!session || !session.user?.id) {
+      console.log('❌ No valid session for delete:', session);
       return NextResponse.json(
         { message: 'Authentication required' },
         { status: 401 }
@@ -359,7 +446,18 @@ export async function DELETE(request, { params }) {
     }
 
     const { jobId } = params;
-    const body = await request.json();
+    
+    let body;
+    try {
+      body = await request.json();
+    } catch (error) {
+      console.error('❌ Failed to parse delete request body:', error);
+      return NextResponse.json(
+        { message: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+
     const { commentId, replyId } = body;
 
     if (!jobId || !commentId) {
@@ -388,22 +486,31 @@ export async function DELETE(request, { params }) {
     }
 
     let result;
-    if (replyId) {
-      // Delete reply
-      result = job.deleteReply(commentId, replyId, user._id);
-    } else {
-      // Delete comment
-      result = job.deleteComment(commentId, user._id);
-    }
+    try {
+      if (replyId) {
+        // Delete reply
+        result = job.deleteReply(commentId, replyId, user._id);
+      } else {
+        // Delete comment
+        result = job.deleteComment(commentId, user._id);
+      }
 
-    if (!result.success) {
+      if (!result.success) {
+        return NextResponse.json(
+          { message: result.message },
+          { status: 403 }
+        );
+      }
+
+      await job.save();
+      console.log('✅ Delete successful:', replyId ? 'reply' : 'comment');
+    } catch (deleteError) {
+      console.error('❌ Failed to delete:', deleteError);
       return NextResponse.json(
-        { message: result.message },
-        { status: 403 }
+        { message: 'Failed to delete from database' },
+        { status: 500 }
       );
     }
-
-    await job.save();
 
     return NextResponse.json({
       success: true,

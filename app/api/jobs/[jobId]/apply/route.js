@@ -210,8 +210,14 @@ export async function POST(request, { params }) {
     job.applications.push(application);
     await job.save();
 
-    // NOTE: Credits are NOT deducted here anymore
-    // Credits will be deducted only when the application is accepted (job assigned)
+    // Deduct credit for free users (as per requirements)
+    if (user.plan?.type !== 'pro') {
+      if (!user.plan) {
+        user.plan = { type: 'free', creditsUsed: 0, status: 'active' };
+      }
+      user.plan.creditsUsed = (user.plan.creditsUsed || 0) + 1;
+      await user.save();
+    }
 
     // Add notification to hirer
     const hirer = job.createdBy;

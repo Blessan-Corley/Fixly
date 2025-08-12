@@ -203,7 +203,7 @@ const jobSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: {
-      values: ['open', 'in_progress', 'completed', 'cancelled', 'disputed'],
+      values: ['open', 'in_progress', 'completed', 'cancelled', 'disputed', 'expired'],
       message: 'Invalid job status'
     },
     default: 'open'

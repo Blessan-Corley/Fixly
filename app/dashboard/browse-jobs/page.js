@@ -5,31 +5,16 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
-  MapPin,
-  Clock,
-  DollarSign,
   Filter,
-  Star,
-  User,
-  Calendar,
-  CheckCircle,
   AlertCircle,
-  X,
   Loader,
   RefreshCw,
-  Zap,
-  Target,
-  TrendingUp,
-  MessageSquare,
-  Send,
-  Heart,
-  Reply,
-  MoreVertical,
-  Trash2
+  TrendingUp
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 import { searchCities, getAllSkills } from '../../../data/cities';
+import JobCardRectangular from '../../../components/JobCardRectangular';
 
 export default function BrowseJobsPage() {
   return (
@@ -70,12 +55,6 @@ function BrowseJobsContent() {
   const [applyingJobs, setApplyingJobs] = useState(new Set());
   const [searchLoading, setSearchLoading] = useState(false);
   const [showRefreshMessage, setShowRefreshMessage] = useState(false);
-  
-  // Comment state
-  const [expandedJobComments, setExpandedJobComments] = useState(new Set());
-  const [jobComments, setJobComments] = useState({});
-  const [newComments, setNewComments] = useState({});
-  const [submittingComments, setSubmittingComments] = useState(new Set());
 
   useEffect(() => {
     // Show loading state when user is typing
@@ -187,18 +166,13 @@ function BrowseJobsContent() {
   };
 
   const handleQuickApply = async (jobId) => {
-    console.log('🎯 Quick Apply clicked for job:', jobId);
-    console.log('👤 Current user:', { role: user?.role, creditsUsed: user?.plan?.creditsUsed });
-    
     // Validate jobId
     if (!jobId) {
-      console.error('❌ No job ID provided');
       toast.error('Invalid job ID. Please try again.');
       return;
     }
     
     if (!canUserApplyToJob(user)) {
-      console.log('❌ User cannot apply to job');
       toast.error('You have used all free applications. Upgrade to Pro for unlimited access.');
       router.push('/dashboard/subscription');
       return;
@@ -206,11 +180,9 @@ function BrowseJobsContent() {
 
     // Set loading state for this specific job
     setApplyingJobs(prev => new Set([...prev, jobId]));
-    console.log('⏳ Setting loading state for job:', jobId);
 
     try {
       const targetUrl = `/dashboard/jobs/${jobId}/apply`;
-      console.log('🚀 Navigating to:', targetUrl);
       
       // First check if the job exists by making a quick API call
       const checkResponse = await fetch(`/api/jobs/${jobId}?forApplication=true`);
@@ -223,7 +195,6 @@ function BrowseJobsContent() {
       toast.success('Opening application form...');
       
     } catch (error) {
-      console.error('❌ Error navigating to application page:', error);
       toast.error(`Failed to open application form: ${error.message}`);
       
       // Remove loading state on error
@@ -244,119 +215,6 @@ function BrowseJobsContent() {
     }, 3000);
   };
 
-  // Comment functions
-  const toggleComments = async (jobId) => {
-    const isExpanded = expandedJobComments.has(jobId);
-    
-    if (isExpanded) {
-      // Collapse comments
-      setExpandedJobComments(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
-    } else {
-      // Expand comments and fetch them
-      setExpandedJobComments(prev => new Set([...prev, jobId]));
-      await fetchJobComments(jobId);
-    }
-  };
-
-  const fetchJobComments = async (jobId) => {
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/comments`);
-      if (response.ok) {
-        const data = await response.json();
-        setJobComments(prev => ({
-          ...prev,
-          [jobId]: data.comments || []
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-      toast.error('Failed to load comments');
-    }
-  };
-
-  const handleSubmitComment = async (jobId) => {
-    const comment = newComments[jobId]?.trim();
-    if (!comment) return;
-
-    setSubmittingComments(prev => new Set([...prev, jobId]));
-
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: comment })
-      });
-
-      if (response.ok) {
-        setNewComments(prev => ({ ...prev, [jobId]: '' }));
-        await fetchJobComments(jobId); // Refresh comments
-        toast.success('Comment posted!');
-      } else {
-        const data = await response.json();
-        toast.error(data.message || 'Failed to post comment');
-      }
-    } catch (error) {
-      console.error('Error posting comment:', error);
-      toast.error('Failed to post comment');
-    } finally {
-      setSubmittingComments(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
-    }
-  };
-
-  const handleLikeComment = async (jobId, commentId) => {
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/like`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (response.ok) {
-        await fetchJobComments(jobId); // Refresh to get updated likes
-      }
-    } catch (error) {
-      console.error('Error liking comment:', error);
-    }
-  };
-
-  const handleDeleteComment = async (jobId, commentId) => {
-    if (!confirm('Are you sure you want to delete this comment?')) return;
-
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        await fetchJobComments(jobId); // Refresh comments
-        toast.success('Comment deleted');
-      } else {
-        toast.error('Failed to delete comment');
-      }
-    } catch (error) {
-      console.error('Error deleting comment:', error);
-      toast.error('Failed to delete comment');
-    }
-  };
-
-  // Time formatting
-  const getTimeAgo = (timestamp) => {
-    const now = new Date();
-    const time = new Date(timestamp);
-    const diffInSeconds = Math.floor((now - time) / 1000);
-
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  };
 
   const clearFilters = () => {
     setFilters({
@@ -371,28 +229,6 @@ function BrowseJobsContent() {
     });
   };
 
-  const getUrgencyColor = (urgency) => {
-    switch (urgency) {
-      case 'asap': return 'text-red-600 bg-red-50 border-red-200';
-      case 'flexible': return 'text-blue-600 bg-blue-50 border-blue-200';
-      case 'scheduled': return 'text-purple-600 bg-purple-50 border-purple-200';
-      default: return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  };
-
-  const getTimeRemaining = (deadline) => {
-    const now = new Date();
-    const deadlineDate = new Date(deadline);
-    const diff = deadlineDate - now;
-    
-    if (diff <= 0) return 'Expired';
-    
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    if (days > 0) return `${days}d ${hours}h`;
-    return `${hours}h`;
-  };
 
   if (loading && jobs.length === 0) {
     return (
@@ -604,293 +440,15 @@ function BrowseJobsContent() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="space-y-4">
           {jobs.map((job, index) => (
-            <motion.div
+            <JobCardRectangular
               key={job._id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-              className="card card-hover"
-            >
-              {/* Job Header */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    {job.featured && (
-                      <span className="bg-fixly-accent text-fixly-text text-xs px-2 py-1 rounded-full font-medium">
-                        Featured
-                      </span>
-                    )}
-                    <span className={`text-xs px-2 py-1 rounded-full border ${getUrgencyColor(job.urgency)}`}>
-                      {job.urgency.toUpperCase()}
-                    </span>
-                  </div>
-                  
-                  <h3 className="font-semibold text-fixly-text mb-2 hover:text-fixly-accent cursor-pointer">
-                    {job.title}
-                  </h3>
-                  
-                  <p className="text-sm text-fixly-text-muted line-clamp-2 mb-3">
-                    {job.description}
-                  </p>
-                </div>
-              </div>
-
-              {/* Skills */}
-              <div className="flex flex-wrap gap-1 mb-4">
-                {job.skillsRequired.slice(0, 3).map((skill, index) => (
-                  <span 
-                    key={index} 
-                    className={`skill-chip text-xs ${
-                      user?.skills?.includes(skill.toLowerCase()) 
-                        ? 'skill-chip-selected' 
-                        : ''
-                    }`}
-                  >
-                    {skill}
-                  </span>
-                ))}
-                {job.skillsRequired.length > 3 && (
-                  <span className="text-xs text-fixly-text-muted">
-                    +{job.skillsRequired.length - 3} more
-                  </span>
-                )}
-              </div>
-
-              {/* Job Details */}
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center text-sm text-fixly-text-muted">
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  {job.budget.type === 'negotiable' 
-                    ? 'Negotiable' 
-                    : `₹${job.budget.amount?.toLocaleString()}`
-                  }
-                </div>
-                
-                <div className="flex items-center text-sm text-fixly-text-muted">
-                  <MapPin className="h-4 w-4 mr-2" />
-                  {job.location.city}, {job.location.state}
-                  {job.isLocalJob && (
-                    <span className="ml-2 text-green-600 text-xs">Local</span>
-                  )}
-                </div>
-                
-                <div className="flex items-center text-sm text-fixly-text-muted">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Deadline: {getTimeRemaining(job.deadline)}
-                </div>
-              </div>
-
-              {/* Hirer Info */}
-              <div className="flex items-center justify-between mb-4 pt-4 border-t border-fixly-border">
-                <div className="flex items-center">
-                  <img
-                    src={job.createdBy.photoURL || '/default-avatar.png'}
-                    alt={job.createdBy.name}
-                    className="h-8 w-8 rounded-full object-cover mr-2"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-fixly-text">
-                      {job.createdBy.name}
-                    </p>
-                    <div className="flex items-center">
-                      <Star className="h-3 w-3 text-yellow-500 mr-1" />
-                      <span className="text-xs text-fixly-text-muted">
-                        {job.createdBy.rating?.average?.toFixed(1) || 'New'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="text-xs text-fixly-text-muted">
-                  {job.applicationCount} applications
-                </div>
-              </div>
-
-              {/* Match Score */}
-              {job.skillMatchPercentage > 0 && (
-                <div className="mb-4">
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-fixly-text-muted">Skill Match</span>
-                    <span className="font-medium text-fixly-text">
-                      {Math.round(job.skillMatchPercentage)}%
-                    </span>
-                  </div>
-                  <div className="progress-bar">
-                    <div 
-                      className="progress-fill"
-                      style={{ width: `${job.skillMatchPercentage}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="space-y-3">
-                <div className="flex space-x-2">
-                  {job.restrictedView ? (
-                    <>
-                      <button
-                        disabled
-                        className="btn-secondary flex-1 opacity-50"
-                      >
-                        <AlertCircle className="h-4 w-4 mr-1" />
-                        Limited View
-                      </button>
-                      <button
-                        onClick={() => router.push('/dashboard/subscription')}
-                        className="btn-primary flex-1"
-                      >
-                        <TrendingUp className="h-4 w-4 mr-1" />
-                        Upgrade to Apply
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => toggleComments(job._id)}
-                        className="flex-1 px-4 py-2 rounded-lg font-medium bg-white border-2 border-fixly-accent text-fixly-accent hover:bg-fixly-accent hover:text-white transition-colors"
-                      >
-                        <MessageSquare className="h-4 w-4 mr-1" />
-                        {expandedJobComments.has(job._id) ? 'Hide Comments' : 'View Comments'}
-                        {jobComments[job._id] && jobComments[job._id].length > 0 && (
-                          <span className="ml-1 text-xs bg-fixly-accent text-white rounded-full px-1">
-                            {jobComments[job._id].length}
-                          </span>
-                        )}
-                      </button>
-                      
-                      {job.hasApplied ? (
-                        <button
-                          disabled
-                          className="btn-ghost flex-1 opacity-50"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Applied
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleQuickApply(job._id)}
-                          disabled={applyingJobs.has(job._id) || !canUserApplyToJob(user)}
-                          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
-                            applyingJobs.has(job._id) || !canUserApplyToJob(user)
-                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                              : 'bg-fixly-accent text-white hover:bg-fixly-accent-dark'
-                          }`}
-                          title={!canUserApplyToJob(user) ? 'You have reached your application limit' : 'Apply to this job'}
-                        >
-                          {applyingJobs.has(job._id) ? (
-                            <Loader className="animate-spin h-4 w-4 mr-1" />
-                          ) : (
-                            <Zap className="h-4 w-4 mr-1" />
-                          )}
-                          Quick Apply
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Instagram-style Comments Section */}
-                {expandedJobComments.has(job._id) && (
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                    {/* Comments List */}
-                    <div className="max-h-60 overflow-y-auto space-y-3">
-                      {jobComments[job._id] && jobComments[job._id].length > 0 ? (
-                        jobComments[job._id].map((comment) => (
-                          <div key={comment._id} className="flex space-x-2">
-                            <img
-                              src={comment.author?.photoURL || '/default-avatar.png'}
-                              alt={comment.author?.name || 'User'}
-                              className="h-8 w-8 rounded-full object-cover flex-shrink-0"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <div className="bg-white rounded-lg px-3 py-2">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium text-sm text-fixly-text">
-                                    {comment.author?.name || 'Anonymous'}
-                                  </span>
-                                  <span className="text-xs text-fixly-text-muted">
-                                    {getTimeAgo(comment.createdAt)}
-                                  </span>
-                                </div>
-                                <p className="text-sm text-fixly-text mt-1">{comment.message}</p>
-                              </div>
-                              
-                              {/* Comment Actions */}
-                              <div className="flex items-center space-x-4 mt-1 px-3">
-                                <button
-                                  onClick={() => handleLikeComment(job._id, comment._id)}
-                                  className={`flex items-center space-x-1 text-xs ${
-                                    comment.likes?.includes(user?._id) 
-                                      ? 'text-red-500 font-medium' 
-                                      : 'text-fixly-text-muted hover:text-red-500'
-                                  } transition-colors`}
-                                >
-                                  <Heart className={`h-3 w-3 ${comment.likes?.includes(user?._id) ? 'fill-current' : ''}`} />
-                                  <span>{comment.likes?.length || 0}</span>
-                                </button>
-                                
-                                {comment.author?._id === user?._id && (
-                                  <button
-                                    onClick={() => handleDeleteComment(job._id, comment._id)}
-                                    className="text-xs text-red-500 hover:text-red-700 transition-colors"
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-fixly-text-muted text-center py-4">
-                          No comments yet. Be the first to comment!
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Add Comment */}
-                    <div className="flex space-x-2 pt-2 border-t">
-                      <img
-                        src={user?.photoURL || '/default-avatar.png'}
-                        alt="You"
-                        className="h-8 w-8 rounded-full object-cover flex-shrink-0"
-                      />
-                      <div className="flex-1">
-                        <input
-                          type="text"
-                          value={newComments[job._id] || ''}
-                          onChange={(e) => setNewComments(prev => ({
-                            ...prev,
-                            [job._id]: e.target.value
-                          }))}
-                          placeholder="Add a comment..."
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-fixly-accent focus:border-transparent"
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter') {
-                              handleSubmitComment(job._id);
-                            }
-                          }}
-                        />
-                      </div>
-                      <button
-                        onClick={() => handleSubmitComment(job._id)}
-                        disabled={!newComments[job._id]?.trim() || submittingComments.has(job._id)}
-                        className="px-3 py-2 bg-fixly-accent text-white rounded-full hover:bg-fixly-accent-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {submittingComments.has(job._id) ? (
-                          <Loader className="animate-spin h-4 w-4" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </motion.div>
+              job={job}
+              user={user}
+              onApply={handleQuickApply}
+              isApplying={applyingJobs.has(job._id)}
+            />
           ))}
         </div>
       )}

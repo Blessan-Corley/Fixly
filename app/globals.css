@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    /* Enhanced Professional Color Scheme - Light/Dark Compatible */
+    /* Light Mode - Enhanced Professional Color Scheme */
     --background: 253 253 253; /* #FDFDFD - Enhanced warm white */
     --foreground: 28 31 38; /* #1C1F26 - Rich charcoal */
     --card: 255 255 255; /* #FFFFFF - Pure white for cards */
@@ -41,6 +41,43 @@
     --warning: 217 119 6; /* #D97706 */
     --error: 220 38 38; /* #DC2626 */
     --info: 37 99 235; /* #2563EB */
+  }
+
+  .dark {
+    /* Dark Mode - Subtle & Elegant Dark Color Scheme */
+    --background: 16 20 28; /* #10141C - Deep navy background, not pure black */
+    --foreground: 241 245 249; /* #F1F5F9 - Soft off-white text */
+    --card: 30 35 47; /* #1E232F - Warm charcoal cards with subtle blue tint */
+    --card-foreground: 241 245 249;
+    --popover: 30 35 47;
+    --popover-foreground: 241 245 249;
+    --primary: 20 184 166; /* #14B8A6 - Elegant teal, consistent with light mode */
+    --primary-foreground: 16 20 28; /* Dark text on bright primary */
+    --secondary: 51 65 85; /* #334155 - Balanced slate */
+    --secondary-foreground: 203 213 225;
+    --muted: 39 48 63; /* #27303F - Subtle muted background */
+    --muted-foreground: 148 163 184; /* #94A3B8 - Gentle muted text */
+    --accent: 20 184 166; /* Matching teal accent */
+    --accent-foreground: 16 20 28;
+    
+    /* Enhanced Fixly specific colors for dark mode - Subtle & Consistent */
+    --fixly-primary: 20 184 166; /* #14B8A6 - Refined teal, matches light mode energy */
+    --fixly-primary-light: 45 212 191; /* #2DD4BF - Brighter but not harsh */
+    --fixly-primary-dark: 13 148 136; /* #0D9488 - Deeper teal */
+    --fixly-primary-hover: 15 166 151; /* #0FA695 - Gentle hover */
+    --fixly-gradient-start: 20 184 166; /* #14B8A6 */
+    --fixly-gradient-end: 34 197 194; /* #22C5C2 - Subtle gradient */
+    --destructive: 244 91 91; /* #F45B5B - Softer red, not aggressive */
+    --destructive-foreground: 241 245 249;
+    --border: 55 65 81; /* #374151 - Gentle borders */
+    --input: 39 48 63; /* #27303F - Input background with warmth */
+    --ring: 20 184 166; /* Matching primary */
+    
+    /* Status color variables for dark mode - Balanced & Pleasant */
+    --success: 52 211 153; /* #34D399 - Gentle green */
+    --warning: 251 191 36; /* #FBBF24 - Warm amber */
+    --error: 248 113 113; /* #F87171 - Soft red */
+    --info: 96 165 250; /* #60A5FA - Calm blue */
   }
 }
 
@@ -108,7 +145,7 @@
   }
   
   .btn-secondary {
-    @apply bg-white hover:bg-fixly-bg-secondary text-fixly-text font-medium px-6 py-3 rounded-xl border border-fixly-border transition-all duration-200 shadow-fixly hover:shadow-fixly-md hover:border-fixly-primary-light focus:ring-2 focus:ring-fixly-primary-light focus:ring-offset-2;
+    @apply bg-fixly-card hover:bg-fixly-bg-secondary text-fixly-text font-medium px-6 py-3 rounded-xl border border-fixly-border transition-all duration-200 shadow-fixly hover:shadow-fixly-md hover:border-fixly-primary-light focus:ring-2 focus:ring-fixly-primary-light focus:ring-offset-2;
   }
   
   .btn-ghost {
@@ -138,15 +175,15 @@
   
   /* Form Components - Clean and Accessible */
   .input-field {
-    @apply w-full px-4 py-3 bg-white border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 placeholder:text-fixly-text-light;
+    @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 placeholder:text-fixly-text-light;
   }
   
   .textarea-field {
-    @apply w-full px-4 py-3 bg-white border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 resize-none placeholder:text-fixly-text-light;
+    @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 resize-none placeholder:text-fixly-text-light;
   }
   
   .select-field {
-    @apply w-full px-4 py-3 bg-white border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 cursor-pointer;
+    @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 cursor-pointer;
   }
   
   /* Badge Components - Subtle and Professional */
@@ -258,7 +295,7 @@
   
   /* Toast Notifications */
   .toast {
-    @apply bg-white border border-fixly-border rounded-xl p-4 shadow-fixly-lg backdrop-blur-sm;
+    @apply bg-fixly-card border border-fixly-border rounded-xl p-4 shadow-fixly-lg backdrop-blur-sm;
   }
   
   .toast-success {
@@ -317,7 +354,7 @@
   }
   
   .glass-effect {
-    @apply bg-white/40 backdrop-blur-xl border border-white/20;
+    @apply bg-fixly-card/40 backdrop-blur-xl border border-fixly-border/20;
   }
   
   .hover-lift {

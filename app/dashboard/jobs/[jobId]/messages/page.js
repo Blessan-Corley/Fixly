@@ -24,10 +24,21 @@ export default function MessagesPage({ params }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [job, setJob] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const messagesEndRef = useRef(null);
+  const pollIntervalRef = useRef(null);
 
   useEffect(() => {
     fetchJobAndMessages();
+    
+    // Start real-time polling
+    startPolling();
+    
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
   }, [jobId]);
 
   useEffect(() => {
@@ -54,6 +65,7 @@ export default function MessagesPage({ params }) {
       if (messagesResponse.ok) {
         const messagesData = await messagesResponse.json();
         setMessages(messagesData.messages || []);
+        setLastUpdated(new Date());
       } else {
         const errorData = await messagesResponse.json();
         toast.error(errorData.message || 'Failed to load messages');
@@ -69,30 +81,77 @@ export default function MessagesPage({ params }) {
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return;
 
+    const messageText = newMessage.trim();
+    setNewMessage(''); // Clear immediately
     setSending(true);
+    
+    // Optimistic update
+    const optimisticMessage = {
+      _id: Date.now().toString(),
+      message: messageText,
+      sender: {
+        _id: user._id,
+        name: user.name,
+        photoURL: user.photoURL
+      },
+      sentAt: new Date().toISOString(),
+      read: false
+    };
+    
+    setMessages(prev => [...prev, optimisticMessage]);
+
     try {
       const response = await fetch(`/api/jobs/${jobId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: newMessage.trim()
+          message: messageText
         })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setMessages(prev => [...prev, data.message]);
-        setNewMessage('');
+        // Replace optimistic message with real one
+        setMessages(prev => prev.map(msg => 
+          msg._id === optimisticMessage._id ? data.message : msg
+        ));
       } else {
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
+        setNewMessage(messageText); // Restore text
         toast.error(data.message || 'Failed to send message');
       }
     } catch (error) {
       console.error('Error sending message:', error);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
+      setNewMessage(messageText); // Restore text
       toast.error('Failed to send message');
     } finally {
       setSending(false);
     }
+  };
+
+  const startPolling = () => {
+    // Poll for new messages every 3 seconds
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/messages`);
+        if (response.ok) {
+          const data = await response.json();
+          const newMessages = data.messages || [];
+          
+          // Only update if there are new messages
+          if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
+            setMessages(newMessages);
+          }
+        }
+      } catch (error) {
+        // Silent fail for polling
+        console.error('Polling error:', error);
+      }
+    }, 3000);
   };
 
   const handleKeyPress = (e) => {

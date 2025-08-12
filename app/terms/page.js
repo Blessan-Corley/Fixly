@@ -199,7 +199,7 @@ export default function TermsConditionsPage() {
             By using Fixly, you agree to be bound by these terms.
           </p>
           <div className="text-sm text-fixly-text-muted">
-            Last updated: January 18, 2025
+            Last updated: May 15, 2025
           </div>
         </motion.div>
 

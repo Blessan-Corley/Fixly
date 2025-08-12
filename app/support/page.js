@@ -54,7 +54,7 @@ export default function SupportPage() {
       icon: Mail,
       color: 'bg-purple-500',
       action: 'Send Email',
-      email: 'support@fixly.com'
+      email: 'blessancorley@gmail.com'
     }
   ];
 

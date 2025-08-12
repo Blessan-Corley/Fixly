@@ -61,8 +61,8 @@ export default function ProfilePage() {
   const [customSkill, setCustomSkill] = useState('');
 
   useEffect(() => {
-    if (user) {
-      setFormData(prev => ({
+    if (user && !editing) {
+      setFormData({
         name: user.name || '',
         bio: user.bio || '',
         location: user.location || null,
@@ -75,9 +75,9 @@ export default function ProfilePage() {
           jobAlerts: user.preferences?.jobAlerts ?? true,
           marketingEmails: user.preferences?.marketingEmails ?? false
         }
-      }));
+      });
     }
-  }, [user]);
+  }, [user, editing]);
 
   // City search
   useEffect(() => {
@@ -353,6 +353,7 @@ export default function ProfilePage() {
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     className="input-field"
                     autoComplete="name"
+                    autoFocus={false}
                   />
                 </div>
 
@@ -366,6 +367,7 @@ export default function ProfilePage() {
                     placeholder="Tell others about yourself..."
                     className="textarea-field h-24"
                     maxLength={500}
+                    autoComplete="off"
                   />
                   <p className="text-xs text-fixly-text-muted mt-1">
                     {(formData.bio || '').length}/500 characters
@@ -454,7 +456,7 @@ export default function ProfilePage() {
               <div className="flex items-center">
                 <MapPin className="h-4 w-4 text-fixly-accent mr-3" />
                 <span className="text-fixly-text">
-                  {user.location ? `${user.location.city}, ${user.location.state}` : 'Not specified'}
+                  {user.location ? `${user.location.name || user.location.city}, ${user.location.state}` : 'Not specified'}
                 </span>
               </div>
             )}
