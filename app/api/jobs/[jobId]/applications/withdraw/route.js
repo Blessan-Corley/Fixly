@@ -44,7 +44,7 @@ export async function POST(request, { params }) {
 
     // Remove the application
     job.applications.splice(applicationIndex, 1);
-    await job.save();
+    await job.save({ validateBeforeSave: false });
 
     return NextResponse.json({
       success: true,

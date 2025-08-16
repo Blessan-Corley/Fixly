@@ -224,8 +224,8 @@ export default function SkillSelectionModal({
                           disabled={selectedSkills.includes(skill)}
                           className={`px-3 py-2 rounded-lg text-sm transition-all ${
                             selectedSkills.includes(skill)
-                              ? 'bg-fixly-accent text-fixly-text'
-                              : 'bg-fixly-accent/10 text-fixly-accent hover:bg-fixly-accent/20'
+                              ? 'bg-fixly-accent text-white'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-transparent hover:border-fixly-accent hover:text-fixly-accent dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-transparent dark:hover:border-fixly-accent dark:hover:text-fixly-accent'
                           }`}
                         >
                           {skill}
@@ -248,8 +248,8 @@ export default function SkillSelectionModal({
                         onClick={() => handleSkillToggle(skill)}
                         className={`p-3 rounded-xl text-left transition-all ${
                           isSelected
-                            ? 'bg-fixly-accent/10 border border-fixly-accent text-fixly-text'
-                            : 'bg-fixly-bg hover:bg-fixly-accent/5 border border-fixly-border hover:border-fixly-accent/50'
+                            ? 'bg-fixly-accent/20 border border-fixly-accent text-fixly-text dark:bg-fixly-accent/30 dark:border-fixly-accent'
+                            : 'bg-slate-50 hover:bg-transparent border border-slate-200 hover:border-fixly-accent text-fixly-text hover:text-fixly-accent dark:bg-slate-800/50 dark:hover:bg-transparent dark:border-slate-700 dark:hover:border-fixly-accent dark:hover:text-fixly-accent'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -284,8 +284,8 @@ export default function SkillSelectionModal({
                         onClick={() => handleSkillToggle(skill)}
                         className={`w-full p-3 rounded-xl text-left transition-all ${
                           isSelected
-                            ? 'bg-fixly-accent/10 border border-fixly-accent text-fixly-text'
-                            : 'bg-fixly-bg hover:bg-fixly-accent/5 border border-fixly-border hover:border-fixly-accent/50'
+                            ? 'bg-fixly-accent/20 border border-fixly-accent text-fixly-text dark:bg-fixly-accent/30 dark:border-fixly-accent'
+                            : 'bg-slate-50 hover:bg-transparent border border-slate-200 hover:border-fixly-accent text-fixly-text hover:text-fixly-accent dark:bg-slate-800/50 dark:hover:bg-transparent dark:border-slate-700 dark:hover:border-fixly-accent dark:hover:text-fixly-accent'
                         }`}
                       >
                         <div className="flex items-center justify-between">

@@ -1,10 +1,12 @@
 // app/api/admin/users/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../lib/db';
+import { authOptions } from '../../auth/[...nextauth]/route';
+import connectDB from '../../../../lib/mongodb';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
+import { withErrorHandler, AuthenticationError } from '../../../../lib/errorHandling';
+import { cache, analytics } from '../../../../lib/redis';
 
 export const dynamic = 'force-dynamic';
 

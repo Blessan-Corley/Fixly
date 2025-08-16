@@ -9,19 +9,23 @@ import {
   Eye,
   MessageSquare,
   Send,
-  Star,
   Calendar,
-  User,
-  Briefcase
+  CheckCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { toastMessages } from '../utils/toast';
 import InstagramCommentsRealtime from './InstagramCommentsRealtime';
 
 export default function JobCardRectangular({ job, user, onApply, isApplying = false }) {
   const router = useRouter();
   const [showComments, setShowComments] = useState(false);
   const [viewCount, setViewCount] = useState(job.viewCount || 0);
+  
+  // Check if current user has applied to this job
+  const hasApplied = user && job.applications?.some(app => 
+    app.fixer === user.id || app.fixer?._id === user.id || app.fixer?.toString() === user.id
+  );
 
   // Handle view count increment only on "View Details" click
   const handleViewDetails = async () => {
@@ -123,7 +127,7 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         whileHover={{ y: -2 }}
-        className={`bg-fixly-card border border-fixly-border rounded-xl p-4 hover:shadow-md transition-all duration-200 ${
+        className={`bg-fixly-card dark:bg-gray-800 border border-fixly-border dark:border-gray-700 rounded-xl p-4 hover:shadow-md dark:hover:shadow-lg transition-all duration-200 touch-scroll ${
           deadlineInfo.urgent ? 'ring-2 ring-orange-300 shadow-lg' : ''
         }`}
       >
@@ -140,6 +144,14 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
                     {skillMatch}% match
                   </span>
                 )}
+                {/* Materials indication */}
+                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                  job.budget?.materialsIncluded 
+                    ? 'text-green-700 bg-green-100 border border-green-200' 
+                    : 'text-orange-700 bg-orange-100 border border-orange-200'
+                }`}>
+                  🔧 {job.budget?.materialsIncluded ? 'Materials Included' : 'Bring Materials'}
+                </span>
                 <span className={`text-xs px-2 py-1 rounded-full font-semibold ${deadlineInfo.color} ${deadlineInfo.bgColor}`}>
                   ⏰ {deadlineInfo.text}
                 </span>
@@ -178,10 +190,10 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
           {job.skillsRequired.slice(0, 4).map((skill, index) => (
             <span
               key={index}
-              className={`text-xs px-2 py-1 rounded-full ${
+              className={`text-xs px-2 py-1 rounded-full transition-all ${
                 user?.skills?.some(s => s.toLowerCase() === skill.toLowerCase())
                   ? 'bg-fixly-accent text-white'
-                  : 'bg-fixly-bg text-fixly-text-muted'
+                  : 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-transparent hover:border-fixly-accent hover:text-fixly-accent dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-transparent dark:hover:border-fixly-accent dark:hover:text-fixly-accent'
               }`}
             >
               {skill}
@@ -218,7 +230,7 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
           <div className="flex items-center gap-2">
             <button
               onClick={handleViewDetails}
-              className="flex items-center gap-1 px-3 py-2 text-sm bg-fixly-bg hover:bg-fixly-border text-fixly-text rounded-lg transition-colors"
+              className="flex items-center gap-1 px-3 py-2 text-sm bg-fixly-bg dark:bg-gray-700 hover:bg-fixly-border dark:hover:bg-gray-600 text-fixly-text dark:text-gray-200 rounded-lg transition-colors tap-target"
               title="View Details"
             >
               <Eye className="h-4 w-4" />
@@ -227,13 +239,13 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
 
             <button
               onClick={() => setShowComments(true)}
-              className="flex items-center gap-1 px-3 py-2 text-sm bg-fixly-bg hover:bg-fixly-border text-fixly-text rounded-lg transition-colors"
+              className="flex items-center gap-1 px-3 py-2 text-sm bg-fixly-bg dark:bg-gray-700 hover:bg-fixly-border dark:hover:bg-gray-600 text-fixly-text dark:text-gray-200 rounded-lg transition-colors tap-target relative"
               title="Comments"
             >
               <MessageSquare className="h-4 w-4" />
               <span className="hidden sm:inline">Comments</span>
               {job.commentCount > 0 && (
-                <span className="bg-fixly-accent text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                <span className="bg-fixly-accent text-white text-xs rounded-full h-5 w-5 flex items-center justify-center absolute -top-1 -right-1 sm:static sm:ml-1">
                   {job.commentCount > 99 ? '99+' : job.commentCount}
                 </span>
               )}
@@ -241,19 +253,23 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
 
             <button
               onClick={handleApply}
-              disabled={isApplying || job.hasApplied}
-              className={`flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-colors ${
-                job.hasApplied
-                  ? 'bg-green-100 text-green-700 cursor-not-allowed'
+              disabled={isApplying || hasApplied}
+              className={`flex items-center gap-1 px-3 py-2 text-sm rounded-lg transition-colors tap-target ${
+                hasApplied
+                  ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 cursor-not-allowed border border-green-200 dark:border-green-700'
                   : isApplying
-                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'bg-fixly-accent hover:bg-fixly-accent-dark text-white'
+                  ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                  : 'bg-fixly-accent hover:bg-fixly-accent-dark text-white shadow-sm hover:shadow-md'
               }`}
-              title={job.hasApplied ? 'Already Applied' : 'Apply Now'}
+              title={hasApplied ? 'Already Applied' : 'Apply Now'}
             >
-              <Send className="h-4 w-4" />
+              {hasApplied ? (
+                <CheckCircle className="h-4 w-4" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
               <span className="hidden sm:inline">
-                {job.hasApplied ? 'Applied' : isApplying ? 'Applying...' : 'Apply'}
+                {hasApplied ? 'Applied ✓' : isApplying ? 'Applying...' : 'Apply'}
               </span>
             </button>
           </div>

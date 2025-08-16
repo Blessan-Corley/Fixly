@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { MessageCircle } from 'lucide-react';
-import InstagramComments from './InstagramComments';
+import InstagramCommentsRealtime from './InstagramCommentsRealtime';
 
 export default function JobCommentButton({ 
   jobId, 
@@ -26,7 +26,7 @@ export default function JobCommentButton({
         )}
       </button>
 
-      <InstagramComments 
+      <InstagramCommentsRealtime 
         jobId={jobId}
         isOpen={showComments}
         onClose={() => setShowComments(false)}

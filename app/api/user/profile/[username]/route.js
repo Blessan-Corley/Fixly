@@ -29,7 +29,7 @@ export async function GET(request, { params }) {
 
     // Find user by username
     const user = await User.findOne({ username })
-      .select('-password -email -notifications -preferences -privacy -createdAt -updatedAt')
+      .select('-password -email -notifications -preferences -privacy -createdAt -updatedAt +lastActivityAt')
       .lean();
 
     if (!user) {

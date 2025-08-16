@@ -525,7 +525,7 @@ export default function OnboardingPage() {
                         key={index}
                         onClick={() => addSkill(skill)}
                         disabled={userData.skills.includes(skill)}
-                        className="skill-chip hover:bg-fixly-accent/30 text-sm"
+                        className="skill-chip text-sm"
                       >
                         {skill}
                       </button>
@@ -567,7 +567,7 @@ export default function OnboardingPage() {
                               className={`skill-chip text-xs ${
                                 userData.skills.includes(skill)
                                   ? 'opacity-50 cursor-not-allowed'
-                                  : 'hover:bg-fixly-accent/30'
+                                  : ''
                               }`}
                             >
                               {skill}

@@ -270,11 +270,11 @@ export async function GET(request) {
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
 
-    // Validate status parameter
-    const validStatuses = ['open', 'in_progress', 'completed', 'cancelled'];
+    // Validate status parameter - match Job model enum
+    const validStatuses = ['open', 'in_progress', 'completed', 'cancelled', 'disputed', 'expired'];
     if (status && !validStatuses.includes(status)) {
       return NextResponse.json(
-        { message: 'Invalid status parameter' },
+        { message: `Invalid status parameter. Valid options: ${validStatuses.join(', ')}` },
         { status: 400 }
       );
     }
@@ -291,42 +291,78 @@ export async function GET(request) {
 
     const skip = (page - 1) * limit;
 
+    // Before executing query, handle expired jobs if querying for expired status
+    if (status === 'expired') {
+      try {
+        // Update expired jobs in database
+        await Job.updateMany(
+          {
+            createdBy: user._id,
+            status: 'open',
+            deadline: { $lt: new Date() }
+          },
+          {
+            $set: { status: 'expired' }
+          }
+        );
+      } catch (updateError) {
+        console.error('Error updating expired jobs:', updateError);
+        // Continue with the query even if update fails
+      }
+    }
+
     // Execute query with error handling
-    const [jobs, total] = await Promise.all([
-      Job.find(query)
-        .sort(sort)
-        .skip(skip)
-        .limit(limit)
-        .populate('assignedTo', 'name username photoURL rating')
-        .lean(),
-      Job.countDocuments(query)
-    ]);
+    let jobs, total;
+    try {
+      [jobs, total] = await Promise.all([
+        Job.find(query)
+          .sort(sort)
+          .skip(skip)
+          .limit(limit)
+          .populate('assignedTo', 'name username photoURL rating')
+          .lean(),
+        Job.countDocuments(query)
+      ]);
+    } catch (queryError) {
+      console.error('Database query error:', queryError);
+      return NextResponse.json(
+        { message: 'Database query failed. Please try again.' },
+        { status: 500 }
+      );
+    }
 
     // Process jobs with enhanced data
-    const jobsWithCounts = jobs.map(job => ({
-      ...job,
-      applicationCount: job.applications?.filter(app => app.status !== 'withdrawn').length || 0,
-      timeRemaining: (() => {
-        const now = new Date();
-        const deadline = new Date(job.deadline);
-        const diff = deadline - now;
-        
-        if (diff <= 0) return 'Expired';
-        
+    const jobsWithCounts = jobs.map(job => {
+      const now = new Date();
+      const deadline = new Date(job.deadline);
+      const diff = deadline - now;
+      
+      // Calculate time remaining
+      let timeRemaining;
+      if (job.status === 'expired' || diff <= 0) {
+        timeRemaining = 'Expired';
+      } else {
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
         const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         
-        if (days > 0) return `${days} days`;
-        return `${hours} hours`;
-      })(),
-      isUrgent: (() => {
-        const now = new Date();
-        const deadline = new Date(job.deadline);
-        const diff = deadline - now;
-        return diff <= 24 * 60 * 60 * 1000; // Less than 24 hours
-      })(),
-      applications: undefined // Remove applications from response for privacy
-    }));
+        if (days > 0) {
+          timeRemaining = `${days} day${days > 1 ? 's' : ''}`;
+        } else if (hours > 0) {
+          timeRemaining = `${hours} hour${hours > 1 ? 's' : ''}`;
+        } else {
+          timeRemaining = 'Less than 1 hour';
+        }
+      }
+      
+      return {
+        ...job,
+        applicationCount: job.applications?.filter(app => app.status !== 'withdrawn').length || 0,
+        timeRemaining,
+        isUrgent: diff <= 24 * 60 * 60 * 1000 && job.status === 'open', // Only urgent if still open
+        isExpired: job.status === 'expired' || diff <= 0,
+        applications: undefined // Remove applications from response for privacy
+      };
+    });
 
     return NextResponse.json({
       success: true,

@@ -267,13 +267,9 @@ const jobSchema = new mongoose.Schema({
         max: [100000, 'Estimated cost cannot exceed ₹1,00,000']
       }
     }],
-    coverLetter: {
+    description: {
       type: String,
-      maxlength: [800, 'Cover letter cannot exceed 800 characters']
-    },
-    workPlan: {
-      type: String,
-      maxlength: [1500, 'Work plan cannot exceed 1500 characters']
+      maxlength: [600, 'Description cannot exceed 600 characters']
     },
     materialsIncluded: {
       type: Boolean,

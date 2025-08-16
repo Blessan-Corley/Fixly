@@ -1,8 +1,10 @@
-// utils/rateLimiting.js - Enhanced rate limiting with better error handling
+// utils/rateLimiting.js - Enhanced rate limiting with Redis support
 import { NextResponse } from 'next/server';
+import { redisRateLimit, redisHealthCheck } from '../lib/redis';
 
-// In-memory store for rate limiting (in production, use Redis)
+// Fallback in-memory store when Redis is unavailable
 const rateLimitStore = new Map();
+let useRedis = null;
 
 // Rate limit configuration
 const rateLimitConfig = {
@@ -77,14 +79,18 @@ function cleanupExpiredEntries() {
   }
 }
 
-// Enhanced rate limiting function
+// Check Redis availability (cached for performance)
+async function checkRedisAvailability() {
+  if (useRedis === null) {
+    useRedis = await redisHealthCheck();
+    console.log(useRedis ? '✅ Using Redis for rate limiting' : '⚠️ Falling back to in-memory rate limiting');
+  }
+  return useRedis;
+}
+
+// Enhanced rate limiting function with Redis support
 export async function rateLimit(request, type, maxAttempts = 5, windowMs = 15 * 60 * 1000) {
   try {
-    // Clean up expired entries periodically
-    if (Math.random() < 0.1) { // 10% chance to cleanup
-      cleanupExpiredEntries();
-    }
-    
     const clientIP = getClientIP(request);
     const key = `${type}:${clientIP}`;
     const now = Date.now();
@@ -95,6 +101,36 @@ export async function rateLimit(request, type, maxAttempts = 5, windowMs = 15 * 
       windowMs,
       blockDuration: windowMs * 2
     };
+
+    // Try Redis first
+    if (await checkRedisAvailability()) {
+      const windowSeconds = Math.ceil(config.windowMs / 1000);
+      const result = await redisRateLimit(
+        key,
+        config.maxAttempts,
+        windowSeconds,
+        'rate_limit'
+      );
+
+      if (!result.fallback) {
+        return {
+          success: result.success,
+          remainingAttempts: result.remaining,
+          resetTime: result.resetTime,
+          remainingTime: result.retryAfter ? result.retryAfter * 60 * 1000 : (result.resetTime - Date.now()),
+          isBlocked: !result.success,
+          message: result.success ? 
+            `Request allowed. ${result.remaining} attempts remaining.` :
+            `Rate limit exceeded. Try again in ${Math.ceil((result.resetTime - Date.now()) / 1000 / 60)} minutes.`
+        };
+      }
+    }
+
+    // Fallback to in-memory rate limiting
+    // Clean up expired entries periodically
+    if (Math.random() < 0.1) { // 10% chance to cleanup
+      cleanupExpiredEntries();
+    }
     
     // Get existing rate limit data
     const existingData = rateLimitStore.get(key);

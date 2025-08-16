@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../../../providers';
 import { toast } from 'sonner';
+import { toastMessages } from '../../../../../utils/toast';
 import { usePageLoading } from '../../../../../contexts/LoadingContext';
 import { GlobalLoading } from '../../../../../components/ui/GlobalLoading';
 
@@ -58,8 +59,7 @@ function JobApplyContent() {
   const [formData, setFormData] = useState({
     proposedAmount: '',
     timeEstimate: { value: '', unit: 'hours' },
-    coverLetter: '',
-    workPlan: '',
+    description: '', // Replaced coverLetter and workPlan with simple description
     materialsIncluded: false,
     materialsList: [],
     requirements: '',
@@ -183,8 +183,10 @@ function JobApplyContent() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.proposedAmount || !formData.coverLetter) {
-      toast.error('Please fill in all required fields');
+    if (!formData.proposedAmount || !formData.description) {
+      toast.error('Please fill in all required fields', {
+        description: 'Both amount and description are required to submit your application'
+      });
       return;
     }
 
@@ -216,19 +218,24 @@ function JobApplyContent() {
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Application submitted successfully!');
+        toastMessages.job.applied();
         router.push('/dashboard/applications');
       } else {
         if (data.needsUpgrade) {
-          toast.error(data.message);
-          router.push('/dashboard/subscription');
+          toast.error('Upgrade Required', {
+            description: data.message,
+            action: {
+              label: 'Upgrade Now',
+              onClick: () => router.push('/dashboard/subscription')
+            }
+          });
         } else {
-          toast.error(data.message || 'Failed to submit application');
+          toastMessages.job.applicationFailed(data.message);
         }
       }
     } catch (error) {
       console.error('Error submitting application:', error);
-      toast.error('Failed to submit application');
+      toastMessages.job.applicationFailed('Network error occurred');
     } finally {
       setSubmitting(false);
     }
@@ -423,7 +430,7 @@ function JobApplyContent() {
               </div>
             </motion.div>
 
-            {/* Cover Letter */}
+            {/* Application Description */}
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -432,81 +439,30 @@ function JobApplyContent() {
             >
               <h3 className="text-lg font-semibold text-fixly-text mb-4 flex items-center">
                 <FileText className="h-5 w-5 mr-2 text-blue-600" />
-                Cover Letter *
+                Why are you the right fit? *
               </h3>
               
               <div>
                 <textarea
                   required
-                  value={formData.coverLetter}
-                  onChange={(e) => setFormData(prev => ({ ...prev, coverLetter: e.target.value }))}
-                  placeholder="Introduce yourself and explain why you're the perfect fit for this job..."
-                  rows={4}
-                  maxLength={800}
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Briefly explain why you're fit for this job and describe the work you'll do to complete this project..."
+                  rows={5}
+                  maxLength={600}
                   className="textarea-field"
                 />
                 <div className="flex justify-between items-center mt-2">
                   <p className="text-sm text-fixly-text-light">
-                    Tell the client why you're the best choice for their project
+                    Keep it simple and focused - tell them why you're the right choice
                   </p>
                   <span className="text-sm text-fixly-text-light">
-                    {formData.coverLetter.length}/800
+                    {formData.description.length}/600
                   </span>
                 </div>
               </div>
             </motion.div>
 
-            {/* Work Plan - Required for negotiable jobs */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="card"
-            >
-              <h3 className="text-lg font-semibold text-fixly-text mb-4 flex items-center">
-                <Target className="h-5 w-5 mr-2 text-purple-600" />
-                Work Plan {job.budget.type === 'negotiable' && '*'}
-              </h3>
-              
-              {job.budget.type === 'negotiable' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-                  <div className="flex items-start">
-                    <Info className="h-4 w-4 text-amber-600 mr-2 mt-0.5" />
-                    <div>
-                      <p className="text-sm text-amber-800 font-medium">Required for Negotiable Jobs</p>
-                      <p className="text-sm text-amber-700">
-                        Since this job has a negotiable budget, please provide a detailed work plan (minimum 100 characters)
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div>
-                <textarea
-                  value={formData.workPlan}
-                  onChange={(e) => setFormData(prev => ({ ...prev, workPlan: e.target.value }))}
-                  placeholder="Describe your approach, methodology, and step-by-step plan for completing this job..."
-                  rows={6}
-                  maxLength={1500}
-                  className="textarea-field"
-                  required={job.budget.type === 'negotiable'}
-                />
-                <div className="flex justify-between items-center mt-2">
-                  <p className="text-sm text-fixly-text-light">
-                    Break down how you'll complete the project
-                  </p>
-                  <span className="text-sm text-fixly-text-light">
-                    {formData.workPlan.length}/1500
-                    {job.budget.type === 'negotiable' && formData.workPlan.length < 100 && (
-                      <span className="text-red-500 ml-2">
-                        (min 100 chars)
-                      </span>
-                    )}
-                  </span>
-                </div>
-              </div>
-            </motion.div>
 
             {/* Materials */}
             <motion.div 

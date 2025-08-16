@@ -4,9 +4,19 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
+import { rateLimit } from '../../../../utils/rateLimiting';
 
 export async function PUT(request) {
   try {
+    // Apply rate limiting
+    const rateLimitResult = await rateLimit(request, 'privacy_update', 10, 60 * 1000);
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { message: 'Too many requests. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const session = await getServerSession(authOptions);
     if (!session) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });

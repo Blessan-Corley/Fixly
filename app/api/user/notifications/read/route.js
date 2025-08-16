@@ -26,11 +26,11 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { notificationId } = body;
+    const { notificationId, notificationIds } = body;
 
-    if (!notificationId) {
+    if (!notificationId && (!notificationIds || !Array.isArray(notificationIds))) {
       return NextResponse.json(
-        { message: 'Notification ID is required' },
+        { message: 'Notification ID or array of IDs required' },
         { status: 400 }
       );
     }
@@ -45,21 +45,35 @@ export async function POST(request) {
       );
     }
 
-    // Find and mark the notification as read
-    const notification = user.notifications.id(notificationId);
-    if (!notification) {
-      return NextResponse.json(
-        { message: 'Notification not found' },
-        { status: 404 }
-      );
+    // Handle single notification
+    if (notificationId) {
+      const notification = user.notifications.id(notificationId);
+      if (notification) {
+        notification.read = true;
+        notification.readAt = new Date();
+      }
     }
 
-    notification.read = true;
+    // Handle multiple notifications
+    if (notificationIds && Array.isArray(notificationIds)) {
+      notificationIds.forEach(id => {
+        const notification = user.notifications.id(id);
+        if (notification) {
+          notification.read = true;
+          notification.readAt = new Date();
+        }
+      });
+    }
+
     await user.save();
+
+    // Count remaining unread notifications
+    const unreadCount = user.notifications.filter(notif => !notif.read).length;
 
     return NextResponse.json({
       success: true,
-      message: 'Notification marked as read'
+      message: 'Notification(s) marked as read',
+      unreadCount
     });
 
   } catch (error) {

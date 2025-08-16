@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { usePageLoading } from '../../../contexts/LoadingContext';
 import { GlobalLoading } from '../../../components/ui/GlobalLoading';
 import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
+import { ProfileVerificationStatus } from '@/components/dashboard/VerificationPrompt';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
@@ -335,6 +336,9 @@ export default function ProfilePage() {
               )}
             </div>
           </ProfileSection>
+
+          {/* Account Verification */}
+          <ProfileVerificationStatus user={user} showActions={true} />
         </div>
 
         {/* Right Column - Detailed Information */}
@@ -552,7 +556,7 @@ export default function ProfilePage() {
                               key={index}
                               onClick={() => addSkill(skill)}
                               disabled={formData.skills.includes(skill)}
-                              className="skill-chip hover:bg-fixly-accent/30 text-sm"
+                              className="skill-chip text-sm"
                             >
                               {skill}
                             </button>
@@ -592,7 +596,7 @@ export default function ProfilePage() {
                                     className={`skill-chip text-xs ${
                                       formData.skills.includes(skill)
                                         ? 'opacity-50 cursor-not-allowed'
-                                        : 'hover:bg-fixly-accent/30'
+                                        : ''
                                     }`}
                                   >
                                     {skill}

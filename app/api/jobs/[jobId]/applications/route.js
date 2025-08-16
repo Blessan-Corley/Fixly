@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
+import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
 
 export const dynamic = 'force-dynamic';
@@ -122,6 +123,16 @@ export async function PUT(request, { params }) {
       job.fixer = application.fixer;
       job.status = 'in_progress';
       job.acceptedApplication = applicationId;
+      
+      // Deduct credit for the accepted fixer (only when application is accepted)
+      const acceptedFixer = await User.findById(application.fixer);
+      if (acceptedFixer && acceptedFixer.plan?.type !== 'pro') {
+        if (!acceptedFixer.plan) {
+          acceptedFixer.plan = { type: 'free', creditsUsed: 0, status: 'active' };
+        }
+        acceptedFixer.plan.creditsUsed = (acceptedFixer.plan.creditsUsed || 0) + 1;
+        await acceptedFixer.save();
+      }
       
       // Reject other applications
       job.applications.forEach(app => {

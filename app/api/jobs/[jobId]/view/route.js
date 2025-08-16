@@ -68,7 +68,7 @@ export async function POST(request, { params }) {
         job.viewedBy = job.viewedBy.slice(-100);
       }
 
-      await job.save();
+      await job.save({ validateBeforeSave: false });
     }
 
     return NextResponse.json({ success: true });

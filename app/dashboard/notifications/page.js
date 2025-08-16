@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../providers';
 import { toast } from 'sonner';
+import { toastMessages } from '../../../utils/toast';
 
 export default function NotificationsPage() {
   const { user } = useApp();
@@ -66,11 +67,11 @@ export default function NotificationsPage() {
       if (response.ok) {
         setNotifications(data.notifications || []);
       } else {
-        toast.error(data.message || 'Failed to fetch notifications');
+        toastMessages.error.generic();
       }
     } catch (error) {
       console.error('Error fetching notifications:', error);
-      toast.error('Failed to fetch notifications');
+      toastMessages.error.network();
     } finally {
       setLoading(false);
     }
@@ -98,11 +99,13 @@ export default function NotificationsPage() {
         );
       } else {
         const data = await response.json();
-        toast.error(data.message || 'Failed to mark notification as read');
+        toast.error('Mark as read failed', {
+          description: data.message || 'Please try again'
+        });
       }
     } catch (error) {
       console.error('Error marking notification as read:', error);
-      toast.error('Failed to mark notification as read');
+      toastMessages.error.network();
     } finally {
       setMarkingAsRead(prev => {
         const newSet = new Set(prev);
@@ -130,14 +133,18 @@ export default function NotificationsPage() {
             readAt: new Date() 
           }))
         );
-        toast.success('All notifications marked as read');
+        toast.success('All notifications marked as read ✅', {
+          description: 'Your notification list is now clear'
+        });
       } else {
         const data = await response.json();
-        toast.error(data.message || 'Failed to mark all notifications as read');
+        toast.error('Mark all as read failed', {
+          description: data.message || 'Please try again'
+        });
       }
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
-      toast.error('Failed to mark all notifications as read');
+      toastMessages.error.network();
     }
   };
 
@@ -155,14 +162,18 @@ export default function NotificationsPage() {
         setNotifications(prev => 
           prev.filter(notification => notification._id !== notificationId)
         );
-        toast.success('Notification deleted');
+        toast.success('Notification deleted', {
+          description: 'The notification has been removed'
+        });
       } else {
         const data = await response.json();
-        toast.error(data.message || 'Failed to delete notification');
+        toast.error('Delete failed', {
+          description: data.message || 'Please try again'
+        });
       }
     } catch (error) {
       console.error('Error deleting notification:', error);
-      toast.error('Failed to delete notification');
+      toastMessages.error.network();
     }
   };
 
