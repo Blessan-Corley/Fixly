@@ -57,12 +57,12 @@
     --secondary-foreground: 203 213 225;
     --muted: 39 48 63; /* #27303F - Subtle muted background */
     --muted-foreground: 148 163 184; /* #94A3B8 - Gentle muted text */
-    --accent: 20 184 166; /* Matching teal accent */
+    --accent: 45 212 191; /* #2DD4BF - Brighter teal for better visibility in dark mode */
     --accent-foreground: 16 20 28;
     
     /* Enhanced Fixly specific colors for dark mode - Subtle & Consistent */
     --fixly-primary: 20 184 166; /* #14B8A6 - Refined teal, matches light mode energy */
-    --fixly-primary-light: 45 212 191; /* #2DD4BF - Brighter but not harsh */
+    --fixly-primary-light: 56 223 204; /* #38DFCC - Even brighter for better contrast */
     --fixly-primary-dark: 13 148 136; /* #0D9488 - Deeper teal */
     --fixly-primary-hover: 15 166 151; /* #0FA695 - Gentle hover */
     --fixly-gradient-start: 20 184 166; /* #14B8A6 */
@@ -135,6 +135,139 @@
   
   html {
     scroll-behavior: smooth;
+  }
+
+  /* Mobile optimizations */
+  @media (max-width: 768px) {
+    html {
+      font-size: 14px;
+    }
+    
+    body {
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  /* Safe area insets for modern mobile devices */
+  .safe-area-pt {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-pl {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-area-pr {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Touch-friendly tap targets */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Improved touch scrolling */
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* Mobile-specific improvements */
+  @media (max-width: 768px) {
+    /* Better spacing for mobile */
+    .container {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+
+    /* Larger tap targets */
+    button, .btn, [role="button"] {
+      min-height: 44px;
+      padding: 12px 16px;
+    }
+
+    /* Mobile-friendly forms */
+    input, textarea, select {
+      font-size: 16px; /* Prevents zoom on iOS */
+      padding: 12px 16px;
+    }
+
+    /* Better modal sizing */
+    .modal {
+      margin: 0;
+      border-radius: 0;
+      max-height: 100vh;
+    }
+
+    /* Improved card spacing */
+    .card {
+      margin-bottom: 1rem;
+      border-radius: 12px;
+    }
+
+    /* Mobile navigation improvements */
+    .nav-item {
+      padding: 12px 16px;
+    }
+
+    /* Better table handling on mobile */
+    table {
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 8px 12px;
+    }
+  }
+
+  /* iPhone X and newer safe areas */
+  @supports (padding: max(0px)) {
+    .safe-area-inset {
+      padding-top: max(0px, env(safe-area-inset-top));
+      padding-bottom: max(0px, env(safe-area-inset-bottom));
+      padding-left: max(0px, env(safe-area-inset-left));
+      padding-right: max(0px, env(safe-area-inset-right));
+    }
+  }
+
+  /* Dark mode mobile improvements */
+  @media (max-width: 768px) {
+    .dark {
+      /* Better contrast for mobile dark mode */
+      --fixly-bg: rgb(17, 24, 39);
+      --fixly-card: rgb(31, 41, 55);
+      --fixly-border: rgb(55, 65, 81);
+    }
+
+    .dark input, .dark textarea, .dark select {
+      background-color: rgb(31, 41, 55);
+      border-color: rgb(55, 65, 81);
+    }
+  }
+
+  /* Accessibility improvements for mobile */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .btn-primary {
+      border: 2px solid currentColor;
+    }
+    
+    .card {
+      border-width: 2px;
+    }
   }
 }
 
@@ -217,11 +350,11 @@
   
   /* Skill Chips - Modern and Interactive */
   .skill-chip {
-    @apply inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-fixly-secondary-bg text-fixly-secondary border border-fixly-secondary/30 hover:bg-fixly-primary-bg hover:text-fixly-primary hover:border-fixly-primary/30 transition-all duration-200 cursor-pointer;
+    @apply inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-transparent hover:border-fixly-accent hover:text-fixly-accent transition-all duration-200 cursor-pointer dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-transparent dark:hover:border-fixly-accent dark:hover:text-fixly-accent;
   }
   
   .skill-chip-selected {
-    @apply bg-fixly-primary-bg text-fixly-primary border border-fixly-primary/40 ring-2 ring-fixly-primary/20;
+    @apply bg-fixly-accent text-white border border-fixly-accent;
   }
   
   /* Loading States */

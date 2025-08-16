@@ -6,6 +6,9 @@ import { SessionProvider, useSession } from 'next-auth/react';
 import { Toaster } from 'sonner';
 import { LoadingProvider } from '../contexts/LoadingContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
+import { SocketProvider } from '../contexts/SocketContext';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import QueryProvider, { QueryPerformanceMonitor, QueryErrorBoundary } from '../components/providers/QueryProvider';
 
 // App Context
 const AppContext = createContext();
@@ -27,6 +30,9 @@ function AppProviderContent({ children }) {
   const [error, setError] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const notificationPollRef = useRef(null);
+  
+  // Initialize network status monitoring
+  const { isOnline, checkConnection } = useNetworkStatus();
 
   // ✅ CRITICAL FIX: Use refs to prevent excessive API calls
   const lastSessionId = useRef(null);
@@ -287,7 +293,10 @@ function AppProviderContent({ children }) {
     updateUser,
     session,
     isAuthenticated: !!session,
-    error
+    error,
+    // Network status
+    isOnline,
+    checkConnection
   };
 
   return (
@@ -300,43 +309,50 @@ function AppProviderContent({ children }) {
 // Main Providers Component
 export function Providers({ children }) {
   return (
-    <SessionProvider 
-      refetchInterval={0} // ✅ CRITICAL: Disable automatic session refetching
-      refetchOnWindowFocus={false} // ✅ CRITICAL: Disable refetch on window focus
-    >
-      <ThemeProvider>
-        <LoadingProvider>
-          <AppProviderContent>
-          {children}
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: '#ffffff',
-                border: '1px solid #e1e3e0',
-                color: '#374650',
-              },
-              success: {
-                style: {
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  color: '#166534',
-                },
-              },
-              error: {
-                style: {
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  color: '#dc2626',
-                },
-              },
-            }}
-          />
-        </AppProviderContent>
-        </LoadingProvider>
-      </ThemeProvider>
-    </SessionProvider>
+    <QueryErrorBoundary>
+      <QueryProvider>
+        <SessionProvider 
+          refetchInterval={0} // ✅ CRITICAL: Disable automatic session refetching
+          refetchOnWindowFocus={false} // ✅ CRITICAL: Disable refetch on window focus
+        >
+          <ThemeProvider>
+            <LoadingProvider>
+              <AppProviderContent>
+                <SocketProvider>
+                  {children}
+                  <QueryPerformanceMonitor />
+                </SocketProvider>
+                <Toaster 
+                  position="top-right"
+                  toastOptions={{
+                    duration: 4000,
+                    style: {
+                      background: '#ffffff',
+                      border: '1px solid #e1e3e0',
+                      color: '#374650',
+                    },
+                    success: {
+                      style: {
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                        color: '#166534',
+                      },
+                    },
+                    error: {
+                      style: {
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        color: '#dc2626',
+                      },
+                    },
+                  }}
+                />
+              </AppProviderContent>
+            </LoadingProvider>
+          </ThemeProvider>
+        </SessionProvider>
+      </QueryProvider>
+    </QueryErrorBoundary>
   );
 }
 

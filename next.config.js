@@ -3,7 +3,17 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['mongoose'],
-    webpackBuildWorker: true
+    webpackBuildWorker: true,
+    optimizeCss: true,
+    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'framer-motion', '@tanstack/react-query'],
+    turbo: {
+      rules: {
+        '*.svg': {
+          loaders: ['@svgr/webpack'],
+          as: '*.js',
+        },
+      },
+    }
   },
   
   // ⚠️ SECURITY: Only expose PUBLIC variables here
@@ -19,7 +29,8 @@ const nextConfig = {
     NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   },
   
-  webpack: (config, { isServer }) => {
+  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
+    // Client-side optimizations
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -49,7 +60,84 @@ const nextConfig = {
         'undici': 'undici',
         'firebase-admin': 'firebase-admin'
       });
+
+      // Bundle splitting and optimization
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          chunks: 'all',
+          cacheGroups: {
+            // Vendor chunk for stable dependencies
+            vendor: {
+              test: /[\\/]node_modules[\\/]/,
+              name: 'vendors',
+              priority: 10,
+              reuseExistingChunk: true,
+            },
+            // React ecosystem chunk
+            react: {
+              test: /[\\/]node_modules[\\/](react|react-dom|react-router)[\\/]/,
+              name: 'react',
+              priority: 20,
+              reuseExistingChunk: true,
+            },
+            // UI libraries chunk
+            ui: {
+              test: /[\\/]node_modules[\\/](framer-motion|lucide-react)[\\/]/,
+              name: 'ui',
+              priority: 15,
+              reuseExistingChunk: true,
+            },
+            // Query and state management
+            query: {
+              test: /[\\/]node_modules[\\/](@tanstack\/react-query|socket\.io-client)[\\/]/,
+              name: 'query',
+              priority: 15,
+              reuseExistingChunk: true,
+            },
+            // Common chunk for frequently used modules
+            common: {
+              name: 'common',
+              minChunks: 2,
+              priority: 5,
+              reuseExistingChunk: true,
+            },
+          },
+        },
+      };
+
+      // Tree shaking and dead code elimination
+      config.optimization.usedExports = true;
+      config.optimization.sideEffects = false;
     }
+
+    // Production optimizations
+    if (!dev) {
+      // Analyze bundle size in development
+      if (process.env.ANALYZE === 'true') {
+        const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
+        config.plugins.push(
+          new BundleAnalyzerPlugin({
+            analyzerMode: 'server',
+            openAnalyzer: true,
+          })
+        );
+      }
+
+      // Compression and minification
+      config.optimization.minimize = true;
+      
+      // Remove console logs in production
+      config.optimization.minimizer[0].options.terserOptions.compress.drop_console = true;
+    }
+
+    // Performance monitoring
+    config.plugins.push(
+      new webpack.DefinePlugin({
+        'process.env.BUILD_ID': JSON.stringify(buildId),
+        'process.env.BUILD_TIME': JSON.stringify(new Date().toISOString()),
+      })
+    );
 
     return config;
   },
@@ -100,12 +188,20 @@ const nextConfig = {
   },
   
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   
   eslint: {
-    ignoreDuringBuilds: true,
-  }
+    ignoreDuringBuilds: false,
+  },
+  
+  // Production optimizations
+  swcMinify: true,
+  compress: true,
+  
+  // Performance improvements
+  poweredByHeader: false,
+  
 };
 
 module.exports = nextConfig;

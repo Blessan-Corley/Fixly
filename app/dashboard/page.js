@@ -25,6 +25,7 @@ import { useApp } from '../providers';
 import { usePageLoading } from '../../contexts/LoadingContext';
 import { GlobalLoading } from '../../components/ui/GlobalLoading';
 import { toast } from 'sonner';
+import VerificationPrompt from '@/components/dashboard/VerificationPrompt';
 
 export default function DashboardPage() {
   const { user, loading } = useApp();
@@ -532,31 +533,8 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {!user?.isVerified && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg"
-        >
-          <div className="flex items-center">
-            <AlertCircle className="h-5 w-5 text-yellow-600 mr-3" />
-            <div className="flex-1">
-              <div className="font-medium text-yellow-800">
-                Verify Your Account
-              </div>
-              <div className="text-sm text-yellow-700">
-                Verify your account to unlock all features and build trust.
-              </div>
-            </div>
-            <button
-              onClick={() => router.push('/dashboard/profile')}
-              className="btn-primary ml-4"
-            >
-              Verify Now
-            </button>
-          </div>
-        </motion.div>
-      )}
+      {/* Verification Prompt */}
+      <VerificationPrompt variant="banner" />
 
       {/* Stats Section */}
       {renderStats()}

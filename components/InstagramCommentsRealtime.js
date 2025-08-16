@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -9,11 +9,13 @@ import {
   MoreHorizontal,
   Trash2,
   Clock,
-  ArrowLeft,
-  Loader
+  ArrowLeft
 } from 'lucide-react';
 import { useApp } from '../app/providers';
 import { toast } from 'sonner';
+import { toastMessages } from '../utils/toast';
+import ConfirmModal from './ui/ConfirmModal';
+import { useRealTimeComments } from '../hooks/useRealTime';
 
 export default function InstagramCommentsRealtime({ 
   jobId, 
@@ -31,138 +33,57 @@ export default function InstagramCommentsRealtime({
   const [expandedComments, setExpandedComments] = useState(new Set());
   const [showDropdown, setShowDropdown] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
   
-  // Real-time connection
-  const eventSourceRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
-  const [connectionAttempts, setConnectionAttempts] = useState(0);
-  const maxReconnectAttempts = 5;
+  // Real-time comments using custom hook
+  const { 
+    data: realTimeComments, 
+    loading: realTimeLoading, 
+    refresh: refreshComments 
+  } = useRealTimeComments(isOpen ? jobId : null);
 
-  // Initialize real-time connection
+  // Update comments when real-time data changes with smooth animations
   useEffect(() => {
-    if (!isOpen || !jobId) {
-      // Clean up connection when modal closes
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      return;
-    }
-
-    connectToRealTimeUpdates();
-
-    // Cleanup on unmount
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, [isOpen, jobId]);
-
-  const connectToRealTimeUpdates = useCallback(() => {
-    if (!jobId || eventSourceRef.current) return;
-
-    console.log('📡 Connecting to real-time comments for job:', jobId);
-    
-    try {
-      eventSourceRef.current = new EventSource(`/api/jobs/${jobId}/comments/stream`);
+    if (realTimeComments?.comments) {
+      const newComments = realTimeComments.comments;
+      const currentComments = comments;
       
-      eventSourceRef.current.onopen = () => {
-        console.log('✅ Real-time connection established');
-        setIsConnected(true);
-        setConnectionAttempts(0);
-      };
-
-      eventSourceRef.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          switch (data.type) {
-            case 'connected':
-              console.log('📡 Real-time comments connected');
-              break;
-              
-            case 'comments_update':
-              setIsUpdating(true);
-              setComments(data.comments || []);
-              setTimeout(() => setIsUpdating(false), 500);
-              break;
-              
-            case 'broadcast':
-              console.log('📢 Received broadcast:', data.data);
-              break;
-              
-            default:
-              console.log('📨 Unknown message type:', data.type);
-          }
-        } catch (error) {
-          console.error('❌ Error parsing SSE data:', error);
-        }
-      };
-
-      eventSourceRef.current.onerror = (error) => {
-        console.error('❌ SSE connection error:', error);
-        setIsConnected(false);
+      // Check if there are new comments to animate in
+      if (newComments.length > currentComments.length) {
+        // Add new comments with entrance animation
+        setComments(newComments);
         
-        if (eventSourceRef.current) {
-          eventSourceRef.current.close();
-          eventSourceRef.current = null;
-        }
-
-        // Attempt to reconnect with exponential backoff
-        if (connectionAttempts < maxReconnectAttempts) {
-          const delay = Math.min(1000 * Math.pow(2, connectionAttempts), 30000);
-          console.log(`🔄 Reconnecting in ${delay}ms (attempt ${connectionAttempts + 1})`);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            setConnectionAttempts(prev => prev + 1);
-            connectToRealTimeUpdates();
-          }, delay);
-        } else {
-          console.log('❌ Max reconnection attempts reached');
-          toast.error('Real-time updates disconnected. Please refresh the page.');
-        }
-      };
-
-    } catch (error) {
-      console.error('❌ Failed to create SSE connection:', error);
-      setIsConnected(false);
-    }
-  }, [jobId, connectionAttempts]);
-
-  // Fallback: Fetch comments initially
-  const fetchComments = useCallback(async () => {
-    if (!jobId || isConnected) return; // Don't fetch if real-time is connected
-    
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/comments`);
-      const data = await response.json();
-      
-      if (response.ok) {
-        setComments(data.comments || []);
+        // Smooth scroll to new content if user is near bottom
+        setTimeout(() => {
+          const container = document.querySelector('.comments-container');
+          if (container) {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+            
+            if (isNearBottom) {
+              container.scrollTo({
+                top: scrollHeight,
+                behavior: 'smooth'
+              });
+            }
+          }
+        }, 100);
       } else {
-        toast.error(data.message || 'Failed to load comments');
+        // Just update existing comments (likes, replies, etc.)
+        setComments(newComments);
       }
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-      toast.error('Failed to load comments');
-    } finally {
-      setLoading(false);
     }
-  }, [jobId, isConnected]);
+  }, [realTimeComments, comments]);
 
-  // Load comments when opened (fallback only)
-  useEffect(() => {
-    if (isOpen && jobId && !isConnected) {
-      fetchComments();
-    }
-  }, [isOpen, jobId, isConnected, fetchComments]);
+  // Delete confirmation modal
+  const [deleteModal, setDeleteModal] = useState({ 
+    isOpen: false, 
+    commentId: null, 
+    replyId: null,
+    loading: false 
+  });
+
+  // Real-time comments are handled by the useRealTimeComments hook
+  // No additional connection logic needed here
 
   // Post new comment with optimistic updates
   const handlePostComment = async () => {
@@ -182,25 +103,21 @@ export default function InstagramCommentsRealtime({
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Comment posted successfully!', { 
-          duration: 2000,
-          style: { 
-            background: 'green',
-            color: 'white'
-          }
+        toast.success('Comment posted! 💬', {
+          description: 'Your comment is now visible to everyone'
         });
         
-        // If not connected to real-time, update manually
-        if (!isConnected) {
-          setComments(prev => [...prev, data.comment]);
-        }
+        // Real-time hook will handle the update automatically
+        console.log('✅ Comment posted successfully');
       } else {
         setNewComment(originalComment);
-        toast.error(data.message || 'Failed to post comment');
+        toast.error('Comment failed to post', {
+          description: data.message || 'Please try again'
+        });
       }
     } catch (error) {
       setNewComment(originalComment);
-      toast.error('Network error. Please try again.');
+      toastMessages.error.network();
     }
   };
 
@@ -224,33 +141,24 @@ export default function InstagramCommentsRealtime({
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Reply posted successfully!', { 
-          duration: 2000,
-          style: { 
-            background: 'green',
-            color: 'white'
-          }
+        toast.success('Reply posted! 💬', {
+          description: 'Your reply has been added'
         });
         
-        // If not connected to real-time, update manually
-        if (!isConnected) {
-          setComments(prev => prev.map(comment => {
-            if (comment._id === commentId) {
-              return { ...comment, replies: data.comment.replies };
-            }
-            return comment;
-          }));
-        }
+        // Real-time hook will handle the update automatically
+        console.log('✅ Reply posted successfully');
       } else {
         setReplyText(originalReply);
         setReplyingTo(originalReplyingTo);
-        toast.error(data.message || 'Failed to post reply');
+        toast.error('Reply failed to post', {
+          description: data.message || 'Please try again'
+        });
       }
     } catch (error) {
       console.error('❌ Reply post error:', error);
       setReplyText(originalReply);
       setReplyingTo(originalReplyingTo);
-      toast.error('Network error. Please try again.');
+      toastMessages.error.network();
     }
   };
 
@@ -268,93 +176,78 @@ export default function InstagramCommentsRealtime({
       const data = await response.json();
 
       if (response.ok) {
+        // Real-time hook will handle the update automatically
         console.log('✅ Like toggled successfully');
-        
-        // If not connected to real-time, update manually
-        if (!isConnected) {
-          setComments(prevComments => 
-            prevComments.map(comment => {
-              if (comment._id === commentId) {
-                if (replyId) {
-                  return {
-                    ...comment,
-                    replies: comment.replies.map(reply => {
-                      if (reply._id === replyId) {
-                        return {
-                          ...reply,
-                          likes: data.liked 
-                            ? [...(reply.likes || []), { user: user._id, likedAt: new Date() }]
-                            : reply.likes.filter(like => like.user !== user._id)
-                        };
-                      }
-                      return reply;
-                    })
-                  };
-                } else {
-                  return {
-                    ...comment,
-                    likes: data.liked 
-                      ? [...(comment.likes || []), { user: user._id, likedAt: new Date() }]
-                      : comment.likes.filter(like => like.user !== user._id)
-                  };
-                }
-              }
-              return comment;
-            })
-          );
-        }
       } else {
-        toast.error(data.message || 'Failed to like comment');
+        toast.error('Like failed', {
+          description: data.message || 'Please try again'
+        });
       }
     } catch (error) {
       console.error('❌ Like error:', error);
-      toast.error('Network error. Please try again.');
+      toastMessages.error.network();
     }
   };
 
+  // Open delete confirmation modal
+  const openDeleteModal = (commentId, replyId = null) => {
+    setDeleteModal({ 
+      isOpen: true, 
+      commentId, 
+      replyId, 
+      loading: false 
+    });
+    setShowDropdown(null);
+  };
+
+  // Close delete modal
+  const closeDeleteModal = () => {
+    setDeleteModal({ 
+      isOpen: false, 
+      commentId: null, 
+      replyId: null, 
+      loading: false 
+    });
+  };
+
   // Delete comment or reply
-  const handleDelete = async (commentId, replyId = null) => {
+  const handleDelete = async () => {
     if (!user) return;
 
-    const confirmMessage = replyId ? 'Delete this reply?' : 'Delete this comment?';
-    if (!confirm(confirmMessage)) return;
-
-    setShowDropdown(null);
+    setDeleteModal(prev => ({ ...prev, loading: true }));
     
     try {
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentId, replyId })
+        body: JSON.stringify({ 
+          commentId: deleteModal.commentId, 
+          replyId: deleteModal.replyId 
+        })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        toast.success(replyId ? 'Reply deleted' : 'Comment deleted');
+        toast.success(deleteModal.replyId ? 'Reply deleted' : 'Comment deleted', {
+          description: 'The content has been removed'
+        });
+        closeDeleteModal();
         
-        // If not connected to real-time, update manually
-        if (!isConnected) {
-          if (replyId) {
-            setComments(prev => prev.map(comment => {
-              if (comment._id === commentId) {
-                return {
-                  ...comment,
-                  replies: comment.replies.filter(reply => reply._id !== replyId)
-                };
-              }
-              return comment;
-            }));
-          } else {
-            setComments(prev => prev.filter(comment => comment._id !== commentId));
-          }
-        }
+        // Real-time hook will handle the update automatically
+        console.log('✅ Comment/reply deleted successfully');
       } else {
-        toast.error(data.message || 'Failed to delete');
+        toast.error('Delete failed', {
+          description: data.message || 'Please try again'
+        });
       }
     } catch (error) {
       console.error('Error deleting:', error);
-      toast.error('Failed to delete');
+      toast.error('Delete failed', {
+        description: 'Network error occurred'
+      });
+    } finally {
+      setDeleteModal(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -389,10 +282,10 @@ export default function InstagramCommentsRealtime({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-fixly-card rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden border border-fixly-border/20"
+        className="bg-fixly-card dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden border border-fixly-border/20 dark:border-gray-700"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-fixly-border">
+        <div className="flex items-center justify-between p-4 border-b border-fixly-border dark:border-gray-700">
           <button
             onClick={onClose}
             className="p-1 hover:bg-fixly-accent/10 rounded-full transition-colors"
@@ -408,14 +301,11 @@ export default function InstagramCommentsRealtime({
             {isUpdating && (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-fixly-accent"></div>
             )}
-            {isConnected && !isUpdating && (
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            )}
           </div>
         </div>
 
         {/* Comments List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto comments-container">
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fixly-accent"></div>
@@ -446,7 +336,7 @@ export default function InstagramCommentsRealtime({
                         className="h-8 w-8 rounded-full object-cover flex-shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="bg-fixly-bg rounded-2xl px-3 py-2">
+                        <div className="bg-fixly-bg dark:bg-gray-700 rounded-2xl px-3 py-2">
                           <div className="flex items-center justify-between">
                             <span className="font-semibold text-sm text-fixly-text">
                               {comment.author?.name || 'Unknown User'}
@@ -462,7 +352,7 @@ export default function InstagramCommentsRealtime({
                                 {showDropdown === comment._id && (
                                   <div className="absolute right-0 top-full mt-1 bg-fixly-card border border-fixly-border rounded-lg shadow-lg py-1 z-10">
                                     <button
-                                      onClick={() => handleDelete(comment._id)}
+                                      onClick={() => openDeleteModal(comment._id)}
                                       className="flex items-center space-x-2 px-3 py-1 text-red-600 hover:bg-red-50 w-full text-left"
                                     >
                                       <Trash2 className="h-4 w-4" />
@@ -539,7 +429,7 @@ export default function InstagramCommentsRealtime({
                                   className="h-6 w-6 rounded-full object-cover flex-shrink-0"
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <div className="bg-fixly-accent/5 rounded-2xl px-3 py-2">
+                                  <div className="bg-fixly-accent/5 dark:bg-gray-700 rounded-2xl px-3 py-2">
                                     <div className="flex items-center justify-between">
                                       <span className="font-semibold text-xs text-fixly-text">
                                         {reply.author?.name || 'Unknown User'}
@@ -555,7 +445,7 @@ export default function InstagramCommentsRealtime({
                                           {showDropdown === reply._id && (
                                             <div className="absolute right-0 top-full mt-1 bg-fixly-card border border-fixly-border rounded-lg shadow-lg py-1 z-10">
                                               <button
-                                                onClick={() => handleDelete(comment._id, reply._id)}
+                                                onClick={() => openDeleteModal(comment._id, reply._id)}
                                                 className="flex items-center space-x-2 px-3 py-1 text-red-600 hover:bg-red-50 w-full text-left"
                                               >
                                                 <Trash2 className="h-3 w-3" />
@@ -684,7 +574,7 @@ export default function InstagramCommentsRealtime({
 
         {/* New Comment Input */}
         {user && (
-          <div className="border-t border-fixly-border p-4">
+          <div className="border-t border-fixly-border dark:border-gray-700 p-4">
             <div className="flex space-x-3">
               <img
                 src={user.photoURL || '/default-avatar.png'}
@@ -697,7 +587,7 @@ export default function InstagramCommentsRealtime({
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   placeholder="Add a comment..."
-                  className="flex-1 bg-fixly-bg border border-fixly-border rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-fixly-accent"
+                  className="flex-1 bg-fixly-bg dark:bg-gray-700 border border-fixly-border dark:border-gray-600 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-fixly-accent text-fixly-text dark:text-gray-100"
                   onKeyPress={(e) => e.key === 'Enter' && handlePostComment()}
                 />
                 <button
@@ -710,19 +600,24 @@ export default function InstagramCommentsRealtime({
               </div>
             </div>
             
-            {/* Connection Status */}
-            <div className="flex items-center justify-center mt-2">
-              <span className={`text-xs flex items-center gap-1 ${
-                isConnected ? 'text-green-600' : 'text-orange-600'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  isConnected ? 'bg-green-500 animate-pulse' : 'bg-orange-500'
-                }`}></div>
-                {isConnected ? 'Real-time connected' : 'Connecting...'}
-              </span>
-            </div>
           </div>
         )}
+
+        {/* Delete Confirmation Modal */}
+        <ConfirmModal
+          isOpen={deleteModal.isOpen}
+          onClose={closeDeleteModal}
+          onConfirm={handleDelete}
+          title={deleteModal.replyId ? "Delete Reply" : "Delete Comment"}
+          description={deleteModal.replyId 
+            ? "Are you sure you want to delete this reply? This action cannot be undone."
+            : "Are you sure you want to delete this comment and all its replies? This action cannot be undone."
+          }
+          confirmText="Delete"
+          cancelText="Cancel"
+          type="danger"
+          loading={deleteModal.loading}
+        />
       </motion.div>
     </div>
   );

@@ -74,6 +74,14 @@ const userSchema = new mongoose.Schema({
       message: 'Username must be 3-20 characters, contain only lowercase letters, numbers, and underscores (no spaces or special characters), and cannot be a reserved word'
     }
   },
+  usernameChangeCount: {
+    type: Number,
+    default: 0,
+    max: [3, 'Maximum 3 username changes allowed']
+  },
+  lastUsernameChange: {
+    type: Date
+  },
   email: {
     type: String,
     required: [true, 'Email is required'],

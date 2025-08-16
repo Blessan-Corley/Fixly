@@ -59,11 +59,16 @@ export async function POST(request, { params }) {
     // Check if user is involved in this job
     const isHirer = job.createdBy.toString() === user._id.toString();
     const isFixer = job.assignedTo && job.assignedTo.toString() === user._id.toString();
-    const hasApplied = job.applications.some(app => 
-      app.fixer.toString() === user._id.toString()
-    );
+    
+    // Messages are only allowed when job is accepted (has assignedTo)
+    if (!job.assignedTo) {
+      return NextResponse.json(
+        { message: 'Messages are only available after the job has been accepted' },
+        { status: 403 }
+      );
+    }
 
-    if (!isHirer && !isFixer && !hasApplied) {
+    if (!isHirer && !isFixer) {
       return NextResponse.json(
         { message: 'You can only message jobs you are involved in' },
         { status: 403 }
@@ -170,11 +175,16 @@ export async function GET(request, { params }) {
     // Check if user can view messages
     const isHirer = job.createdBy.toString() === user._id.toString();
     const isFixer = job.assignedTo && job.assignedTo.toString() === user._id.toString();
-    const hasApplied = job.applications.some(app => 
-      app.fixer.toString() === user._id.toString()
-    );
+    
+    // Messages are only available when job is accepted (has assignedTo)
+    if (!job.assignedTo) {
+      return NextResponse.json(
+        { message: 'Messages are only available after the job has been accepted' },
+        { status: 403 }
+      );
+    }
 
-    if (!isHirer && !isFixer && !hasApplied) {
+    if (!isHirer && !isFixer) {
       return NextResponse.json(
         { message: 'Access denied' },
         { status: 403 }

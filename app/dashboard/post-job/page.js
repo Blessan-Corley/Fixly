@@ -409,7 +409,7 @@ function PostJobContent() {
                     className={`skill-chip ${
                       formData.skillsRequired.includes(skill)
                         ? 'opacity-50 cursor-not-allowed'
-                        : 'hover:bg-fixly-accent/30'
+                        : ''
                     }`}
                   >
                     {skill}

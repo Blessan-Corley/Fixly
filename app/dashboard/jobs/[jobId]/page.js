@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { canApplyToJob, getRemainingApplications } from '@/utils/creditUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -43,7 +44,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../providers';
 import { toast } from 'sonner';
-import InstagramComments from '../../../../components/InstagramComments';
+import InstagramCommentsRealtime from '../../../../components/InstagramCommentsRealtime';
 
 export default function JobDetailsPage({ params }) {
   const { jobId } = params;
@@ -113,12 +114,12 @@ export default function JobDetailsPage({ params }) {
         // Fetch comments
         fetchComments();
       } else {
-        toast.error(data.message || 'Failed to load job details');
+        toast.error('Unable to load job');
         router.push('/dashboard');
       }
     } catch (error) {
       console.error('Error fetching job:', error);
-      toast.error('Failed to load job details');
+      toast.error('Connection error');
       router.push('/dashboard');
     } finally {
       setLoading(false);
@@ -158,8 +159,8 @@ export default function JobDetailsPage({ params }) {
   };
 
   const handleQuickApply = async () => {
-    if (!user?.canApplyToJob()) {
-      toast.error('You need to upgrade to Pro to apply to more jobs');
+    if (!canApplyToJob(user)) {
+      toast.error('Free applications used up - Upgrade to Pro');
       router.push('/dashboard/subscription');
       return;
     }
@@ -187,7 +188,7 @@ export default function JobDetailsPage({ params }) {
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Application sent successfully!');
+        toast.success('✅ Application sent');
         setJob(prev => ({ ...prev, hasApplied: true }));
         fetchApplications(); // Refresh applications
         
@@ -199,11 +200,11 @@ export default function JobDetailsPage({ params }) {
         if (data.needsUpgrade) {
           router.push('/dashboard/subscription');
         }
-        toast.error(data.message || 'Failed to apply');
+        toast.error('Application failed');
       }
     } catch (error) {
       console.error('Error applying:', error);
-      toast.error('Failed to apply to job');
+      toast.error('Connection error');
     } finally {
       setApplying(false);
     }
@@ -211,12 +212,12 @@ export default function JobDetailsPage({ params }) {
 
   const handleDetailedApplication = async () => {
     if (!applicationData.proposedAmount || !applicationData.coverLetter || !applicationData.workPlan) {
-      toast.error('Please fill in all required fields: Amount, Work Plan, and Cover Letter');
+      toast.error('Fill required fields: Amount, Work Plan, Cover Letter');
       return;
     }
 
     if (job.budget.type === 'negotiable' && applicationData.workPlan.length < 100) {
-      toast.error('For negotiable jobs, please provide a detailed work plan (at least 100 characters)');
+      toast.error('Work plan too short - need 100+ characters');
       return;
     }
 
@@ -231,7 +232,7 @@ export default function JobDetailsPage({ params }) {
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Detailed application submitted successfully!');
+        toast.success('✅ Application submitted');
         setJob(prev => ({ ...prev, hasApplied: true }));
         setShowApplicationModal(false);
         fetchApplications();
@@ -241,11 +242,11 @@ export default function JobDetailsPage({ params }) {
           window.location.reload();
         }
       } else {
-        toast.error(data.message || 'Failed to submit application');
+        toast.error('Submission failed');
       }
     } catch (error) {
       console.error('Error submitting application:', error);
-      toast.error('Failed to submit application');
+      toast.error('Connection error');
     } finally {
       setApplying(false);
     }
@@ -290,11 +291,11 @@ export default function JobDetailsPage({ params }) {
         toast.success(message);
         fetchJobDetails();
       } else {
-        toast.error(data.message || 'Failed to update job status');
+        toast.error('Status update failed');
       }
     } catch (error) {
       console.error('Error updating job:', error);
-      toast.error('Failed to update job status');
+      toast.error('Connection error');
     }
   };
 
@@ -362,7 +363,7 @@ export default function JobDetailsPage({ params }) {
       });
 
       if (response.ok) {
-        toast.success('Rating submitted successfully!');
+        toast.success('✅ Rating submitted');
         setShowRatingModal(false);
         fetchJobDetails();
         
@@ -379,11 +380,11 @@ export default function JobDetailsPage({ params }) {
         });
       } else {
         const data = await response.json();
-        toast.error(data.message || 'Failed to submit rating');
+        toast.error('Rating failed');
       }
     } catch (error) {
       console.error('Error submitting rating:', error);
-      toast.error('Failed to submit rating');
+      toast.error('Connection error');
     }
   };
 
@@ -392,7 +393,7 @@ export default function JobDetailsPage({ params }) {
     
     // Check for sensitive information
     if (containsSensitiveInfo(newComment)) {
-      toast.error('⚠️ Sensitive information (phone, email, address, social media) is not allowed in comments. Use private messaging after job assignment instead!');
+      toast.error('⚠️ No personal info in comments - use private messages');
       return;
     }
 
@@ -407,14 +408,14 @@ export default function JobDetailsPage({ params }) {
       if (response.ok) {
         setNewComment('');
         fetchComments();
-        toast.success('Comment posted');
+        toast.success('✅ Comment added');
       } else {
         const data = await response.json();
-        toast.error(data.message || 'Failed to post comment');
+        toast.error('Comment failed');
       }
     } catch (error) {
       console.error('Error posting comment:', error);
-      toast.error('Failed to post comment');
+      toast.error('Connection error');
     } finally {
       setSubmittingComment(false);
     }
@@ -425,7 +426,7 @@ export default function JobDetailsPage({ params }) {
     
     // Check for sensitive information
     if (containsSensitiveInfo(replyText)) {
-      toast.error('⚠️ Sensitive information (phone, email, address, social media) is not allowed in replies. Use private messaging after job assignment instead!');
+      toast.error('⚠️ No personal info in replies - use private messages');
       return;
     }
 
@@ -441,14 +442,14 @@ export default function JobDetailsPage({ params }) {
         setReplyText('');
         setReplyingTo(null);
         fetchComments();
-        toast.success('Reply posted');
+        toast.success('✅ Reply added');
       } else {
         const data = await response.json();
-        toast.error(data.message || 'Failed to post reply');
+        toast.error('Reply failed');
       }
     } catch (error) {
       console.error('Error posting reply:', error);
-      toast.error('Failed to post reply');
+      toast.error('Connection error');
     } finally {
       setSubmittingReply(false);
     }
@@ -494,13 +495,13 @@ export default function JobDetailsPage({ params }) {
 
       if (response.ok) {
         fetchComments();
-        toast.success('Comment deleted');
+        toast.success('✅ Comment removed');
       } else {
-        toast.error('Failed to delete comment');
+        toast.error('Delete failed');
       }
     } catch (error) {
       console.error('Error deleting comment:', error);
-      toast.error('Failed to delete comment');
+      toast.error('Connection error');
     }
   };
 
@@ -516,13 +517,13 @@ export default function JobDetailsPage({ params }) {
 
       if (response.ok) {
         fetchComments();
-        toast.success('Reply deleted');
+        toast.success('✅ Reply removed');
       } else {
-        toast.error('Failed to delete reply');
+        toast.error('Delete failed');
       }
     } catch (error) {
       console.error('Error deleting reply:', error);
-      toast.error('Failed to delete reply');
+      toast.error('Connection error');
     }
   };
 
@@ -545,15 +546,15 @@ export default function JobDetailsPage({ params }) {
       const result = await response.json();
 
       if (response.ok) {
-        toast.success('Application accepted successfully!');
+        toast.success('✅ Application accepted');
         fetchJobDetails(); // Refresh job details
         fetchApplications(); // Refresh applications
       } else {
-        toast.error(result.message || 'Failed to accept application');
+        toast.error('Accept failed');
       }
     } catch (error) {
       console.error('Error accepting application:', error);
-      toast.error('Failed to accept application');
+      toast.error('Connection error');
     }
   };
 
@@ -575,19 +576,19 @@ export default function JobDetailsPage({ params }) {
       const result = await response.json();
 
       if (response.ok) {
-        toast.success('Application rejected');
+        toast.success('✅ Application rejected');
         fetchApplications(); // Refresh applications
       } else {
-        toast.error(result.message || 'Failed to reject application');
+        toast.error('Reject failed');
       }
     } catch (error) {
       console.error('Error rejecting application:', error);
-      toast.error('Failed to reject application');
+      toast.error('Connection error');
     }
   };
 
   const handleMessageFixer = (fixerId) => {
-    router.push(`/dashboard/messages?user=${fixerId}`);
+    router.push(`/dashboard/jobs/${jobId}/messages`);
   };
 
   const getTimeAgo = (timestamp) => {
@@ -639,7 +640,7 @@ export default function JobDetailsPage({ params }) {
       }
     } else {
       navigator.clipboard.writeText(url);
-      toast.success('Job link copied to clipboard');
+      toast.success('✅ Link copied');
     }
   };
 
@@ -830,7 +831,7 @@ export default function JobDetailsPage({ params }) {
                 </div>
               ) : (
                 <>
-                  {user?.canApplyToJob() ? (
+                  {canApplyToJob(user) ? (
                     <>
                       <button
                         onClick={handleQuickApply}
@@ -876,7 +877,7 @@ export default function JobDetailsPage({ params }) {
                 </>
               )}
               
-              {job.canMessage && user?.canApplyToJob() && (
+              {job.canMessage && canApplyToJob(user) && (
                 <button
                   onClick={() => router.push(`/dashboard/jobs/${jobId}/messages`)}
                   className="btn-ghost flex items-center"
@@ -886,7 +887,7 @@ export default function JobDetailsPage({ params }) {
                 </button>
               )}
               
-              {!user?.canApplyToJob() && (
+              {!canApplyToJob(user) && (
                 <div className="text-sm text-fixly-text-muted italic">
                   Messaging disabled - upgrade to Pro to message hirers
                 </div>
@@ -1908,7 +1909,7 @@ export default function JobDetailsPage({ params }) {
                     )}
                   </button>
                   
-                  {user?.role === 'fixer' && !user?.canApplyToJob() && !job.hasApplied && (
+                  {user?.role === 'fixer' && !canApplyToJob(user) && !job.hasApplied && (
                     <button
                       onClick={() => router.push('/dashboard/subscription')}
                       className="ml-2 btn-secondary text-sm"
@@ -2528,7 +2529,7 @@ export default function JobDetailsPage({ params }) {
       </button>
 
       {/* Instagram-Style Comments Modal */}
-      <InstagramComments
+      <InstagramCommentsRealtime
         jobId={jobId}
         isOpen={showInstagramComments}
         onClose={() => setShowInstagramComments(false)}

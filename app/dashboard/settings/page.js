@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
+import { toastMessages } from '../../../utils/toast';
 import { useTheme } from '../../../contexts/ThemeContext';
 
 export default function SettingsPage() {
@@ -42,6 +43,119 @@ function SettingsContent() {
   const { theme, setLightTheme, setDarkTheme, setSystemTheme, isDark, isLight, isSystem } = useTheme();
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('profile');
+  const [badgeStyle, setBadgeStyle] = useState('numbers'); // 'dots' or 'numbers'
+  const [compactMode, setCompactMode] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [showUsernameChange, setShowUsernameChange] = useState(false);
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  // Load preferences from cookies on mount
+  useEffect(() => {
+    const savedBadgeStyle = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('badgeStyle='))
+      ?.split('=')[1] || 'numbers';
+    
+    const savedCompactMode = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('compactMode='))
+      ?.split('=')[1] === 'true';
+    
+    const savedAnimations = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('animationsEnabled='))
+      ?.split('=')[1] !== 'false';
+    
+    const savedAutoRefresh = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('autoRefresh='))
+      ?.split('=')[1] !== 'false';
+    
+    setBadgeStyle(savedBadgeStyle);
+    setCompactMode(savedCompactMode);
+    setAnimationsEnabled(savedAnimations);
+    setAutoRefresh(savedAutoRefresh);
+  }, []);
+
+  // Save badge style to cookies
+  const handleBadgeStyleChange = (style) => {
+    setBadgeStyle(style);
+    document.cookie = `badgeStyle=${style}; path=/; max-age=${365 * 24 * 60 * 60}`; // 1 year
+    toast.success('Badge style updated', {
+      description: `Now showing ${style} for notifications`
+    });
+  };
+
+  // Save compact mode to cookies
+  const handleCompactModeChange = (enabled) => {
+    setCompactMode(enabled);
+    document.cookie = `compactMode=${enabled}; path=/; max-age=${365 * 24 * 60 * 60}`; // 1 year
+    toast.success(`Compact mode ${enabled ? 'enabled' : 'disabled'}`, {
+      description: enabled ? 'Interface will use smaller elements' : 'Interface will use normal spacing'
+    });
+  };
+
+  // Handle username change
+  const handleUsernameChange = async () => {
+    if (!newUsername || newUsername.length < 3) {
+      toast.error('Username too short', {
+        description: 'Username must be at least 3 characters long'
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/user/update-username', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: newUsername })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toastMessages.profile.usernameChanged(data.user.username);
+        setShowUsernameChange(false);
+        setNewUsername('');
+        // Update user context would go here
+      } else {
+        toast.error('Username change failed', {
+          description: data.message || 'Please try a different username'
+        });
+      }
+    } catch (error) {
+      toastMessages.error.network();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle animations toggle
+  const handleAnimationsChange = (enabled) => {
+    setAnimationsEnabled(enabled);
+    document.cookie = `animationsEnabled=${enabled}; path=/; max-age=${365 * 24 * 60 * 60}`;
+    toast.success(`Animations ${enabled ? 'enabled' : 'disabled'}`, {
+      description: enabled ? 'Smooth transitions will be shown' : 'Reduced motion for better performance'
+    });
+    
+    // Apply/remove reduced motion class
+    if (enabled) {
+      document.documentElement.classList.remove('reduce-motion');
+    } else {
+      document.documentElement.classList.add('reduce-motion');
+    }
+  };
+
+  // Handle auto-refresh toggle
+  const handleAutoRefreshChange = (enabled) => {
+    setAutoRefresh(enabled);
+    document.cookie = `autoRefresh=${enabled}; path=/; max-age=${365 * 24 * 60 * 60}`;
+    toast.success(`Auto-refresh ${enabled ? 'enabled' : 'disabled'}`, {
+      description: enabled ? 'Content will update automatically' : 'Manual refresh required for updates'
+    });
+  };
 
   const settingSections = [
     {
@@ -134,12 +248,67 @@ function SettingsContent() {
               <label className="block text-sm font-medium text-fixly-text mb-2">
                 Username
               </label>
-              <input
-                type="text"
-                defaultValue={user?.username || ''}
-                className="input-field"
-                placeholder="Choose a username"
-              />
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={user?.username || ''}
+                    className="input-field"
+                    placeholder="Choose a username"
+                    disabled
+                  />
+                  <button
+                    onClick={() => setShowUsernameChange(true)}
+                    disabled={user?.usernameChangeCount >= 3}
+                    className="btn-secondary text-sm whitespace-nowrap"
+                  >
+                    Change
+                  </button>
+                </div>
+                <p className="text-xs text-fixly-text-muted">
+                  {user?.usernameChangeCount >= 3 
+                    ? 'Maximum username changes reached (3/3)' 
+                    : `${3 - (user?.usernameChangeCount || 0)} changes remaining`
+                  }
+                </p>
+                
+                {showUsernameChange && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="font-medium text-fixly-text mb-2">Change Username</h4>
+                    <div className="space-y-3">
+                      <input
+                        type="text"
+                        value={newUsername}
+                        onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                        placeholder="Enter new username"
+                        className="input-field text-sm"
+                        maxLength={20}
+                      />
+                      <p className="text-xs text-fixly-text-muted">
+                        3-20 characters, only lowercase letters, numbers, and underscores
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleUsernameChange}
+                          disabled={loading || !newUsername || newUsername.length < 3}
+                          className="btn-primary text-sm"
+                        >
+                          {loading ? 'Updating...' : 'Update Username'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowUsernameChange(false);
+                            setNewUsername('');
+                          }}
+                          className="btn-secondary text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="mt-4">
@@ -168,8 +337,80 @@ function SettingsContent() {
 
   const renderNotificationSettings = () => (
     <div className="space-y-6">
+      {/* Notification Badge Style */}
       <div>
-        <h3 className="text-lg font-semibold text-fixly-text mb-4">Notification Preferences</h3>
+        <h3 className="text-lg font-semibold text-fixly-text mb-4">Notification Badge Style</h3>
+        <div className="card">
+          <p className="text-sm text-fixly-text-muted mb-4">
+            Choose how notification badges appear in the navigation
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div 
+              onClick={() => handleBadgeStyleChange('numbers')}
+              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                badgeStyle === 'numbers' 
+                  ? 'border-fixly-accent bg-fixly-accent/5' 
+                  : 'border-fixly-border hover:border-fixly-accent/50'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-fixly-text">Numbers</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-red-500 text-white px-2 py-1 rounded-full">3</span>
+                  <span className="text-xs bg-red-500 text-white px-2 py-1 rounded-full">12</span>
+                  {badgeStyle === 'numbers' && <Check className="h-4 w-4 text-fixly-accent" />}
+                </div>
+              </div>
+              <p className="text-sm text-fixly-text-muted">Show actual count of notifications</p>
+            </div>
+            
+            <div 
+              onClick={() => handleBadgeStyleChange('dots')}
+              className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                badgeStyle === 'dots' 
+                  ? 'border-fixly-accent bg-fixly-accent/5' 
+                  : 'border-fixly-border hover:border-fixly-accent/50'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-fixly-text">Dots</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  {badgeStyle === 'dots' && <Check className="h-4 w-4 text-fixly-accent" />}
+                </div>
+              </div>
+              <p className="text-sm text-fixly-text-muted">Show simple dots for any notifications</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Interface Preferences */}
+      <div>
+        <h3 className="text-lg font-semibold text-fixly-text mb-4">Interface Preferences</h3>
+        <div className="card space-y-4">
+          <div className="flex items-center justify-between p-4 bg-fixly-bg-secondary rounded-lg">
+            <div>
+              <h4 className="font-medium text-fixly-text">Compact Mode</h4>
+              <p className="text-sm text-fixly-text-muted">Use smaller UI elements and reduced spacing</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={compactMode}
+                onChange={(e) => handleCompactModeChange(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Notification Types */}
+      <div>
+        <h3 className="text-lg font-semibold text-fixly-text mb-4">Notification Types</h3>
         <div className="card space-y-4">
           {[
             { key: 'emailNotifications', label: 'Email Notifications', desc: 'Receive updates via email' },
@@ -189,7 +430,7 @@ function SettingsContent() {
                   defaultChecked={user?.preferences?.[setting.key] !== false}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-primary"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
               </label>
             </div>
           ))}
@@ -381,9 +622,15 @@ function SettingsContent() {
                     <h4 className="font-medium text-fixly-text">Compact Mode</h4>
                     <p className="text-sm text-fixly-text-muted">Reduce spacing for more content</p>
                   </div>
-                  <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200 dark:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-fixly-primary focus:ring-offset-2">
-                    <span className="inline-block h-4 w-4 transform rounded-full bg-white dark:bg-gray-200 shadow-lg transition-transform"></span>
-                  </button>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={compactMode}
+                      onChange={(e) => handleCompactModeChange(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+                  </label>
                 </div>
                 
                 <div className="flex items-center justify-between">
@@ -391,9 +638,31 @@ function SettingsContent() {
                     <h4 className="font-medium text-fixly-text">Animations</h4>
                     <p className="text-sm text-fixly-text-muted">Enable smooth transitions and effects</p>
                   </div>
-                  <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-fixly-primary transition-colors focus:outline-none focus:ring-2 focus:ring-fixly-primary focus:ring-offset-2">
-                    <span className="inline-block h-4 w-4 transform translate-x-6 rounded-full bg-white dark:bg-gray-100 shadow-lg transition-transform"></span>
-                  </button>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={animationsEnabled}
+                      onChange={(e) => handleAnimationsChange(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-fixly-text">Auto-refresh</h4>
+                    <p className="text-sm text-fixly-text-muted">Automatically refresh content for updates</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoRefresh}
+                      onChange={(e) => handleAutoRefreshChange(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+                  </label>
                 </div>
               </div>
             </div>
@@ -538,6 +807,31 @@ function SettingsContent() {
                 Resources
               </a>
             </div>
+          </div>
+        </div>
+
+        {/* Account Actions */}
+        <div className="mt-8 pt-6 border-t border-fixly-border">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-center sm:text-left">
+              <h4 className="text-lg font-semibold text-fixly-text mb-1">Account Actions</h4>
+              <p className="text-sm text-fixly-text-muted">
+                Manage your account or sign out securely
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (window.confirm('Are you sure you want to sign out?')) {
+                  // Import signOut from next-auth/react at the top level would be better,
+                  // but for now we'll use the logout function from the auth context if available
+                  window.location.href = '/api/auth/signout';
+                }
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 border border-red-200 rounded-lg transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </button>
           </div>
         </div>
 

@@ -1096,7 +1096,7 @@ export default function SignupPage() {
                               key={index}
                               onClick={() => addSkill(skill)}
                               disabled={formData.skills.includes(skill)}
-                              className="skill-chip hover:bg-fixly-accent/30 text-sm"
+                              className="skill-chip text-sm"
                             >
                               {skill}
                             </button>
@@ -1138,7 +1138,7 @@ export default function SignupPage() {
                                     className={`skill-chip text-xs ${
                                       formData.skills.includes(skill)
                                         ? 'opacity-50 cursor-not-allowed'
-                                        : 'hover:bg-fixly-accent/30'
+                                        : ''
                                     }`}
                                   >
                                     {skill}

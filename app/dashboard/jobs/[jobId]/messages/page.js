@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../../../providers';
 import { toast } from 'sonner';
+import { toastMessages } from '../../../../../utils/toast';
+import { useRealTimeMessages } from '../../../../../hooks/useRealTime';
 
 export default function MessagesPage({ params }) {
   const { jobId } = params;
@@ -25,8 +27,47 @@ export default function MessagesPage({ params }) {
   const [sending, setSending] = useState(false);
   const [job, setJob] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [silentLoading, setSilentLoading] = useState(false);
+  const [otherUser, setOtherUser] = useState(null);
+  const [onlineStatus, setOnlineStatus] = useState(null);
   const messagesEndRef = useRef(null);
   const pollIntervalRef = useRef(null);
+
+  // Real-time messages
+  const { 
+    data: realTimeData, 
+    loading: realTimeLoading,
+    refresh: refreshMessages 
+  } = useRealTimeMessages(jobId);
+
+  // Update messages when real-time data changes with smooth animations
+  useEffect(() => {
+    if (realTimeData?.messages) {
+      const newMessages = realTimeData.messages;
+      const currentMessages = messages;
+      
+      // Check if there are new messages
+      if (newMessages.length > currentMessages.length) {
+        setMessages(newMessages);
+        
+        // Smooth scroll to bottom for new messages
+        setTimeout(() => {
+          const container = messagesEndRef.current?.parentElement;
+          if (container) {
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            const isNearBottom = scrollTop + clientHeight >= scrollHeight - 150;
+            
+            if (isNearBottom) {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
+          }
+        }, 50);
+      } else {
+        // Just update existing messages (read status, etc.)
+        setMessages(newMessages);
+      }
+    }
+  }, [realTimeData, messages]);
 
   useEffect(() => {
     fetchJobAndMessages();
@@ -49,15 +90,46 @@ export default function MessagesPage({ params }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const fetchJobAndMessages = async () => {
+  const fetchJobAndMessages = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      } else {
+        setSilentLoading(true);
+      }
       
       // Fetch job details
       const jobResponse = await fetch(`/api/jobs/${jobId}`);
       if (jobResponse.ok) {
         const jobData = await jobResponse.json();
         setJob(jobData.job);
+        
+        // Determine the other user in the conversation
+        if (jobData.job) {
+          const isHirer = jobData.job.createdBy._id === user._id;
+          const otherUserData = isHirer ? jobData.job.assignedTo : jobData.job.createdBy;
+          
+          if (otherUserData) {
+            try {
+              const userResponse = await fetch(`/api/user/profile/${otherUserData.username}`);
+              if (userResponse.ok) {
+                const userData = await userResponse.json();
+                setOtherUser(userData.user);
+                
+                // Check if user is online (active within last 5 minutes)
+                const lastActivity = new Date(userData.user.lastActivityAt);
+                const now = new Date();
+                const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+                setOnlineStatus(lastActivity > fiveMinutesAgo);
+              }
+            } catch (error) {
+              console.error('Error fetching user status:', error);
+              // Fallback to basic info from job data
+              setOtherUser(otherUserData);
+              setOnlineStatus(false);
+            }
+          }
+        }
       }
 
       // Fetch messages
@@ -68,13 +140,21 @@ export default function MessagesPage({ params }) {
         setLastUpdated(new Date());
       } else {
         const errorData = await messagesResponse.json();
-        toast.error(errorData.message || 'Failed to load messages');
+        if (!silent) {
+          toastMessages.message.failed();
+        }
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
-      toast.error('Failed to load messages');
+      if (!silent) {
+        toastMessages.message.failed();
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      } else {
+        setSilentLoading(false);
+      }
     }
   };
 
@@ -120,21 +200,21 @@ export default function MessagesPage({ params }) {
         // Remove optimistic message on error
         setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
         setNewMessage(messageText); // Restore text
-        toast.error(data.message || 'Failed to send message');
+        toastMessages.message.failed();
       }
     } catch (error) {
       console.error('Error sending message:', error);
       // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
       setNewMessage(messageText); // Restore text
-      toast.error('Failed to send message');
+      toastMessages.message.failed();
     } finally {
       setSending(false);
     }
   };
 
   const startPolling = () => {
-    // Poll for new messages every 3 seconds
+    // Poll for new messages every 5 seconds (reduced frequency)
     pollIntervalRef.current = setInterval(async () => {
       try {
         const response = await fetch(`/api/jobs/${jobId}/messages`);
@@ -142,8 +222,10 @@ export default function MessagesPage({ params }) {
           const data = await response.json();
           const newMessages = data.messages || [];
           
-          // Only update if there are new messages
-          if (JSON.stringify(newMessages) !== JSON.stringify(messages)) {
+          // Only update if there are new messages (better comparison)
+          if (newMessages.length !== messages.length || 
+              (newMessages.length > 0 && messages.length > 0 &&
+               newMessages[newMessages.length - 1]._id !== messages[messages.length - 1]._id)) {
             setMessages(newMessages);
           }
         }
@@ -151,7 +233,7 @@ export default function MessagesPage({ params }) {
         // Silent fail for polling
         console.error('Polling error:', error);
       }
-    }, 3000);
+    }, 5000); // Increased to 5 seconds
   };
 
   const handleKeyPress = (e) => {
@@ -167,6 +249,26 @@ export default function MessagesPage({ params }) {
       minute: '2-digit',
       day: 'numeric',
       month: 'short'
+    });
+  };
+
+  const formatLastSeen = (date) => {
+    const now = new Date();
+    const lastSeen = new Date(date);
+    const diffInMinutes = Math.floor((now - lastSeen) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays}d ago`;
+    
+    return lastSeen.toLocaleDateString('en-IN', { 
+      day: 'numeric', 
+      month: 'short' 
     });
   };
 
@@ -192,12 +294,44 @@ export default function MessagesPage({ params }) {
           Back
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-fixly-text">Messages</h1>
-          {job && (
-            <p className="text-fixly-text-muted text-sm">
-              {job.title}
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-fixly-text">Messages</h1>
+              {job && (
+                <p className="text-fixly-text-muted text-sm">
+                  {job.title}
+                </p>
+              )}
+            </div>
+            {otherUser && (
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2">
+                  {otherUser.profilePhoto || otherUser.picture ? (
+                    <img
+                      src={otherUser.profilePhoto || otherUser.picture}
+                      alt={otherUser.name}
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-fixly-accent flex items-center justify-center">
+                      <User className="h-4 w-4 text-fixly-text" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-fixly-text">{otherUser.name}</p>
+                    <div className="flex items-center gap-1 text-xs">
+                      <div className={`w-2 h-2 rounded-full ${
+                        onlineStatus ? 'bg-green-500' : 'bg-gray-400'
+                      }`}></div>
+                      <span className="text-fixly-text-muted">
+                        {onlineStatus ? 'Online' : `Last seen ${formatLastSeen(otherUser.lastActivityAt)}`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -226,8 +360,8 @@ export default function MessagesPage({ params }) {
                     <div
                       className={`rounded-lg p-3 ${
                         isOwn
-                          ? 'bg-fixly-accent text-fixly-text'
-                          : 'bg-gray-100 text-gray-800'
+                          ? 'bg-fixly-accent text-white dark:bg-fixly-accent dark:text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
                       }`}
                     >
                       <p className="text-sm">{message.message}</p>

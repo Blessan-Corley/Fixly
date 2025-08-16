@@ -112,8 +112,7 @@ export async function POST(request, { params }) {
       proposedAmount,
       timeEstimate,
       materialsList,
-      coverLetter,
-      workPlan,
+      description, // Replaced coverLetter and workPlan with simple description
       materialsIncluded,
       requirements,
       specialNotes
@@ -127,32 +126,23 @@ export async function POST(request, { params }) {
       );
     }
 
-    if (coverLetter && coverLetter.length > 800) {
+    if (description && description.length > 600) {
       return NextResponse.json(
-        { message: 'Cover letter must be less than 800 characters' },
+        { message: 'Description must be less than 600 characters' },
         { status: 400 }
       );
     }
 
-    if (workPlan && workPlan.length > 1500) {
+    if (!description || description.length < 20) {
       return NextResponse.json(
-        { message: 'Work plan must be less than 1500 characters' },
-        { status: 400 }
-      );
-    }
-
-    // For negotiable jobs, require a detailed work plan
-    if (job.budget.type === 'negotiable' && (!workPlan || workPlan.length < 100)) {
-      return NextResponse.json(
-        { message: 'Negotiable jobs require a detailed work plan (at least 100 characters)' },
+        { message: 'Please provide a description (at least 20 characters)' },
         { status: 400 }
       );
     }
 
     // Check for sensitive content in application fields
     const fieldsToCheck = [
-      { name: 'coverLetter', value: coverLetter },
-      { name: 'workPlan', value: workPlan },
+      { name: 'description', value: description },
       { name: 'requirements', value: requirements },
       { name: 'specialNotes', value: specialNotes }
     ];
@@ -182,8 +172,7 @@ export async function POST(request, { params }) {
     const application = {
       fixer: user._id,
       proposedAmount: Number(proposedAmount),
-      coverLetter: coverLetter || '',
-      workPlan: workPlan || '',
+      description: description || '',
       materialsIncluded: materialsIncluded || false,
       requirements: requirements || '',
       specialNotes: specialNotes || '',
@@ -209,15 +198,6 @@ export async function POST(request, { params }) {
     // Add application to job
     job.applications.push(application);
     await job.save();
-
-    // Deduct credit for free users (as per requirements)
-    if (user.plan?.type !== 'pro') {
-      if (!user.plan) {
-        user.plan = { type: 'free', creditsUsed: 0, status: 'active' };
-      }
-      user.plan.creditsUsed = (user.plan.creditsUsed || 0) + 1;
-      await user.save();
-    }
 
     // Add notification to hirer
     const hirer = job.createdBy;
@@ -263,7 +243,7 @@ export async function POST(request, { params }) {
         status: application.status,
         appliedAt: application.appliedAt
       },
-      creditsRemaining: user.plan.type === 'pro' ? 'unlimited' : Math.max(0, 3 - (user.plan.creditsUsed || 0))
+      creditsRemaining: user.plan?.type === 'pro' ? 'unlimited' : Math.max(0, 3 - (user.plan?.creditsUsed || 0))
     }, { status: 201 });
 
   } catch (error) {

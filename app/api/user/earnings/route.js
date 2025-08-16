@@ -7,6 +7,8 @@ import Job from '../../../../models/Job';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request) {
   try {
     // Apply rate limiting
@@ -42,43 +44,54 @@ export async function GET(request) {
       completedJobs: 0
     };
 
-    if (user.role === 'hirer') {
-      // For hirers, show job spending
-      const completedJobs = await Job.find({
-        createdBy: user._id,
-        status: 'completed',
-        'completion.confirmedAt': { $exists: true }
-      }).select('budget.amount createdAt completion.confirmedAt');
+    try {
+      if (user.role === 'hirer') {
+        // For hirers, show job spending
+        const completedJobs = await Job.find({
+          createdBy: user._id,
+          status: 'completed',
+          'completion.confirmedAt': { $exists: true }
+        }).select('budget.amount createdAt completion.confirmedAt').lean();
 
-      earnings.completedJobs = completedJobs.length;
-      earnings.total = completedJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
+        earnings.completedJobs = completedJobs.length;
+        earnings.total = completedJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
 
-      // Calculate this month's spending
-      const now = new Date();
-      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const thisMonthJobs = completedJobs.filter(job => 
-        new Date(job.completion.confirmedAt) >= thisMonth
-      );
-      earnings.thisMonth = thisMonthJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
+        // Calculate this month's spending
+        const now = new Date();
+        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const thisMonthJobs = completedJobs.filter(job => 
+          job.completion?.confirmedAt && new Date(job.completion.confirmedAt) >= thisMonth
+        );
+        earnings.thisMonth = thisMonthJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
 
-    } else if (user.role === 'fixer') {
-      // For fixers, show earnings
-      const completedJobs = await Job.find({
-        assignedTo: user._id,
-        status: 'completed',
-        'completion.confirmedAt': { $exists: true }
-      }).select('budget.amount createdAt completion.confirmedAt');
+      } else if (user.role === 'fixer') {
+        // For fixers, show earnings
+        const completedJobs = await Job.find({
+          assignedTo: user._id,
+          status: 'completed',
+          'completion.confirmedAt': { $exists: true }
+        }).select('budget.amount createdAt completion.confirmedAt').lean();
 
-      earnings.completedJobs = completedJobs.length;
-      earnings.total = completedJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
+        earnings.completedJobs = completedJobs.length;
+        earnings.total = completedJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
 
-      // Calculate this month's earnings
-      const now = new Date();
-      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const thisMonthJobs = completedJobs.filter(job => 
-        new Date(job.completion.confirmedAt) >= thisMonth
-      );
-      earnings.thisMonth = thisMonthJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
+        // Calculate this month's earnings
+        const now = new Date();
+        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const thisMonthJobs = completedJobs.filter(job => 
+          job.completion?.confirmedAt && new Date(job.completion.confirmedAt) >= thisMonth
+        );
+        earnings.thisMonth = thisMonthJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
+      }
+    } catch (earningsError) {
+      console.error('Error calculating earnings:', earningsError);
+      // Return default earnings object if calculation fails
+      earnings = {
+        total: 0,
+        thisMonth: 0,
+        completedJobs: 0,
+        error: 'Unable to calculate earnings at this time'
+      };
     }
 
     return NextResponse.json({

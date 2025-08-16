@@ -25,8 +25,11 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
-import { usePageLoading } from '../../../contexts/LoadingContext';
+import { usePageLoading } from '../../../hooks/usePageLoading';
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus';
 import { GlobalLoading } from '../../../components/ui/GlobalLoading';
+import ConfirmModal from '../../../components/ui/ConfirmModal';
+import RepostJobModal from '../../../components/ui/RepostJobModal';
 import { Briefcase } from 'lucide-react';
 
 export default function JobsPage() {
@@ -44,8 +47,10 @@ function JobsContent() {
     loading: pageLoading, 
     showRefreshMessage, 
     startLoading, 
-    stopLoading 
+    stopLoading,
+    handleNetworkError
   } = usePageLoading('jobs');
+  const { isOnline, checkConnection } = useNetworkStatus();
 
   // Jobs data
   const [jobs, setJobs] = useState([]);
@@ -71,6 +76,10 @@ function JobsContent() {
     completedJobs: 0
   });
 
+  // Modal states
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, jobId: null, loading: false });
+  const [repostModal, setRepostModal] = useState({ isOpen: false, job: null, loading: false });
+
   useEffect(() => {
     fetchJobs(true);
     fetchEarnings();
@@ -81,6 +90,8 @@ function JobsContent() {
   }, [activeTab]);
 
   const fetchJobs = async (reset = false) => {
+    if (!checkConnection()) return;
+
     try {
       if (reset) {
         setLoading(true);
@@ -118,8 +129,7 @@ function JobsContent() {
         toast.error(data.message || 'Failed to fetch jobs');
       }
     } catch (error) {
-      console.error('Error fetching jobs:', error);
-      toast.error('Failed to fetch jobs');
+      handleNetworkError(error);
     } finally {
       setLoading(false);
       stopLoading();
@@ -152,75 +162,98 @@ function JobsContent() {
     }));
   };
 
-  const handleDeleteJob = async (jobId) => {
-    if (!confirm('Are you sure you want to delete this job? This action cannot be undone.')) {
-      return;
-    }
+  const openDeleteModal = (jobId) => {
+    setDeleteModal({ isOpen: true, jobId, loading: false });
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModal({ isOpen: false, jobId: null, loading: false });
+  };
+
+  const handleDeleteJob = async () => {
+    if (!checkConnection()) return;
+
+    setDeleteModal(prev => ({ ...prev, loading: true }));
 
     try {
-      const response = await fetch(`/api/jobs/${jobId}`, {
+      const response = await fetch(`/api/jobs/${deleteModal.jobId}`, {
         method: 'DELETE',
       });
 
       if (response.ok) {
         toast.success('Job deleted successfully', {
-          style: { background: 'green', color: 'white' }
+          style: { background: '#10B981', color: 'white' }
         });
-        setJobs(prevJobs => prevJobs.filter(job => job._id !== jobId));
+        closeDeleteModal();
+        setJobs(prevJobs => prevJobs.filter(job => job._id !== deleteModal.jobId));
       } else {
         const data = await response.json();
         toast.error(data.message || 'Failed to delete job', {
-          style: { background: 'red', color: 'white' }
+          style: { background: '#EF4444', color: 'white' }
         });
       }
     } catch (error) {
-      console.error('Error deleting job:', error);
-      toast.error('Failed to delete job - network error', {
-        style: { background: 'red', color: 'white' }
-      });
+      handleNetworkError(error);
+    } finally {
+      setDeleteModal(prev => ({ ...prev, loading: false }));
     }
   };
 
-  const handleRepostJob = async (job) => {
+  const openRepostModal = (job) => {
+    setRepostModal({ isOpen: true, job, loading: false });
+  };
+
+  const closeRepostModal = () => {
+    setRepostModal({ isOpen: false, job: null, loading: false });
+  };
+
+  const handleRepostJob = async (formData) => {
+    if (!checkConnection()) return;
+
+    setRepostModal(prev => ({ ...prev, loading: true }));
+
     try {
-      // First, check if user can post (server will handle the 3-hour limit)
       const response = await fetch('/api/jobs/post', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          title: `${job.title} (Reposted)`,
-          description: job.description,
-          skillsRequired: job.skillsRequired,
-          experienceLevel: job.experienceLevel,
-          budget: job.budget,
-          location: job.location,
-          urgency: job.urgency,
-          type: job.type,
-          estimatedDuration: job.estimatedDuration,
-          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Default to 7 days from now
-          scheduledDate: job.scheduledDate ? new Date(Date.now() + 24 * 60 * 60 * 1000) : undefined
+          title: formData.title,
+          description: repostModal.job.description,
+          skillsRequired: repostModal.job.skillsRequired,
+          experienceLevel: repostModal.job.experienceLevel,
+          budget: {
+            type: formData.budgetType,
+            amount: formData.budgetAmount
+          },
+          location: repostModal.job.location,
+          urgency: repostModal.job.urgency,
+          type: repostModal.job.type,
+          estimatedDuration: repostModal.job.estimatedDuration,
+          deadline: new Date(formData.deadline),
+          scheduledDate: repostModal.job.scheduledDate ? new Date(Date.now() + 24 * 60 * 60 * 1000) : undefined
         }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        toast.success('Job reposted successfully! You can now edit the details.', {
-          style: { background: 'green', color: 'white' }
+        toast.success('Job reposted successfully! Redirecting to view details.', {
+          style: { background: '#10B981', color: 'white' }
         });
-        router.push(`/dashboard/jobs/${data.job._id}/edit`);
+        closeRepostModal();
+        fetchJobs(true);
+        router.push(`/dashboard/jobs/${data.job._id}`);
       } else {
         toast.error(data.message || 'Failed to repost job', {
-          style: { background: 'red', color: 'white' }
+          style: { background: '#EF4444', color: 'white' }
         });
       }
     } catch (error) {
-      console.error('Error reposting job:', error);
-      toast.error('Failed to repost job - network error', {
-        style: { background: 'red', color: 'white' }
-      });
+      handleNetworkError(error);
+    } finally {
+      setRepostModal(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -562,14 +595,14 @@ function JobsContent() {
                   {job.status === 'expired' && (
                     <>
                       <button
-                        onClick={() => handleRepostJob(job)}
+                        onClick={() => openRepostModal(job)}
                         className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center"
                       >
                         <RotateCcw className="h-4 w-4 mr-1" />
                         Repost
                       </button>
                       <button
-                        onClick={() => handleDeleteJob(job._id)}
+                        onClick={() => openDeleteModal(job._id)}
                         className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
@@ -622,6 +655,28 @@ function JobsContent() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={closeDeleteModal}
+        onConfirm={handleDeleteJob}
+        title="Delete Job"
+        description="Are you sure you want to delete this job? This action cannot be undone and all applications will be lost."
+        confirmText="Delete Job"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleteModal.loading}
+      />
+
+      {/* Repost Job Modal */}
+      <RepostJobModal
+        isOpen={repostModal.isOpen}
+        onClose={closeRepostModal}
+        onConfirm={handleRepostJob}
+        job={repostModal.job}
+        loading={repostModal.loading}
+      />
     </div>
   );
 }

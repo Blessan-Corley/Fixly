@@ -1,11 +1,15 @@
 {
-  "name": "Fixly - Hyperlocal Service Marketplace",
+  "name": "Fixly - Local Services Marketplace",
   "short_name": "Fixly",
-  "description": "Find trusted local service professionals and get yours Fixed",
+  "description": "Connect with trusted local service providers for all your home and business needs",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F1F2EE",
-  "theme_color": "#DCF763",
+  "background_color": "#FDFDFD",
+  "theme_color": "#0D9488",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en-US",
+  "categories": ["business", "productivity", "utilities"],
   "icons": [
     {
       "src": "/favicon.ico",
@@ -15,7 +19,88 @@
     {
       "src": "/apple-touch-icon.png",
       "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon-16x16.png",
+      "sizes": "16x16",
       "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Find Jobs",
+      "short_name": "Jobs",
+      "description": "Browse available jobs in your area",
+      "url": "/dashboard/jobs",
+      "icons": [
+        {
+          "src": "/apple-touch-icon.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Post Job",
+      "short_name": "Post",
+      "description": "Post a new job for service providers",
+      "url": "/dashboard/post-job",
+      "icons": [
+        {
+          "src": "/apple-touch-icon.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "short_name": "Chat",
+      "description": "View your conversations",
+      "url": "/dashboard/messages",
+      "icons": [
+        {
+          "src": "/apple-touch-icon.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "short_name": "Profile",
+      "description": "Manage your profile and settings",
+      "url": "/dashboard/profile",
+      "icons": [
+        {
+          "src": "/apple-touch-icon.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "features": [
+    "real-time messaging",
+    "offline browsing",
+    "location services",
+    "push notifications",
+    "background sync"
+  ],
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "prefer_related_applications": false
 }

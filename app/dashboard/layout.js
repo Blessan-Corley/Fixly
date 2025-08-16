@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useApp, ProtectedRoute } from '../providers';
 import { toast } from 'sonner';
+import { toastMessages } from '../../utils/toast';
 import ThemeToggle from '../../components/ui/ThemeToggle';
 
 export default function DashboardLayout({ children }) {
@@ -46,6 +47,44 @@ function DashboardContent({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [notificationDropdownOpen, setNotificationDropdownOpen] = useState(false);
+  const [notificationCounts, setNotificationCounts] = useState({});
+  const [badgeStyle, setBadgeStyle] = useState('numbers'); // Load from cookies
+
+  // Load badge style preference from cookies
+  useEffect(() => {
+    const savedBadgeStyle = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('badgeStyle='))
+      ?.split('=')[1] || 'numbers';
+    setBadgeStyle(savedBadgeStyle);
+  }, []);
+
+  // Fetch notification counts for badges
+  useEffect(() => {
+    const fetchNotificationCounts = async () => {
+      try {
+        const unreadNotifications = notifications.filter(n => !n.read);
+        
+        const counts = {
+          messages: unreadNotifications.filter(n => n.type === 'new_message').length,
+          applications: unreadNotifications.filter(n => 
+            n.type === 'job_applied' || n.type === 'application_accepted' || n.type === 'application_rejected'
+          ).length,
+          jobs: unreadNotifications.filter(n => 
+            n.type === 'job_question' || n.type === 'comment_reply'
+          ).length
+        };
+        
+        setNotificationCounts(counts);
+      } catch (error) {
+        console.error('Error fetching notification counts:', error);
+      }
+    };
+
+    if (notifications.length > 0) {
+      fetchNotificationCounts();
+    }
+  }, [notifications]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -67,7 +106,7 @@ function DashboardContent({ children }) {
       await signOut({ callbackUrl: '/' });
     } catch (error) {
       console.error('Sign out error:', error);
-      toast.error('Error signing out');
+      toastMessages.error.generic();
     }
   };
 
@@ -83,7 +122,8 @@ function DashboardContent({ children }) {
         name: 'Messages',
         href: '/dashboard/messages',
         icon: MessageSquare,
-        current: pathname.startsWith('/dashboard/messages')
+        current: pathname.startsWith('/dashboard/messages'),
+        count: notificationCounts.messages || 0
       },
       {
         name: 'Profile',
@@ -107,7 +147,8 @@ function DashboardContent({ children }) {
           name: 'My Jobs',
           href: '/dashboard/jobs',
           icon: Briefcase,
-          current: pathname.startsWith('/dashboard/jobs')
+          current: pathname.startsWith('/dashboard/jobs'),
+          count: notificationCounts.jobs || 0
         },
         {
           name: 'Find Fixers',
@@ -133,7 +174,8 @@ function DashboardContent({ children }) {
           name: 'My Applications',
           href: '/dashboard/applications',
           icon: Briefcase,
-          current: pathname.startsWith('/dashboard/applications')
+          current: pathname.startsWith('/dashboard/applications'),
+          count: notificationCounts.applications || 0
         },
         {
           name: 'Earnings',
@@ -270,6 +312,15 @@ function DashboardContent({ children }) {
               >
                 <item.icon className="h-5 w-5 mr-3" />
                 <span className="flex-1 text-left">{item.name}</span>
+                {item.count && item.count > 0 && (
+                  badgeStyle === 'dots' ? (
+                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  ) : (
+                    <span className="text-xs bg-red-500 text-white px-2 py-1 rounded-full min-w-[20px] text-center">
+                      {item.count > 9 ? '9+' : item.count}
+                    </span>
+                  )
+                )}
                 {item.badge && (
                   <span className="text-xs bg-orange-500 text-white px-2 py-1 rounded-full">
                     {item.badge}
@@ -331,9 +382,13 @@ function DashboardContent({ children }) {
                 >
                   <Bell className="h-5 w-5 text-fixly-text" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
+                    badgeStyle === 'dots' ? (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
+                    ) : (
+                      <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )
                   )}
                 </button>
 
@@ -347,7 +402,26 @@ function DashboardContent({ children }) {
                       className="absolute right-0 mt-2 w-80 bg-fixly-card border border-fixly-border rounded-lg shadow-fixly-lg z-50"
                     >
                       <div className="p-4 border-b border-fixly-border">
-                        <h3 className="font-semibold text-fixly-text">Notifications</h3>
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-fixly-text">Notifications</h3>
+                          {notifications.some(n => !n.read) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Mark all notifications as read
+                                notifications.forEach(notification => {
+                                  if (!notification.read) {
+                                    markNotificationRead(notification._id);
+                                  }
+                                });
+                                toast.success('All notifications marked as read');
+                              }}
+                              className="text-xs text-fixly-accent hover:text-fixly-accent-dark font-medium transition-colors"
+                            >
+                              Mark all read
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="max-h-96 overflow-y-auto">
                         {notifications.length === 0 ? (
@@ -358,25 +432,63 @@ function DashboardContent({ children }) {
                           notifications.slice(0, 5).map((notification) => (
                             <div
                               key={notification._id}
-                              className={`p-4 border-b border-fixly-border hover:bg-fixly-bg cursor-pointer ${
-                                !notification.read ? 'bg-fixly-accent/5' : ''
+                              className={`p-4 border-b border-fixly-border hover:bg-fixly-bg cursor-pointer transition-colors ${
+                                !notification.read ? 'bg-fixly-accent/5 border-l-4 border-l-fixly-accent' : ''
                               }`}
-                              onClick={() => markNotificationRead(notification._id)}
+                              onClick={() => {
+                                markNotificationRead(notification._id);
+                                // Navigate to relevant page based on notification type
+                                if (notification.data?.jobId) {
+                                  if (notification.type === 'new_message') {
+                                    router.push(`/dashboard/jobs/${notification.data.jobId}/messages`);
+                                  } else if (notification.type === 'job_applied') {
+                                    router.push(`/dashboard/jobs/${notification.data.jobId}`);
+                                  } else if (notification.type.includes('application')) {
+                                    router.push('/dashboard/applications');
+                                  }
+                                }
+                                setNotificationDropdownOpen(false);
+                              }}
                             >
                               <div className="flex items-start">
-                                <div className="flex-1">
-                                  <p className="font-medium text-fixly-text text-sm">
+                                <div className="flex-shrink-0 mr-3">
+                                  {notification.type === 'new_message' && (
+                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                      <MessageSquare className="h-4 w-4 text-blue-600" />
+                                    </div>
+                                  )}
+                                  {notification.type === 'job_applied' && (
+                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                      <Briefcase className="h-4 w-4 text-green-600" />
+                                    </div>
+                                  )}
+                                  {notification.type.includes('application') && (
+                                    <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                                      <Star className="h-4 w-4 text-orange-600" />
+                                    </div>
+                                  )}
+                                  {(!notification.type.includes('message') && !notification.type.includes('job') && !notification.type.includes('application')) && (
+                                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                                      <Bell className="h-4 w-4 text-gray-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm ${!notification.read ? 'font-semibold text-fixly-text' : 'font-medium text-fixly-text'}`}>
                                     {notification.title}
                                   </p>
-                                  <p className="text-xs text-fixly-text-muted mt-1">
+                                  <p className="text-xs text-fixly-text-muted mt-1 line-clamp-2">
                                     {notification.message}
                                   </p>
                                   <p className="text-xs text-fixly-text-muted mt-2">
-                                    {new Date(notification.createdAt).toLocaleDateString()}
+                                    {new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(
+                                      Math.floor((new Date(notification.createdAt) - new Date()) / (1000 * 60 * 60 * 24)),
+                                      'day'
+                                    )}
                                   </p>
                                 </div>
                                 {!notification.read && (
-                                  <div className="w-2 h-2 bg-fixly-accent rounded-full ml-2 mt-1"></div>
+                                  <div className="w-3 h-3 bg-fixly-accent rounded-full ml-2 mt-1 flex-shrink-0"></div>
                                 )}
                               </div>
                             </div>
