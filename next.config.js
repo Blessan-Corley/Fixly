@@ -62,53 +62,51 @@ const nextConfig = {
       });
 
       // Bundle splitting and optimization
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            // Vendor chunk for stable dependencies
-            vendor: {
-              test: /[\\/]node_modules[\\/]/,
-              name: 'vendors',
-              priority: 10,
-              reuseExistingChunk: true,
-            },
-            // React ecosystem chunk
-            react: {
-              test: /[\\/]node_modules[\\/](react|react-dom|react-router)[\\/]/,
-              name: 'react',
-              priority: 20,
-              reuseExistingChunk: true,
-            },
-            // UI libraries chunk
-            ui: {
-              test: /[\\/]node_modules[\\/](framer-motion|lucide-react)[\\/]/,
-              name: 'ui',
-              priority: 15,
-              reuseExistingChunk: true,
-            },
-            // Query and state management
-            query: {
-              test: /[\\/]node_modules[\\/](@tanstack\/react-query|socket\.io-client)[\\/]/,
-              name: 'query',
-              priority: 15,
-              reuseExistingChunk: true,
-            },
-            // Common chunk for frequently used modules
-            common: {
-              name: 'common',
-              minChunks: 2,
-              priority: 5,
-              reuseExistingChunk: true,
+      if (!dev) {
+        config.optimization = {
+          ...config.optimization,
+          splitChunks: {
+            chunks: 'all',
+            cacheGroups: {
+              // Vendor chunk for stable dependencies
+              vendor: {
+                test: /[\\/]node_modules[\\/]/,
+                name: 'vendors',
+                priority: 10,
+                reuseExistingChunk: true,
+              },
+              // React ecosystem chunk
+              react: {
+                test: /[\\/]node_modules[\\/](react|react-dom|react-router)[\\/]/,
+                name: 'react',
+                priority: 20,
+                reuseExistingChunk: true,
+              },
+              // UI libraries chunk
+              ui: {
+                test: /[\\/]node_modules[\\/](framer-motion|lucide-react)[\\/]/,
+                name: 'ui',
+                priority: 15,
+                reuseExistingChunk: true,
+              },
+              // Query and state management
+              query: {
+                test: /[\\/]node_modules[\\/](@tanstack\/react-query|socket\.io-client)[\\/]/,
+                name: 'query',
+                priority: 15,
+                reuseExistingChunk: true,
+              },
+              // Common chunk for frequently used modules
+              common: {
+                name: 'common',
+                minChunks: 2,
+                priority: 5,
+                reuseExistingChunk: true,
+              },
             },
           },
-        },
-      };
-
-      // Tree shaking and dead code elimination
-      config.optimization.usedExports = true;
-      config.optimization.sideEffects = false;
+        };
+      }
     }
 
     // Production optimizations
@@ -127,8 +125,13 @@ const nextConfig = {
       // Compression and minification
       config.optimization.minimize = true;
       
-      // Remove console logs in production
-      config.optimization.minimizer[0].options.terserOptions.compress.drop_console = true;
+      // Remove console logs in production (safely check if minimizer exists)
+      if (config.optimization.minimizer && 
+          config.optimization.minimizer[0] && 
+          config.optimization.minimizer[0].options && 
+          config.optimization.minimizer[0].options.terserOptions) {
+        config.optimization.minimizer[0].options.terserOptions.compress.drop_console = true;
+      }
     }
 
     // Performance monitoring

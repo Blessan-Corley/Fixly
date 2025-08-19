@@ -7,6 +7,7 @@ import { Toaster } from 'sonner';
 import { LoadingProvider } from '../contexts/LoadingContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { SocketProvider } from '../contexts/SocketContext';
+import { NotificationProvider } from '../contexts/NotificationContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import QueryProvider, { QueryPerformanceMonitor, QueryErrorBoundary } from '../components/providers/QueryProvider';
 
@@ -42,6 +43,11 @@ function AppProviderContent({ children }) {
 
   // ✅ OPTIMIZATION: Debounced fetch functions
   const fetchUserProfile = useCallback(async (sessionUserId) => {
+    // ✅ CRITICAL FIX: Only run on client side
+    if (typeof window === 'undefined') {
+      return;
+    }
+    
     // ✅ CRITICAL FIX: Don't fetch for temporary session IDs
     if (!sessionUserId || sessionUserId.startsWith('temp_')) {
       console.log('⏭️ Skipping fetch for temporary session');
@@ -98,6 +104,11 @@ function AppProviderContent({ children }) {
   }, []);
 
   const fetchNotifications = useCallback(async () => {
+    // ✅ CRITICAL FIX: Only run on client side
+    if (typeof window === 'undefined') {
+      return;
+    }
+    
     // Only fetch if we have a user
     if (!lastUserId.current) return;
 
@@ -171,6 +182,11 @@ function AppProviderContent({ children }) {
 
   // ✅ CRITICAL FIX: Only fetch user when session ACTUALLY changes
   useEffect(() => {
+    // ✅ CRITICAL FIX: Only run on client side
+    if (typeof window === 'undefined') {
+      return;
+    }
+    
     const handleSessionChange = async () => {
       if (status === 'loading') {
         return; // Still loading, don't do anything
@@ -319,8 +335,10 @@ export function Providers({ children }) {
             <LoadingProvider>
               <AppProviderContent>
                 <SocketProvider>
-                  {children}
-                  <QueryPerformanceMonitor />
+                  <NotificationProvider>
+                    {children}
+                    <QueryPerformanceMonitor />
+                  </NotificationProvider>
                 </SocketProvider>
                 <Toaster 
                   position="top-right"

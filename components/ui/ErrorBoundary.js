@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, RefreshCw, Home, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Home, Bug, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 class ErrorBoundary extends React.Component {
@@ -17,13 +17,27 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({
       error: error,
-      errorInfo: errorInfo
+      errorInfo: errorInfo,
+      retryCount: 0
     });
 
-    // Log error to monitoring service in production
-    if (process.env.NODE_ENV === 'production') {
-      console.error('Error caught by boundary:', error, errorInfo);
-      // TODO: Send to monitoring service (Sentry, LogRocket, etc.)
+    // Enhanced error logging with context
+    console.error('Error caught by boundary:', {
+      error: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      url: window.location.href,
+      level: this.props.level || 'page'
+    });
+
+    // Send to error tracking service
+    if (typeof window !== 'undefined' && window.gtag) {
+      window.gtag('event', 'exception', {
+        description: error.toString(),
+        fatal: this.props.level === 'page'
+      });
     }
   }
 

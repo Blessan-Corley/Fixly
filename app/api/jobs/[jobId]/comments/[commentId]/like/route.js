@@ -6,6 +6,7 @@ import connectDB from '@/lib/db';
 import Job from '@/models/Job';
 import User from '@/models/User';
 import { rateLimit } from '@/utils/rateLimiting';
+import { emitToJob } from '@/lib/socket';
 
 export async function POST(request, { params }) {
   try {
@@ -132,6 +133,19 @@ export async function POST(request, { params }) {
         );
       }
     }
+
+    // Emit real-time event for like/unlike
+    emitToJob(jobId, 'comment:like_toggled', {
+      commentId,
+      replyId,
+      jobId,
+      userId: user._id,
+      userName: user.name,
+      liked: result.liked,
+      likeCount: result.likeCount,
+      type: replyId ? 'reply' : 'comment',
+      timestamp: new Date()
+    });
 
     return NextResponse.json({
       success: true,

@@ -7,6 +7,7 @@ import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
 import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
+import { analytics } from '@/lib/analytics';
 import nodemailer from 'nodemailer';
 
 // Email transporter
@@ -115,7 +116,8 @@ export async function POST(request, { params }) {
       description, // Replaced coverLetter and workPlan with simple description
       materialsIncluded,
       requirements,
-      specialNotes
+      specialNotes,
+      negotiationNotes
     } = body;
 
     // Validation
@@ -124,6 +126,25 @@ export async function POST(request, { params }) {
         { message: 'Proposed amount is required and must be greater than 0' },
         { status: 400 }
       );
+    }
+
+    // For fixed price jobs, check if proposed amount is within reasonable range
+    if (job.budget.type === 'fixed' && job.budget.amount) {
+      const variance = Math.abs(proposedAmount - job.budget.amount);
+      const maxVariance = job.budget.amount * 0.5; // 50% variance allowed
+      
+      if (variance > maxVariance) {
+        return NextResponse.json(
+          { 
+            message: `Proposed amount (₹${proposedAmount.toLocaleString()}) is too far from the fixed budget (₹${job.budget.amount.toLocaleString()}). Please propose within ±50% of the budget.`,
+            suggestedRange: {
+              min: Math.round(job.budget.amount * 0.5),
+              max: Math.round(job.budget.amount * 1.5)
+            }
+          },
+          { status: 400 }
+        );
+      }
     }
 
     if (description && description.length > 600) {
@@ -168,14 +189,26 @@ export async function POST(request, { params }) {
       }
     }
 
+    // Calculate price variance for job budget comparison
+    let priceVariance = 0;
+    let priceVariancePercentage = 0;
+    
+    if (job.budget.amount && job.budget.amount > 0) {
+      priceVariance = proposedAmount - job.budget.amount;
+      priceVariancePercentage = (priceVariance / job.budget.amount) * 100;
+    }
+
     // Create application
     const application = {
       fixer: user._id,
       proposedAmount: Number(proposedAmount),
+      priceVariance: Math.round(priceVariance),
+      priceVariancePercentage: Math.round(priceVariancePercentage * 100) / 100, // Round to 2 decimal places
       description: description || '',
       materialsIncluded: materialsIncluded || false,
       requirements: requirements || '',
       specialNotes: specialNotes || '',
+      negotiationNotes: negotiationNotes || '',
       status: 'pending',
       appliedAt: new Date()
     };
@@ -197,6 +230,20 @@ export async function POST(request, { params }) {
 
     // Add application to job
     job.applications.push(application);
+    
+    // Track application analytics
+    await analytics.trackEvent('job_applied', {
+      jobId: job._id,
+      jobTitle: job.title,
+      jobCategory: job.skillsRequired[0],
+      jobBudget: job.budget.amount,
+      jobBudgetType: job.budget.type,
+      proposedAmount: application.proposedAmount,
+      priceVariance: application.priceVariance,
+      priceVariancePercentage: application.priceVariancePercentage,
+      applicationCount: job.applications.length
+    }, user._id);
+    
     await job.save();
 
     // Add notification to hirer
@@ -239,10 +286,19 @@ export async function POST(request, { params }) {
       application: {
         _id: application._id,
         proposedAmount: application.proposedAmount,
+        priceVariance: application.priceVariance,
+        priceVariancePercentage: application.priceVariancePercentage,
         timeEstimate: application.timeEstimate,
         status: application.status,
         appliedAt: application.appliedAt
       },
+      budgetComparison: job.budget.amount ? {
+        jobBudget: job.budget.amount,
+        proposedAmount: application.proposedAmount,
+        difference: application.priceVariance,
+        percentageDifference: application.priceVariancePercentage,
+        budgetType: job.budget.type
+      } : null,
       creditsRemaining: user.plan?.type === 'pro' ? 'unlimited' : Math.max(0, 3 - (user.plan?.creditsUsed || 0))
     }, { status: 201 });
 
@@ -311,9 +367,12 @@ export async function GET(request, { params }) {
         _id: app._id,
         fixer: app.fixer,
         proposedAmount: app.proposedAmount,
+        priceVariance: app.priceVariance || 0,
+        priceVariancePercentage: app.priceVariancePercentage || 0,
         timeEstimate: app.timeEstimate,
         materialsList: app.materialsList,
-        coverLetter: app.coverLetter,
+        description: app.description,
+        negotiationNotes: app.negotiationNotes,
         status: app.status,
         appliedAt: app.appliedAt
       }));

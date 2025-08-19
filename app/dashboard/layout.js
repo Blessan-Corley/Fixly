@@ -14,6 +14,7 @@ import {
   Users,
   DollarSign,
   Bell,
+  BellRing,
   Settings,
   User,
   LogOut,
@@ -28,6 +29,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { useApp, ProtectedRoute } from '../providers';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { toast } from 'sonner';
 import { toastMessages } from '../../utils/toast';
 import ThemeToggle from '../../components/ui/ThemeToggle';
@@ -41,7 +43,15 @@ export default function DashboardLayout({ children }) {
 }
 
 function DashboardContent({ children }) {
-  const { user, notifications, unreadCount, markNotificationRead } = useApp();
+  const { user } = useApp();
+  const { 
+    notifications, 
+    unreadCount, 
+    markAsRead, 
+    markAllAsRead,
+    handleNotificationClick,
+    isRealTimeConnected 
+  } = useNotifications();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -378,15 +388,29 @@ function DashboardContent({ children }) {
               <div className="relative notification-dropdown">
                 <button
                   onClick={() => setNotificationDropdownOpen(!notificationDropdownOpen)}
-                  className="relative p-2 hover:bg-fixly-accent/10 rounded-lg transition-colors"
+                  className="relative p-2 hover:bg-fixly-accent/10 rounded-lg transition-all duration-200 group"
+                  title={`${unreadCount} unread notifications${isRealTimeConnected ? ' (Real-time)' : ''}`}
                 >
-                  <Bell className="h-5 w-5 text-fixly-text" />
+                  <div className="relative">
+                    {unreadCount > 0 ? (
+                      <BellRing className="h-5 w-5 text-fixly-text group-hover:text-fixly-accent transition-colors duration-200" />
+                    ) : (
+                      <Bell className="h-5 w-5 text-fixly-text group-hover:text-fixly-accent transition-colors duration-200" />
+                    )}
+                    
+                    {/* Real-time connection indicator */}
+                    {isRealTimeConnected && (
+                      <div className="absolute -top-1 -left-1 w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-sm"></div>
+                    )}
+                  </div>
+                  
+                  {/* Notification badge with improved styling */}
                   {unreadCount > 0 && (
                     badgeStyle === 'dots' ? (
-                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full shadow-lg animate-pulse"></div>
                     ) : (
-                      <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                        {unreadCount > 9 ? '9+' : unreadCount}
+                      <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium shadow-lg animate-pulse">
+                        {unreadCount > 99 ? '99+' : unreadCount}
                       </span>
                     )
                   )}
@@ -401,98 +425,127 @@ function DashboardContent({ children }) {
                       exit={{ opacity: 0, scale: 0.95, y: -10 }}
                       className="absolute right-0 mt-2 w-80 bg-fixly-card border border-fixly-border rounded-lg shadow-fixly-lg z-50"
                     >
-                      <div className="p-4 border-b border-fixly-border">
+                      <div className="p-4 border-b border-fixly-border dark:border-gray-700">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-semibold text-fixly-text">Notifications</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-fixly-text dark:text-gray-200">Notifications</h3>
+                            {isRealTimeConnected ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-xs rounded-full">
+                                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                                Live
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 text-xs rounded-full">
+                                <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                                Offline
+                              </span>
+                            )}
+                          </div>
                           {notifications.some(n => !n.read) && (
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                // Mark all notifications as read
-                                notifications.forEach(notification => {
-                                  if (!notification.read) {
-                                    markNotificationRead(notification._id);
-                                  }
-                                });
-                                toast.success('All notifications marked as read');
+                                await markAllAsRead();
                               }}
-                              className="text-xs text-fixly-accent hover:text-fixly-accent-dark font-medium transition-colors"
+                              className="text-xs text-fixly-accent hover:text-fixly-accent-dark dark:text-fixly-accent-light font-medium transition-colors duration-200"
                             >
                               Mark all read
                             </button>
                           )}
                         </div>
                       </div>
-                      <div className="max-h-96 overflow-y-auto">
+                      <div className="max-h-96 overflow-hidden">
                         {notifications.length === 0 ? (
-                          <div className="p-4 text-center text-fixly-text-muted">
-                            No notifications yet
+                          <div className="p-8 text-center">
+                            <div className="w-12 h-12 bg-fixly-accent/10 dark:bg-fixly-accent/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                              <Bell className="h-6 w-6 text-fixly-accent dark:text-fixly-accent-light" />
+                            </div>
+                            <p className="text-fixly-text-muted dark:text-gray-400 text-sm">
+                              No notifications yet
+                            </p>
                           </div>
                         ) : (
-                          notifications.slice(0, 5).map((notification) => (
-                            <div
-                              key={notification._id}
-                              className={`p-4 border-b border-fixly-border hover:bg-fixly-bg cursor-pointer transition-colors ${
-                                !notification.read ? 'bg-fixly-accent/5 border-l-4 border-l-fixly-accent' : ''
-                              }`}
-                              onClick={() => {
-                                markNotificationRead(notification._id);
-                                // Navigate to relevant page based on notification type
-                                if (notification.data?.jobId) {
-                                  if (notification.type === 'new_message') {
-                                    router.push(`/dashboard/jobs/${notification.data.jobId}/messages`);
-                                  } else if (notification.type === 'job_applied') {
-                                    router.push(`/dashboard/jobs/${notification.data.jobId}`);
-                                  } else if (notification.type.includes('application')) {
-                                    router.push('/dashboard/applications');
-                                  }
-                                }
-                                setNotificationDropdownOpen(false);
-                              }}
-                            >
-                              <div className="flex items-start">
-                                <div className="flex-shrink-0 mr-3">
-                                  {notification.type === 'new_message' && (
-                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                      <MessageSquare className="h-4 w-4 text-blue-600" />
-                                    </div>
-                                  )}
-                                  {notification.type === 'job_applied' && (
-                                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                                      <Briefcase className="h-4 w-4 text-green-600" />
-                                    </div>
-                                  )}
-                                  {notification.type.includes('application') && (
-                                    <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
-                                      <Star className="h-4 w-4 text-orange-600" />
-                                    </div>
-                                  )}
-                                  {(!notification.type.includes('message') && !notification.type.includes('job') && !notification.type.includes('application')) && (
-                                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                                      <Bell className="h-4 w-4 text-gray-600" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-sm ${!notification.read ? 'font-semibold text-fixly-text' : 'font-medium text-fixly-text'}`}>
-                                    {notification.title}
-                                  </p>
-                                  <p className="text-xs text-fixly-text-muted mt-1 line-clamp-2">
-                                    {notification.message}
-                                  </p>
-                                  <p className="text-xs text-fixly-text-muted mt-2">
-                                    {new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(
-                                      Math.floor((new Date(notification.createdAt) - new Date()) / (1000 * 60 * 60 * 24)),
-                                      'day'
+                          <div className="divide-y divide-fixly-border dark:divide-gray-700">
+                            {notifications.slice(0, 5).map((notification) => (
+                              <motion.div
+                                key={notification._id}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={`
+                                  p-4 hover:bg-fixly-bg/50 dark:hover:bg-gray-800/50 cursor-pointer transition-all duration-200
+                                  ${!notification.read ? 'bg-fixly-accent/5 dark:bg-fixly-accent/10 border-l-4 border-l-fixly-accent' : ''}
+                                `}
+                                onClick={async () => {
+                                  await handleNotificationClick(notification);
+                                  setNotificationDropdownOpen(false);
+                                }}
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="flex-shrink-0">
+                                    {notification.type === 'message' && (
+                                      <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/20 rounded-full flex items-center justify-center">
+                                        <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                      </div>
                                     )}
-                                  </p>
+                                    {notification.type === 'job_applied' && (
+                                      <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center">
+                                        <Briefcase className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                      </div>
+                                    )}
+                                    {notification.type.includes('application') && (
+                                      <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/20 rounded-full flex items-center justify-center">
+                                        <Star className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                      </div>
+                                    )}
+                                    {(!['message', 'job_applied'].some(t => notification.type.includes(t)) && !notification.type.includes('application')) && (
+                                      <div className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
+                                        <Bell className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between mb-1">
+                                      <p className={`text-sm font-medium ${
+                                        !notification.read 
+                                          ? 'text-fixly-text dark:text-gray-100' 
+                                          : 'text-fixly-text-muted dark:text-gray-300'
+                                      }`}>
+                                        {notification.title}
+                                      </p>
+                                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                        <span className="text-xs text-fixly-text-muted dark:text-gray-500">
+                                          {(() => {
+                                            const date = new Date(notification.createdAt);
+                                            const now = new Date();
+                                            const diffInMinutes = Math.floor((now - date) / (1000 * 60));
+                                            
+                                            if (diffInMinutes < 1) return 'Just now';
+                                            if (diffInMinutes < 60) return `${diffInMinutes}m`;
+                                            
+                                            const diffInHours = Math.floor(diffInMinutes / 60);
+                                            if (diffInHours < 24) return `${diffInHours}h`;
+                                            
+                                            const diffInDays = Math.floor(diffInHours / 24);
+                                            if (diffInDays < 7) return `${diffInDays}d`;
+                                            
+                                            return date.toLocaleDateString();
+                                          })()}
+                                        </span>
+                                        {!notification.read && (
+                                          <div className="w-2 h-2 bg-fixly-accent rounded-full animate-pulse"></div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    
+                                    <p className="text-xs text-fixly-text-muted dark:text-gray-400 line-clamp-2 leading-relaxed">
+                                      {notification.message}
+                                    </p>
+                                  </div>
                                 </div>
-                                {!notification.read && (
-                                  <div className="w-3 h-3 bg-fixly-accent rounded-full ml-2 mt-1 flex-shrink-0"></div>
-                                )}
-                              </div>
-                            </div>
-                          ))
+                              </motion.div>
+                            ))}
+                          </div>
                         )}
                       </div>
                       {notifications.length > 5 && (

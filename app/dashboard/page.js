@@ -51,21 +51,41 @@ export default function DashboardPage() {
     startLoading('Loading dashboard data...');
     
     // ✅ Fetch dashboard stats - API gets role from session/database
-    const statsResponse = await fetch('/api/dashboard/stats');
+    const statsResponse = await fetch('/api/dashboard/stats', {
+      method: 'GET',
+      credentials: 'include', // Include cookies for session
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
     if (statsResponse.ok) {
       const statsData = await statsResponse.json();
       setStats(statsData);
     } else {
-      console.error('Stats API error:', statsResponse.status);
+      const errorText = await statsResponse.text();
+      console.error('Stats API error:', statsResponse.status, errorText);
+      if (statsResponse.status === 401) {
+        toast.error('Please sign in to view dashboard');
+      }
     }
 
     // ✅ Fetch recent jobs - API gets role from session/database  
-    const jobsResponse = await fetch('/api/dashboard/recent-jobs');
+    const jobsResponse = await fetch('/api/dashboard/recent-jobs', {
+      method: 'GET',
+      credentials: 'include', // Include cookies for session
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    });
     if (jobsResponse.ok) {
       const jobsData = await jobsResponse.json();
       setRecentJobs(jobsData.jobs || []);
     } else {
-      console.error('Jobs API error:', jobsResponse.status);
+      const errorText = await jobsResponse.text();
+      console.error('Jobs API error:', jobsResponse.status, errorText);
+      if (jobsResponse.status === 401) {
+        toast.error('Please sign in to view recent jobs');
+      }
     }
 
   } catch (error) {

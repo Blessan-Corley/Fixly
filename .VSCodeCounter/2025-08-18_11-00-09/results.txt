@@ -1,0 +1,415 @@
+Date : 2025-08-18 11:00:09
+Directory : c:\Users\Blessan Corley\My Projects\Fixly
+Total : 220 files,  79068 codes, 3299 comments, 7079 blanks, all 89446 lines
+
+Languages
++--------------------+------------+------------+------------+------------+------------+
+| language           | files      | code       | comment    | blank      | total      |
++--------------------+------------+------------+------------+------------+------------+
+| JavaScript         |        205 |     60,247 |      3,243 |      6,670 |     70,160 |
+| JSON               |          3 |     17,254 |          0 |          2 |     17,256 |
+| Markdown           |          6 |        771 |          0 |        237 |      1,008 |
+| PostCSS            |          1 |        462 |         47 |        116 |        625 |
+| HTML               |          1 |        274 |          2 |         46 |        322 |
+| XML                |          3 |         46 |          7 |          8 |         61 |
+| JSON with Comments |          1 |         14 |          0 |          0 |         14 |
++--------------------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                              | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                                 |        220 |     79,068 |      3,299 |      7,079 |     89,446 |
+| . (Files)                                                                                         |         17 |     18,880 |         78 |        314 |     19,272 |
+| __tests__                                                                                         |          1 |        493 |         17 |        100 |        610 |
+| __tests__\integration                                                                             |          1 |        493 |         17 |        100 |        610 |
+| app                                                                                               |        120 |     38,195 |      1,624 |      3,961 |     43,780 |
+| app (Files)                                                                                       |          8 |      1,778 |         81 |        219 |      2,078 |
+| app\about                                                                                         |          1 |        393 |        341 |         39 |        773 |
+| app\admin                                                                                         |          2 |        232 |          5 |         23 |        260 |
+| app\admin (Files)                                                                                 |          1 |         35 |          4 |          5 |         44 |
+| app\admin\setup                                                                                   |          1 |        197 |          1 |         18 |        216 |
+| app\api                                                                                           |         64 |     10,834 |        911 |      1,699 |     13,444 |
+| app\api\admin                                                                                     |          6 |        851 |         66 |        130 |      1,047 |
+| app\api\admin\dashboard                                                                           |          1 |        140 |         15 |         24 |        179 |
+| app\api\admin\jobs                                                                                |          1 |        217 |         14 |         29 |        260 |
+| app\api\admin\setup                                                                               |          1 |         83 |          7 |         14 |        104 |
+| app\api\admin\stats                                                                               |          1 |         76 |          7 |         13 |         96 |
+| app\api\admin\users                                                                               |          2 |        335 |         23 |         50 |        408 |
+| app\api\admin\users (Files)                                                                       |          1 |        206 |         13 |         28 |        247 |
+| app\api\admin\users\[userId]                                                                      |          1 |        129 |         10 |         22 |        161 |
+| app\api\admin\users\[userId]\[action]                                                             |          1 |        129 |         10 |         22 |        161 |
+| app\api\auth                                                                                      |         13 |      1,527 |        158 |        271 |      1,956 |
+| app\api\auth\[...nextauth]                                                                        |          1 |          4 |          1 |          2 |          7 |
+| app\api\auth\check-username                                                                       |          1 |        144 |         15 |         29 |        188 |
+| app\api\auth\complete-google-signup                                                               |          1 |         64 |          2 |         11 |         77 |
+| app\api\auth\forgot-password                                                                      |          1 |         93 |         10 |         18 |        121 |
+| app\api\auth\reset-password                                                                       |          1 |        149 |         15 |         21 |        185 |
+| app\api\auth\send-email-verification                                                              |          1 |        126 |         14 |         20 |        160 |
+| app\api\auth\send-phone-otp                                                                       |          1 |        110 |         12 |         18 |        140 |
+| app\api\auth\signup                                                                               |          1 |        263 |         30 |         46 |        339 |
+| app\api\auth\update-session                                                                       |          1 |         43 |          4 |          8 |         55 |
+| app\api\auth\verify-email                                                                         |          1 |        146 |         18 |         27 |        191 |
+| app\api\auth\verify-otp                                                                           |          1 |        157 |         15 |         30 |        202 |
+| app\api\auth\verify-phone-firebase                                                                |          1 |         94 |          9 |         18 |        121 |
+| app\api\auth\verify-phone-otp                                                                     |          1 |        134 |         13 |         23 |        170 |
+| app\api\contact                                                                                   |          1 |        119 |         10 |         15 |        144 |
+| app\api\dashboard                                                                                 |          2 |        650 |         46 |         73 |        769 |
+| app\api\dashboard\recent-jobs                                                                     |          1 |        115 |         10 |         21 |        146 |
+| app\api\dashboard\stats                                                                           |          1 |        535 |         36 |         52 |        623 |
+| app\api\disputes                                                                                  |          2 |        627 |         43 |         98 |        768 |
+| app\api\disputes (Files)                                                                          |          1 |        358 |         26 |         54 |        438 |
+| app\api\disputes\[disputeId]                                                                      |          1 |        269 |         17 |         44 |        330 |
+| app\api\fixer                                                                                     |          1 |        101 |          9 |         15 |        125 |
+| app\api\fixer\applications                                                                        |          1 |        101 |          9 |         15 |        125 |
+| app\api\health                                                                                    |          1 |          7 |          0 |          2 |          9 |
+| app\api\jobs                                                                                      |         15 |      3,469 |        239 |        539 |      4,247 |
+| app\api\jobs\[jobId]                                                                              |         13 |      2,938 |        189 |        469 |      3,596 |
+| app\api\jobs\[jobId] (Files)                                                                      |          1 |        627 |         53 |        115 |        795 |
+| app\api\jobs\[jobId]\applications                                                                 |          2 |        221 |         17 |         37 |        275 |
+| app\api\jobs\[jobId]\applications (Files)                                                         |          1 |        174 |         13 |         27 |        214 |
+| app\api\jobs\[jobId]\applications\withdraw                                                        |          1 |         47 |          4 |         10 |         61 |
+| app\api\jobs\[jobId]\apply                                                                        |          1 |        342 |         18 |         46 |        406 |
+| app\api\jobs\[jobId]\comments                                                                     |          3 |        756 |         38 |        109 |        903 |
+| app\api\jobs\[jobId]\comments (Files)                                                             |          1 |        448 |         20 |         68 |        536 |
+| app\api\jobs\[jobId]\comments\[commentId]                                                         |          1 |        200 |         10 |         28 |        238 |
+| app\api\jobs\[jobId]\comments\[commentId]\like                                                    |          1 |        200 |         10 |         28 |        238 |
+| app\api\jobs\[jobId]\comments\stream                                                              |          1 |        108 |          8 |         13 |        129 |
+| app\api\jobs\[jobId]\like                                                                         |          1 |        141 |          5 |         22 |        168 |
+| app\api\jobs\[jobId]\messages                                                                     |          1 |        172 |         12 |         31 |        215 |
+| app\api\jobs\[jobId]\rating                                                                       |          1 |        102 |         10 |         19 |        131 |
+| app\api\jobs\[jobId]\review                                                                       |          1 |        164 |         11 |         25 |        200 |
+| app\api\jobs\[jobId]\status                                                                       |          1 |        350 |         20 |         50 |        420 |
+| app\api\jobs\[jobId]\view                                                                         |          1 |         63 |          5 |         15 |         83 |
+| app\api\jobs\browse                                                                               |          1 |        209 |         20 |         25 |        254 |
+| app\api\jobs\post                                                                                 |          1 |        322 |         30 |         45 |        397 |
+| app\api\messages                                                                                  |          1 |        396 |         27 |         61 |        484 |
+| app\api\reviews                                                                                   |          2 |        352 |         28 |         56 |        436 |
+| app\api\reviews (Files)                                                                           |          1 |        304 |         23 |         48 |        375 |
+| app\api\reviews\[reviewId]                                                                        |          1 |         48 |          5 |          8 |         61 |
+| app\api\reviews\[reviewId]\helpful                                                                |          1 |         48 |          5 |          8 |         61 |
+| app\api\socket                                                                                    |          1 |         83 |          7 |         12 |        102 |
+| app\api\subscription                                                                              |          4 |        784 |         48 |        121 |        953 |
+| app\api\subscription\create-order                                                                 |          1 |        146 |          7 |         18 |        171 |
+| app\api\subscription\fixer                                                                        |          1 |        202 |         13 |         36 |        251 |
+| app\api\subscription\hirer                                                                        |          1 |        218 |         14 |         41 |        273 |
+| app\api\subscription\verify-payment                                                               |          1 |        218 |         14 |         26 |        258 |
+| app\api\upload                                                                                    |          1 |         86 |          7 |         11 |        104 |
+| app\api\user                                                                                      |         14 |      1,782 |        223 |        295 |      2,300 |
+| app\api\user\change-password                                                                      |          1 |         45 |          1 |          8 |         54 |
+| app\api\user\earnings                                                                             |          1 |         87 |          7 |         14 |        108 |
+| app\api\user\fixer-settings                                                                       |          1 |        228 |         17 |         32 |        277 |
+| app\api\user\notifications                                                                        |          2 |        281 |         23 |         49 |        353 |
+| app\api\user\notifications (Files)                                                                |          1 |        209 |         16 |         35 |        260 |
+| app\api\user\notifications\read                                                                   |          1 |         72 |          7 |         14 |         93 |
+| app\api\user\preferences                                                                          |          1 |         32 |          1 |          6 |         39 |
+| app\api\user\privacy                                                                              |          1 |        200 |         22 |         38 |        260 |
+| app\api\user\profile                                                                              |          3 |        510 |         45 |         76 |        631 |
+| app\api\user\profile (Files)                                                                      |          1 |        308 |         24 |         46 |        378 |
+| app\api\user\profile\[username]                                                                   |          1 |         76 |          9 |         13 |         98 |
+| app\api\user\profile\search                                                                       |          1 |        126 |         12 |         17 |        155 |
+| app\api\user\push-subscription                                                                    |          1 |        121 |          4 |         20 |        145 |
+| app\api\user\update-phone                                                                         |          1 |        113 |         10 |         20 |        143 |
+| app\api\user\update-username                                                                      |          1 |         95 |          9 |         18 |        122 |
+| app\api\user\upload-photo                                                                         |          1 |         70 |         84 |         14 |        168 |
+| app\auth                                                                                          |          8 |      3,451 |         73 |        331 |      3,855 |
+| app\auth\error                                                                                    |          1 |        164 |          0 |         14 |        178 |
+| app\auth\forgot-password                                                                          |          1 |        197 |          1 |         20 |        218 |
+| app\auth\onboarding                                                                               |          1 |        615 |         12 |         52 |        679 |
+| app\auth\reset-password                                                                           |          1 |        252 |          1 |         24 |        277 |
+| app\auth\signin                                                                                   |          1 |        328 |         10 |         34 |        372 |
+| app\auth\signup                                                                                   |          1 |      1,196 |         33 |        128 |      1,357 |
+| app\auth\verified                                                                                 |          1 |        161 |          1 |         14 |        176 |
+| app\auth\verify-account                                                                           |          1 |        538 |         15 |         45 |        598 |
+| app\contact                                                                                       |          1 |        460 |          3 |         31 |        494 |
+| app\cookies                                                                                       |          1 |        300 |          0 |         18 |        318 |
+| app\dashboard                                                                                     |         21 |     13,701 |        170 |      1,137 |     15,008 |
+| app\dashboard (Files)                                                                             |          2 |      1,340 |          6 |         84 |      1,430 |
+| app\dashboard\admin                                                                               |          1 |        518 |          7 |         34 |        559 |
+| app\dashboard\applications                                                                        |          1 |        339 |          0 |         32 |        371 |
+| app\dashboard\browse-jobs                                                                         |          1 |        432 |         14 |         50 |        496 |
+| app\dashboard\disputes                                                                            |          2 |      1,170 |          2 |         99 |      1,271 |
+| app\dashboard\disputes (Files)                                                                    |          1 |        413 |          0 |         32 |        445 |
+| app\dashboard\disputes\[disputeId]                                                                |          1 |        757 |          2 |         67 |        826 |
+| app\dashboard\earnings                                                                            |          1 |        477 |          5 |         40 |        522 |
+| app\dashboard\find-fixers                                                                         |          1 |        447 |          2 |         40 |        489 |
+| app\dashboard\jobs                                                                                |          6 |      4,529 |         65 |        414 |      5,008 |
+| app\dashboard\jobs (Files)                                                                        |          1 |        616 |          3 |         63 |        682 |
+| app\dashboard\jobs\[jobId]                                                                        |          5 |      3,913 |         62 |        351 |      4,326 |
+| app\dashboard\jobs\[jobId] (Files)                                                                |          1 |      2,314 |         24 |        203 |      2,541 |
+| app\dashboard\jobs\[jobId]\apply                                                                  |          2 |        702 |         14 |         59 |        775 |
+| app\dashboard\jobs\[jobId]\edit                                                                   |          1 |        526 |          6 |         48 |        580 |
+| app\dashboard\jobs\[jobId]\messages                                                               |          1 |        371 |         18 |         41 |        430 |
+| app\dashboard\messages                                                                            |          1 |        623 |         25 |         63 |        711 |
+| app\dashboard\notifications                                                                       |          1 |        522 |          6 |         46 |        574 |
+| app\dashboard\post-job                                                                            |          1 |        880 |         11 |         76 |        967 |
+| app\dashboard\profile                                                                             |          1 |        737 |          8 |         47 |        792 |
+| app\dashboard\settings                                                                            |          1 |        812 |         10 |         47 |        869 |
+| app\dashboard\subscription                                                                        |          1 |        875 |          9 |         65 |        949 |
+| app\help                                                                                          |          1 |        923 |          8 |         35 |        966 |
+| app\how-it-works                                                                                  |          1 |        397 |          0 |         27 |        424 |
+| app\jobs                                                                                          |          3 |      1,899 |          9 |        157 |      2,065 |
+| app\jobs\[jobId]                                                                                  |          3 |      1,899 |          9 |        157 |      2,065 |
+| app\jobs\[jobId] (Files)                                                                          |          1 |        732 |          5 |         51 |        788 |
+| app\jobs\[jobId]\dispute                                                                          |          1 |        580 |          1 |         52 |        633 |
+| app\jobs\[jobId]\review                                                                           |          1 |        587 |          3 |         54 |        644 |
+| app\pricing                                                                                       |          1 |        364 |          2 |         19 |        385 |
+| app\privacy                                                                                       |          1 |        265 |          1 |         14 |        280 |
+| app\profile                                                                                       |          1 |        595 |          2 |         53 |        650 |
+| app\profile\[username]                                                                            |          1 |        595 |          2 |         53 |        650 |
+| app\profile\[username]\reviews                                                                    |          1 |        595 |          2 |         53 |        650 |
+| app\resources                                                                                     |          1 |        462 |          0 |         28 |        490 |
+| app\safety                                                                                        |          1 |        469 |          0 |         27 |        496 |
+| app\search                                                                                        |          1 |        586 |         17 |         41 |        644 |
+| app\services                                                                                      |          1 |        315 |          0 |         20 |        335 |
+| app\support                                                                                       |          1 |        460 |          0 |         32 |        492 |
+| app\terms                                                                                         |          1 |        311 |          1 |         11 |        323 |
+| components                                                                                        |         31 |      8,625 |        267 |        802 |      9,694 |
+| components (Files)                                                                                |          5 |      1,256 |         26 |        103 |      1,385 |
+| components\admin                                                                                  |          1 |        598 |          5 |         43 |        646 |
+| components\auth                                                                                   |          1 |        249 |         12 |         40 |        301 |
+| components\dashboard                                                                              |          1 |        259 |          5 |         21 |        285 |
+| components\dynamic                                                                                |          1 |        372 |         26 |         30 |        428 |
+| components\jobs                                                                                   |          2 |        749 |         20 |         56 |        825 |
+| components\providers                                                                              |          1 |        203 |         21 |         32 |        256 |
+| components\search                                                                                 |          1 |        443 |         11 |         44 |        498 |
+| components\settings                                                                               |          1 |        356 |          2 |         15 |        373 |
+| components\ui                                                                                     |         17 |      4,140 |        139 |        418 |      4,697 |
+| contexts                                                                                          |          4 |        547 |         50 |        110 |        707 |
+| data                                                                                              |          2 |        989 |         32 |         38 |      1,059 |
+| hooks                                                                                             |          8 |      1,526 |        149 |        311 |      1,986 |
+| lib                                                                                               |         14 |      3,404 |        429 |        604 |      4,437 |
+| lib (Files)                                                                                       |         13 |      3,056 |        336 |        522 |      3,914 |
+| lib\realtime                                                                                      |          1 |        348 |         93 |         82 |        523 |
+| models                                                                                            |          6 |      2,766 |        177 |        252 |      3,195 |
+| public                                                                                            |          4 |        320 |          9 |         54 |        383 |
+| scripts                                                                                           |          2 |        169 |         21 |         38 |        228 |
+| utils                                                                                             |         11 |      3,154 |        446 |        495 |      4,095 |
++---------------------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| filename                                                                                          | language           | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+
+| c:\Users\Blessan Corley\My Projects\Fixly\README.md                                               | Markdown           |         70 |          0 |         24 |         94 |
+| c:\Users\Blessan Corley\My Projects\Fixly\SETUP_GUIDE.md                                          | Markdown           |        223 |          0 |         68 |        291 |
+| c:\Users\Blessan Corley\My Projects\Fixly\SMS_SETUP_GUIDE.md                                      | Markdown           |        127 |          0 |         52 |        179 |
+| c:\Users\Blessan Corley\My Projects\Fixly\VERIFICATION_IMPLEMENTATION.md                          | Markdown           |        194 |          0 |         59 |        253 |
+| c:\Users\Blessan Corley\My Projects\Fixly\VERIFICATION_SETUP.md                                   | Markdown           |         93 |          0 |         23 |        116 |
+| c:\Users\Blessan Corley\My Projects\Fixly\__tests__\integration\AppIntegration.test.js            | JavaScript         |        493 |         17 |        100 |        610 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\about\page.js                                       | JavaScript         |        393 |        341 |         39 |        773 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\admin\page.js                                       | JavaScript         |         35 |          4 |          5 |         44 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\admin\setup\page.js                                 | JavaScript         |        197 |          1 |         18 |        216 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\admin\dashboard\route.js                        | JavaScript         |        140 |         15 |         24 |        179 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\admin\jobs\route.js                             | JavaScript         |        217 |         14 |         29 |        260 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\admin\setup\route.js                            | JavaScript         |         83 |          7 |         14 |        104 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\admin\stats\route.js                            | JavaScript         |         76 |          7 |         13 |         96 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\admin\users\[userId]\[action]\route.js          | JavaScript         |        129 |         10 |         22 |        161 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\admin\users\route.js                            | JavaScript         |        206 |         13 |         28 |        247 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\[...nextauth]\route.js                     | JavaScript         |          4 |          1 |          2 |          7 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\check-username\route.js                    | JavaScript         |        144 |         15 |         29 |        188 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\complete-google-signup\route.js            | JavaScript         |         64 |          2 |         11 |         77 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\forgot-password\route.js                   | JavaScript         |         93 |         10 |         18 |        121 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\reset-password\route.js                    | JavaScript         |        149 |         15 |         21 |        185 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\send-email-verification\route.js           | JavaScript         |        126 |         14 |         20 |        160 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\send-phone-otp\route.js                    | JavaScript         |        110 |         12 |         18 |        140 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\signup\route.js                            | JavaScript         |        263 |         30 |         46 |        339 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\update-session\route.js                    | JavaScript         |         43 |          4 |          8 |         55 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\verify-email\route.js                      | JavaScript         |        146 |         18 |         27 |        191 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\verify-otp\route.js                        | JavaScript         |        157 |         15 |         30 |        202 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\verify-phone-firebase\route.js             | JavaScript         |         94 |          9 |         18 |        121 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\auth\verify-phone-otp\route.js                  | JavaScript         |        134 |         13 |         23 |        170 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\contact\route.js                                | JavaScript         |        119 |         10 |         15 |        144 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\dashboard\recent-jobs\route.js                  | JavaScript         |        115 |         10 |         21 |        146 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\dashboard\stats\route.js                        | JavaScript         |        535 |         36 |         52 |        623 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\disputes\[disputeId]\route.js                   | JavaScript         |        269 |         17 |         44 |        330 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\disputes\route.js                               | JavaScript         |        358 |         26 |         54 |        438 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\fixer\applications\route.js                     | JavaScript         |        101 |          9 |         15 |        125 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\health\route.js                                 | JavaScript         |          7 |          0 |          2 |          9 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\applications\route.js              | JavaScript         |        174 |         13 |         27 |        214 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\applications\withdraw\route.js     | JavaScript         |         47 |          4 |         10 |         61 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\apply\route.js                     | JavaScript         |        342 |         18 |         46 |        406 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\comments\[commentId]\like\route.js | JavaScript         |        200 |         10 |         28 |        238 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\comments\route.js                  | JavaScript         |        448 |         20 |         68 |        536 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\comments\stream\route.js           | JavaScript         |        108 |          8 |         13 |        129 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\like\route.js                      | JavaScript         |        141 |          5 |         22 |        168 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\messages\route.js                  | JavaScript         |        172 |         12 |         31 |        215 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\rating\route.js                    | JavaScript         |        102 |         10 |         19 |        131 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\review\route.js                    | JavaScript         |        164 |         11 |         25 |        200 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\route.js                           | JavaScript         |        627 |         53 |        115 |        795 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\status\route.js                    | JavaScript         |        350 |         20 |         50 |        420 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\[jobId]\view\route.js                      | JavaScript         |         63 |          5 |         15 |         83 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\browse\route.js                            | JavaScript         |        209 |         20 |         25 |        254 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\jobs\post\route.js                              | JavaScript         |        322 |         30 |         45 |        397 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\messages\route.js                               | JavaScript         |        396 |         27 |         61 |        484 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\reviews\[reviewId]\helpful\route.js             | JavaScript         |         48 |          5 |          8 |         61 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\reviews\route.js                                | JavaScript         |        304 |         23 |         48 |        375 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\socket\route.js                                 | JavaScript         |         83 |          7 |         12 |        102 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\subscription\create-order\route.js              | JavaScript         |        146 |          7 |         18 |        171 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\subscription\fixer\route.js                     | JavaScript         |        202 |         13 |         36 |        251 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\subscription\hirer\route.js                     | JavaScript         |        218 |         14 |         41 |        273 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\subscription\verify-payment\route.js            | JavaScript         |        218 |         14 |         26 |        258 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\upload\route.js                                 | JavaScript         |         86 |          7 |         11 |        104 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\change-password\route.js                   | JavaScript         |         45 |          1 |          8 |         54 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\earnings\route.js                          | JavaScript         |         87 |          7 |         14 |        108 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\fixer-settings\route.js                    | JavaScript         |        228 |         17 |         32 |        277 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\notifications\read\route.js                | JavaScript         |         72 |          7 |         14 |         93 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\notifications\route.js                     | JavaScript         |        209 |         16 |         35 |        260 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\preferences\route.js                       | JavaScript         |         32 |          1 |          6 |         39 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\privacy\route.js                           | JavaScript         |        200 |         22 |         38 |        260 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\profile\[username]\route.js                | JavaScript         |         76 |          9 |         13 |         98 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\profile\route.js                           | JavaScript         |        308 |         24 |         46 |        378 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\profile\search\route.js                    | JavaScript         |        126 |         12 |         17 |        155 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\push-subscription\route.js                 | JavaScript         |        121 |          4 |         20 |        145 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\update-phone\route.js                      | JavaScript         |        113 |         10 |         20 |        143 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\update-username\route.js                   | JavaScript         |         95 |          9 |         18 |        122 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\api\user\upload-photo\route.js                      | JavaScript         |         70 |         84 |         14 |        168 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\error\page.js                                  | JavaScript         |        164 |          0 |         14 |        178 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\forgot-password\page.js                        | JavaScript         |        197 |          1 |         20 |        218 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\onboarding\page.js                             | JavaScript         |        615 |         12 |         52 |        679 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\reset-password\page.js                         | JavaScript         |        252 |          1 |         24 |        277 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\signin\page.js                                 | JavaScript         |        328 |         10 |         34 |        372 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\signup\page.js                                 | JavaScript         |      1,196 |         33 |        128 |      1,357 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\verified\page.js                               | JavaScript         |        161 |          1 |         14 |        176 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\auth\verify-account\page.js                         | JavaScript         |        538 |         15 |         45 |        598 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\contact\page.js                                     | JavaScript         |        460 |          3 |         31 |        494 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\cookies\page.js                                     | JavaScript         |        300 |          0 |         18 |        318 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\admin\page.js                             | JavaScript         |        518 |          7 |         34 |        559 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\applications\page.js                      | JavaScript         |        339 |          0 |         32 |        371 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\browse-jobs\page.js                       | JavaScript         |        432 |         14 |         50 |        496 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\disputes\[disputeId]\page.js              | JavaScript         |        757 |          2 |         67 |        826 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\disputes\page.js                          | JavaScript         |        413 |          0 |         32 |        445 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\earnings\page.js                          | JavaScript         |        477 |          5 |         40 |        522 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\find-fixers\page.js                       | JavaScript         |        447 |          2 |         40 |        489 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\jobs\[jobId]\apply\error.js               | JavaScript         |         56 |          0 |          7 |         63 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\jobs\[jobId]\apply\page.js                | JavaScript         |        646 |         14 |         52 |        712 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\jobs\[jobId]\edit\page.js                 | JavaScript         |        526 |          6 |         48 |        580 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\jobs\[jobId]\messages\page.js             | JavaScript         |        371 |         18 |         41 |        430 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\jobs\[jobId]\page.js                      | JavaScript         |      2,314 |         24 |        203 |      2,541 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\jobs\page.js                              | JavaScript         |        616 |          3 |         63 |        682 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\layout.js                                 | JavaScript         |        612 |          4 |         39 |        655 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\messages\page.js                          | JavaScript         |        623 |         25 |         63 |        711 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\notifications\page.js                     | JavaScript         |        522 |          6 |         46 |        574 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\page.js                                   | JavaScript         |        728 |          2 |         45 |        775 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\post-job\page.js                          | JavaScript         |        880 |         11 |         76 |        967 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\profile\page.js                           | JavaScript         |        737 |          8 |         47 |        792 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\settings\page.js                          | JavaScript         |        812 |         10 |         47 |        869 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\dashboard\subscription\page.js                      | JavaScript         |        875 |          9 |         65 |        949 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\error.js                                            | JavaScript         |        102 |          5 |         12 |        119 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\globals.css                                         | PostCSS            |        462 |         47 |        116 |        625 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\help\page.js                                        | JavaScript         |        923 |          8 |         35 |        966 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\how-it-works\page.js                                | JavaScript         |        397 |          0 |         27 |        424 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\jobs\[jobId]\dispute\page.js                        | JavaScript         |        580 |          1 |         52 |        633 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\jobs\[jobId]\page.js                                | JavaScript         |        732 |          5 |         51 |        788 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\jobs\[jobId]\review\page.js                         | JavaScript         |        587 |          3 |         54 |        644 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\layout.js                                           | JavaScript         |        107 |          1 |          5 |        113 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\loading.js                                          | JavaScript         |         16 |          1 |          2 |         19 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\manifest.js                                         | JavaScript         |        167 |          0 |          0 |        167 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\not-found.js                                        | JavaScript         |         93 |          1 |          8 |        102 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\page.js                                             | JavaScript         |        548 |          1 |         30 |        579 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\pricing\page.js                                     | JavaScript         |        364 |          2 |         19 |        385 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\privacy\page.js                                     | JavaScript         |        265 |          1 |         14 |        280 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\profile\[username]\reviews\page.js                  | JavaScript         |        595 |          2 |         53 |        650 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\providers.js                                        | JavaScript         |        283 |         25 |         46 |        354 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\resources\page.js                                   | JavaScript         |        462 |          0 |         28 |        490 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\safety\page.js                                      | JavaScript         |        469 |          0 |         27 |        496 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\search\page.js                                      | JavaScript         |        586 |         17 |         41 |        644 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\services\page.js                                    | JavaScript         |        315 |          0 |         20 |        335 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\support\page.js                                     | JavaScript         |        460 |          0 |         32 |        492 |
+| c:\Users\Blessan Corley\My Projects\Fixly\app\terms\page.js                                       | JavaScript         |        311 |          1 |         11 |        323 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\CookieConsent.js                             | JavaScript         |         79 |          2 |         10 |         91 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\InstagramCommentsRealtime.js                 | JavaScript         |        558 |         19 |         47 |        624 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\JobCardRectangular.js                        | JavaScript         |        260 |          4 |         24 |        288 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\JobCommentButton.js                          | JavaScript         |         33 |          0 |          4 |         37 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\SkillSelectionModal.js                       | JavaScript         |        326 |          1 |         18 |        345 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\admin\AdminDashboard.js                      | JavaScript         |        598 |          5 |         43 |        646 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\auth\FirebasePhoneAuth.js                    | JavaScript         |        249 |         12 |         40 |        301 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\dashboard\VerificationPrompt.js              | JavaScript         |        259 |          5 |         21 |        285 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\dynamic\DynamicComponents.js                 | JavaScript         |        372 |         26 |         30 |        428 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\jobs\JobStatusManager.js                     | JavaScript         |        398 |          2 |         29 |        429 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\jobs\VirtualJobList.js                       | JavaScript         |        351 |         18 |         27 |        396 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\providers\QueryProvider.js                   | JavaScript         |        203 |         21 |         32 |        256 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\search\AdvancedSearch.js                     | JavaScript         |        443 |         11 |         44 |        498 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\settings\PrivacyControls.js                  | JavaScript         |        356 |          2 |         15 |        373 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\ConfirmModal.js                           | JavaScript         |        111 |          0 |          8 |        119 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\DarkModeFixups.js                         | JavaScript         |        373 |          8 |         14 |        395 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\ErrorBoundary.js                          | JavaScript         |        176 |          4 |         25 |        205 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\GlobalLoading.js                          | JavaScript         |        109 |         19 |         15 |        143 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\LoadingStates.js                          | JavaScript         |        294 |          9 |         30 |        333 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\MobileOptimized.js                        | JavaScript         |        436 |          9 |         43 |        488 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\NotificationCenter.js                     | JavaScript         |        404 |         10 |         43 |        457 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\OptimizedImage.js                         | JavaScript         |        298 |          6 |         25 |        329 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\PWAInstallButton.js                       | JavaScript         |         99 |          8 |         20 |        127 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\PWAInstallPrompt.js                       | JavaScript         |        205 |          8 |         29 |        242 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\PushNotificationManager.js                | JavaScript         |        135 |          7 |         23 |        165 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\RepostJobModal.js                         | JavaScript         |        237 |          1 |         20 |        258 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\ServiceWorkerRegistration.js              | JavaScript         |         87 |         13 |         20 |        120 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\ThemeToggle.js                            | JavaScript         |        163 |          2 |         10 |        175 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\VerifiedBadge.js                          | JavaScript         |        142 |         10 |         21 |        173 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\VirtualList.js                            | JavaScript         |        548 |         13 |         29 |        590 |
+| c:\Users\Blessan Corley\My Projects\Fixly\components\ui\VirtualizedNotificationList.js            | JavaScript         |        323 |         12 |         43 |        378 |
+| c:\Users\Blessan Corley\My Projects\Fixly\contexts\LoadingContext.js                              | JavaScript         |         76 |         10 |         18 |        104 |
+| c:\Users\Blessan Corley\My Projects\Fixly\contexts\NotificationContext.js                         | JavaScript         |        307 |         22 |         55 |        384 |
+| c:\Users\Blessan Corley\My Projects\Fixly\contexts\SocketContext.js                               | JavaScript         |         73 |          4 |         12 |         89 |
+| c:\Users\Blessan Corley\My Projects\Fixly\contexts\ThemeContext.js                                | JavaScript         |         91 |         14 |         25 |        130 |
+| c:\Users\Blessan Corley\My Projects\Fixly\data\cities.js                                          | JavaScript         |        967 |         31 |         35 |      1,033 |
+| c:\Users\Blessan Corley\My Projects\Fixly\data\validation.js                                      | JavaScript         |         22 |          1 |          3 |         26 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\useFirebase.js                                    | JavaScript         |         43 |          8 |         13 |         64 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\useLoadingTimeout.js                              | JavaScript         |         90 |         15 |         21 |        126 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\useNetworkStatus.js                               | JavaScript         |         58 |          6 |         15 |         79 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\usePageLoading.js                                 | JavaScript         |         66 |          6 |         13 |         85 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\useQuery.js                                       | JavaScript         |        384 |         30 |         58 |        472 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\useRealTime.js                                    | JavaScript         |        108 |         13 |         20 |        141 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\useServiceWorker.js                               | JavaScript         |        314 |         25 |         62 |        401 |
+| c:\Users\Blessan Corley\My Projects\Fixly\hooks\useSocket.js                                      | JavaScript         |        463 |         46 |        109 |        618 |
+| c:\Users\Blessan Corley\My Projects\Fixly\jest.setup.js                                           | JavaScript         |        342 |         27 |         27 |        396 |
+| c:\Users\Blessan Corley\My Projects\Fixly\jsconfig.json                                           | JSON with Comments |         14 |          0 |          0 |         14 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\analytics.js                                        | JavaScript         |        317 |         51 |         78 |        446 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\auth.js                                             | JavaScript         |        461 |         42 |         65 |        568 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\db.js                                               | JavaScript         |        161 |         29 |         33 |        223 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\email.js                                            | JavaScript         |        320 |         11 |         20 |        351 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\errorHandling.js                                    | JavaScript         |        312 |         36 |         56 |        404 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\firebase-admin.js                                   | JavaScript         |         24 |          1 |          5 |         30 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\firebase-client.js                                  | JavaScript         |         15 |          2 |          3 |         20 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\firebase.js                                         | JavaScript         |        140 |         11 |         33 |        184 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\mongodb.js                                          | JavaScript         |         49 |          6 |          7 |         62 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\notifications.js                                    | JavaScript         |        424 |         45 |         78 |        547 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\reactQuery.js                                       | JavaScript         |        282 |         54 |         48 |        384 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\realtime\NotificationManager.js                     | JavaScript         |        348 |         93 |         82 |        523 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\redis.js                                            | JavaScript         |        349 |         25 |         56 |        430 |
+| c:\Users\Blessan Corley\My Projects\Fixly\lib\socket.js                                           | JavaScript         |        202 |         23 |         40 |        265 |
+| c:\Users\Blessan Corley\My Projects\Fixly\middleware.js                                           | JavaScript         |         64 |         10 |         10 |         84 |
+| c:\Users\Blessan Corley\My Projects\Fixly\models\Conversation.js                                  | JavaScript         |        192 |         11 |         15 |        218 |
+| c:\Users\Blessan Corley\My Projects\Fixly\models\Dispute.js                                       | JavaScript         |        381 |         12 |         23 |        416 |
+| c:\Users\Blessan Corley\My Projects\Fixly\models\Job.js                                           | JavaScript         |        970 |         66 |        104 |      1,140 |
+| c:\Users\Blessan Corley\My Projects\Fixly\models\Review.js                                        | JavaScript         |        293 |         11 |         20 |        324 |
+| c:\Users\Blessan Corley\My Projects\Fixly\models\User.js                                          | JavaScript         |        806 |         69 |         74 |        949 |
+| c:\Users\Blessan Corley\My Projects\Fixly\models\VerificationToken.js                             | JavaScript         |        124 |          8 |         16 |        148 |
+| c:\Users\Blessan Corley\My Projects\Fixly\next-sitemap.config.js                                  | JavaScript         |         51 |          1 |          0 |         52 |
+| c:\Users\Blessan Corley\My Projects\Fixly\next.config.js                                          | JavaScript         |        171 |         21 |         20 |        212 |
+| c:\Users\Blessan Corley\My Projects\Fixly\package-lock.json                                       | JSON               |     17,073 |          0 |          1 |     17,074 |
+| c:\Users\Blessan Corley\My Projects\Fixly\package-scripts.json                                    | JSON               |          6 |          0 |          0 |          6 |
+| c:\Users\Blessan Corley\My Projects\Fixly\package.json                                            | JSON               |        175 |          0 |          1 |        176 |
+| c:\Users\Blessan Corley\My Projects\Fixly\postcss.config.js                                       | JavaScript         |          6 |          1 |          1 |          8 |
+| c:\Users\Blessan Corley\My Projects\Fixly\production-checklist.md                                 | Markdown           |         64 |          0 |         11 |         75 |
+| c:\Users\Blessan Corley\My Projects\Fixly\public\favicon.svg                                      | XML                |         21 |          7 |          8 |         36 |
+| c:\Users\Blessan Corley\My Projects\Fixly\public\offline.html                                     | HTML               |        274 |          2 |         46 |        322 |
+| c:\Users\Blessan Corley\My Projects\Fixly\public\sitemap-0.xml                                    | XML                |         20 |          0 |          0 |         20 |
+| c:\Users\Blessan Corley\My Projects\Fixly\public\sitemap.xml                                      | XML                |          5 |          0 |          0 |          5 |
+| c:\Users\Blessan Corley\My Projects\Fixly\scripts\fix-duplicate-usernames.js                      | JavaScript         |         94 |         14 |         25 |        133 |
+| c:\Users\Blessan Corley\My Projects\Fixly\scripts\generate-pwa-icons.js                           | JavaScript         |         75 |          7 |         13 |         95 |
+| c:\Users\Blessan Corley\My Projects\Fixly\server.js                                               | JavaScript         |         42 |          6 |          6 |         54 |
+| c:\Users\Blessan Corley\My Projects\Fixly\tailwind.config.js                                      | JavaScript         |        165 |         12 |         11 |        188 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\bundleOptimization.js                             | JavaScript         |        438 |         22 |         29 |        489 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\creditUtils.js                                    | JavaScript         |         74 |         40 |         23 |        137 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\emailService.js                                   | JavaScript         |        239 |          8 |         16 |        263 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\errorHandling.js                                  | JavaScript         |        353 |         31 |         71 |        455 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\performance.js                                    | JavaScript         |        298 |         37 |         70 |        405 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\performanceMonitoring.js                          | JavaScript         |        578 |         73 |        106 |        757 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\rateLimiting.js                                   | JavaScript         |        234 |         32 |         36 |        302 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\sensitiveContentFilter.js                         | JavaScript         |        101 |         27 |         18 |        146 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\smsService.js                                     | JavaScript         |         84 |        106 |         21 |        211 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\toast.js                                          | JavaScript         |        140 |         13 |         12 |        165 |
+| c:\Users\Blessan Corley\My Projects\Fixly\utils\validation.js                                     | JavaScript         |        615 |         57 |         93 |        765 |
+| Total                                                                                             |                    |     79,068 |      3,299 |      7,079 |     89,446 |
++---------------------------------------------------------------------------------------------------+--------------------+------------+------------+------------+------------+

@@ -29,6 +29,8 @@ import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 import { toastMessages } from '../../../utils/toast';
 import { useTheme } from '../../../contexts/ThemeContext';
+import PWAInstallButton from '../../../components/ui/PWAInstallButton';
+import PushNotificationManager from '../../../components/ui/PushNotificationManager';
 
 export default function SettingsPage() {
   return (
@@ -408,16 +410,25 @@ function SettingsContent() {
         </div>
       </div>
 
+      {/* Push Notifications */}
+      <div>
+        <h3 className="text-lg font-semibold text-fixly-text mb-4">Push Notifications</h3>
+        <div className="card">
+          <PushNotificationManager />
+        </div>
+      </div>
+
       {/* Notification Types */}
       <div>
-        <h3 className="text-lg font-semibold text-fixly-text mb-4">Notification Types</h3>
+        <h3 className="text-lg font-semibold text-fixly-text mb-4">Notification Categories</h3>
         <div className="card space-y-4">
           {[
-            { key: 'emailNotifications', label: 'Email Notifications', desc: 'Receive updates via email' },
-            { key: 'pushNotifications', label: 'Push Notifications', desc: 'Get browser notifications' },
-            { key: 'smsNotifications', label: 'SMS Notifications', desc: 'Receive text messages' },
-            { key: 'jobAlerts', label: 'Job Alerts', desc: 'New job opportunities' },
-            { key: 'marketing', label: 'Marketing Emails', desc: 'Promotional content' }
+            { key: 'jobNotifications', label: 'Job Updates', desc: 'Applications, status changes, completions' },
+            { key: 'messageNotifications', label: 'Messages', desc: 'New messages and replies' },
+            { key: 'socialNotifications', label: 'Social', desc: 'Likes, comments, profile views' },
+            { key: 'paymentNotifications', label: 'Payments', desc: 'Payment confirmations and failures' },
+            { key: 'systemNotifications', label: 'System', desc: 'Account updates and security alerts' },
+            { key: 'reviewNotifications', label: 'Reviews', desc: 'New reviews and ratings' }
           ].map((setting) => (
             <div key={setting.key} className="flex items-center justify-between p-4 bg-fixly-bg-secondary rounded-lg">
               <div>
@@ -806,6 +817,11 @@ function SettingsContent() {
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Resources
               </a>
+              
+              {/* PWA Install Option */}
+              <div className="pt-2 border-t border-fixly-border mt-4">
+                <PWAInstallButton variant="link" className="w-full" />
+              </div>
             </div>
           </div>
         </div>

@@ -208,6 +208,48 @@ const jobSchema = new mongoose.Schema({
     },
     default: 'open'
   },
+
+  // Analytics & Engagement
+  views: {
+    count: {
+      type: Number,
+      default: 0
+    },
+    uniqueViewers: [{
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      viewedAt: {
+        type: Date,
+        default: Date.now
+      },
+      ipAddress: String,
+      userAgent: String
+    }],
+    dailyViews: [{
+      date: {
+        type: String, // YYYY-MM-DD format
+        required: true
+      },
+      count: {
+        type: Number,
+        default: 0
+      }
+    }]
+  },
+
+  likes: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    likedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   
   // Relationships
   createdBy: {
@@ -233,6 +275,19 @@ const jobSchema = new mongoose.Schema({
       required: [true, 'Proposed amount is required'],
       min: [0, 'Proposed amount cannot be negative'],
       max: [1000000, 'Proposed amount cannot exceed ₹10,00,000']
+    },
+    priceVariance: {
+      type: Number,
+      default: 0 // Difference from job budget (positive = higher, negative = lower)
+    },
+    priceVariancePercentage: {
+      type: Number,
+      default: 0 // Percentage difference from job budget
+    },
+    negotiationNotes: {
+      type: String,
+      maxlength: [500, 'Negotiation notes cannot exceed 500 characters'],
+      trim: true
     },
     timeEstimate: {
       value: {
@@ -371,6 +426,53 @@ const jobSchema = new mongoose.Schema({
         default: Date.now
       }
     }],
+    reactions: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      type: {
+        type: String,
+        enum: ['thumbs_up', 'thumbs_down', 'heart', 'laugh', 'wow', 'angry'],
+        required: true
+      },
+      reactedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+    mentions: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      startIndex: {
+        type: Number,
+        required: true
+      },
+      endIndex: {
+        type: Number,
+        required: true
+      }
+    }],
+    edited: {
+      isEdited: {
+        type: Boolean,
+        default: false
+      },
+      editedAt: {
+        type: Date
+      },
+      editHistory: [{
+        originalMessage: String,
+        editedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }]
+    },
     replies: [{
       author: {
         type: mongoose.Schema.Types.ObjectId,
@@ -395,6 +497,53 @@ const jobSchema = new mongoose.Schema({
           default: Date.now
         }
       }],
+      reactions: [{
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true
+        },
+        type: {
+          type: String,
+          enum: ['thumbs_up', 'thumbs_down', 'heart', 'laugh', 'wow', 'angry'],
+          required: true
+        },
+        reactedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }],
+      mentions: [{
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true
+        },
+        startIndex: {
+          type: Number,
+          required: true
+        },
+        endIndex: {
+          type: Number,
+          required: true
+        }
+      }],
+      edited: {
+        isEdited: {
+          type: Boolean,
+          default: false
+        },
+        editedAt: {
+          type: Date
+        },
+        editHistory: [{
+          originalMessage: String,
+          editedAt: {
+            type: Date,
+            default: Date.now
+          }
+        }]
+      },
       createdAt: {
         type: Date,
         default: Date.now
@@ -819,34 +968,67 @@ jobSchema.methods.addReply = function(commentId, authorId, message) {
   return this.save();
 };
 
-// Method to increment views
-jobSchema.methods.addView = function(userId) {
+// Method to increment views with analytics
+jobSchema.methods.addView = function(userId, ipAddress, userAgent) {
   // Don't count views from the job poster
   if (this.createdBy.toString() === userId.toString()) return;
+  
+  // Initialize views object if not exists
+  if (!this.views) {
+    this.views = {
+      count: 0,
+      uniqueViewers: [],
+      dailyViews: []
+    };
+  }
   
   // Check if user already viewed today
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const todayString = today.toISOString().split('T')[0];
   
-  const viewedToday = this.viewedBy.some(view => 
-    view.user.toString() === userId.toString() &&
-    view.viewedAt >= today
+  const viewedToday = this.views.uniqueViewers.some(view => 
+    view.userId && view.userId.toString() === userId.toString() &&
+    new Date(view.viewedAt) >= today
   );
   
   if (!viewedToday) {
-    this.views += 1;
-    this.viewedBy.push({
-      user: userId,
-      viewedAt: new Date()
+    // Increment total count
+    this.views.count += 1;
+    
+    // Add to unique viewers
+    this.views.uniqueViewers.push({
+      userId: userId,
+      viewedAt: new Date(),
+      ipAddress: ipAddress,
+      userAgent: userAgent
     });
     
-    // Keep only last 100 views
-    if (this.viewedBy.length > 100) {
-      this.viewedBy = this.viewedBy.slice(-100);
+    // Update daily views
+    const existingDayIndex = this.views.dailyViews.findIndex(dv => dv.date === todayString);
+    if (existingDayIndex > -1) {
+      this.views.dailyViews[existingDayIndex].count += 1;
+    } else {
+      this.views.dailyViews.push({
+        date: todayString,
+        count: 1
+      });
     }
     
-    return this.save();
+    // Keep only last 30 days of daily views
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoString = thirtyDaysAgo.toISOString().split('T')[0];
+    
+    this.views.dailyViews = this.views.dailyViews.filter(dv => dv.date >= thirtyDaysAgoString);
+    
+    // Keep only last 1000 unique viewers
+    if (this.views.uniqueViewers.length > 1000) {
+      this.views.uniqueViewers = this.views.uniqueViewers.slice(-1000);
+    }
   }
+  
+  return this.views.count;
 };
 
 // Method to raise dispute
@@ -1008,6 +1190,132 @@ jobSchema.methods.deleteReply = function(commentId, replyId, userId) {
   
   reply.deleteOne();
   return { success: true, message: 'Reply deleted successfully' };
+};
+
+// Enhanced comment reaction methods
+jobSchema.methods.toggleCommentReaction = function(commentId, userId, reactionType) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return null;
+  
+  const existingReactionIndex = comment.reactions.findIndex(
+    reaction => reaction.user.toString() === userId.toString()
+  );
+  
+  if (existingReactionIndex > -1) {
+    const existingReaction = comment.reactions[existingReactionIndex];
+    if (existingReaction.type === reactionType) {
+      // Remove reaction if same type
+      comment.reactions.splice(existingReactionIndex, 1);
+      return { reacted: false, reactionType: null, count: comment.reactions.length };
+    } else {
+      // Update reaction type
+      existingReaction.type = reactionType;
+      existingReaction.reactedAt = new Date();
+      return { reacted: true, reactionType, count: comment.reactions.length };
+    }
+  } else {
+    // Add new reaction
+    comment.reactions.push({
+      user: userId,
+      type: reactionType,
+      reactedAt: new Date()
+    });
+    return { reacted: true, reactionType, count: comment.reactions.length };
+  }
+};
+
+jobSchema.methods.toggleReplyReaction = function(commentId, replyId, userId, reactionType) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return null;
+  
+  const reply = comment.replies.id(replyId);
+  if (!reply) return null;
+  
+  const existingReactionIndex = reply.reactions.findIndex(
+    reaction => reaction.user.toString() === userId.toString()
+  );
+  
+  if (existingReactionIndex > -1) {
+    const existingReaction = reply.reactions[existingReactionIndex];
+    if (existingReaction.type === reactionType) {
+      // Remove reaction if same type
+      reply.reactions.splice(existingReactionIndex, 1);
+      return { reacted: false, reactionType: null, count: reply.reactions.length };
+    } else {
+      // Update reaction type
+      existingReaction.type = reactionType;
+      existingReaction.reactedAt = new Date();
+      return { reacted: true, reactionType, count: reply.reactions.length };
+    }
+  } else {
+    // Add new reaction
+    reply.reactions.push({
+      user: userId,
+      type: reactionType,
+      reactedAt: new Date()
+    });
+    return { reacted: true, reactionType, count: reply.reactions.length };
+  }
+};
+
+// Comment editing methods
+jobSchema.methods.editComment = function(commentId, userId, newMessage, mentions = []) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return { success: false, message: 'Comment not found' };
+  
+  const isAuthor = comment.author.toString() === userId.toString();
+  if (!isAuthor) {
+    return { success: false, message: 'Only the author can edit this comment' };
+  }
+  
+  // Store edit history
+  if (!comment.edited.editHistory) {
+    comment.edited.editHistory = [];
+  }
+  
+  comment.edited.editHistory.push({
+    originalMessage: comment.message,
+    editedAt: new Date()
+  });
+  
+  // Update comment
+  comment.message = newMessage;
+  comment.mentions = mentions;
+  comment.edited.isEdited = true;
+  comment.edited.editedAt = new Date();
+  
+  return { success: true, message: 'Comment updated successfully', comment };
+};
+
+jobSchema.methods.editReply = function(commentId, replyId, userId, newMessage, mentions = []) {
+  const comment = this.comments.id(commentId);
+  if (!comment) return { success: false, message: 'Comment not found' };
+  
+  const reply = comment.replies.id(replyId);
+  if (!reply) return { success: false, message: 'Reply not found' };
+  
+  const isAuthor = reply.author.toString() === userId.toString();
+  if (!isAuthor) {
+    return { success: false, message: 'Only the author can edit this reply' };
+  }
+  
+  // Store edit history
+  if (!reply.edited.editHistory) {
+    reply.edited.editHistory = [];
+  }
+  
+  reply.edited.editHistory.push({
+    originalMessage: reply.message,
+    editedAt: new Date()
+  });
+  
+  // Update reply
+  reply.message = newMessage;
+  reply.mentions = mentions;
+  reply.edited.isEdited = true;
+  reply.edited.editedAt = new Date();
+  
+  return { success: true, message: 'Reply updated successfully', reply };
 };
 
 // Static method to find jobs by filters

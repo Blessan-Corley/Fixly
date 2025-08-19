@@ -1,41 +1,122 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
-// Custom hook for Socket.io connection
+// Performance-optimized Socket.io connection pool
+class SocketConnectionPool {
+  constructor() {
+    this.connections = new Map();
+    this.maxConnections = 3;
+    this.connectionTimeout = 20000;
+    this.heartbeatInterval = 25000;
+  }
+
+  getConnection(sessionId) {
+    return this.connections.get(sessionId);
+  }
+
+  createConnection(sessionId, accessToken) {
+    if (this.connections.size >= this.maxConnections) {
+      // Clean up oldest connection
+      const oldestKey = this.connections.keys().next().value;
+      this.destroyConnection(oldestKey);
+    }
+
+    // Detect if running in PWA mode
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
+                  window.navigator.standalone === true;
+
+    const socket = io(process.env.NEXTAUTH_URL || 'http://localhost:3000', {
+      auth: { 
+        token: accessToken,
+        isPWA: isPWA,
+        userAgent: navigator.userAgent
+      },
+      transports: ['websocket', 'polling'],
+      timeout: this.connectionTimeout,
+      forceNew: false,
+      reconnection: true,
+      reconnectionAttempts: isPWA ? 10 : 5, // More attempts for PWA
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: isPWA ? 10000 : 5000, // Longer delays for PWA
+      randomizationFactor: 0.5,
+      pingTimeout: 60000,
+      pingInterval: this.heartbeatInterval,
+      // PWA-specific optimizations
+      upgrade: true,
+      rememberUpgrade: true,
+      forceBase64: false
+    });
+
+    this.connections.set(sessionId, socket);
+    return socket;
+  }
+
+  destroyConnection(sessionId) {
+    const socket = this.connections.get(sessionId);
+    if (socket) {
+      socket.disconnect();
+      this.connections.delete(sessionId);
+    }
+  }
+
+  destroyAll() {
+    this.connections.forEach((socket, sessionId) => {
+      this.destroyConnection(sessionId);
+    });
+  }
+}
+
+// Global connection pool
+const socketPool = new SocketConnectionPool();
+
+// Custom hook for Socket.io connection with advanced optimization
 export function useSocket() {
   const { data: session } = useSession();
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
+  const [latency, setLatency] = useState(0);
+  
   const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 5;
+  const heartbeatRef = useRef(null);
+  const latencyRef = useRef(null);
+  const connectionIdRef = useRef(null);
+  const isCleanupRef = useRef(false);
 
   const connect = useCallback(() => {
-    if (!session?.accessToken || socket?.connected) return;
+    if (!session?.accessToken || isCleanupRef.current) return;
+
+    const sessionId = session.user?.id;
+    if (!sessionId) return;
+
+    // Check if we already have a connection for this session
+    let existingSocket = socketPool.getConnection(sessionId);
+    
+    if (existingSocket?.connected) {
+      setSocket(existingSocket);
+      setConnected(true);
+      setConnecting(false);
+      setError(null);
+      return;
+    }
 
     console.log('🔌 Connecting to Socket.io...');
     setConnecting(true);
     setError(null);
 
-    const newSocket = io(process.env.NEXTAUTH_URL || 'http://localhost:3000', {
-      auth: {
-        token: session.accessToken
-      },
-      transports: ['websocket', 'polling'],
-      timeout: 20000,
-      forceNew: true,
-      reconnection: true,
-      reconnectionAttempts: maxReconnectAttempts,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000
-    });
+    // Create new connection through pool
+    const newSocket = socketPool.createConnection(sessionId, session.accessToken);
+    connectionIdRef.current = sessionId;
 
+    // Connection event handlers with performance optimizations
     newSocket.on('connect', () => {
+      if (isCleanupRef.current) return;
+      
       console.log('✅ Socket.io connected');
       setConnected(true);
       setConnecting(false);
@@ -44,39 +125,57 @@ export function useSocket() {
       
       // Send online status
       newSocket.emit('user:online');
+      
+      // Start latency monitoring
+      startLatencyMonitoring(newSocket);
     });
 
     newSocket.on('disconnect', (reason) => {
+      if (isCleanupRef.current) return;
+      
       console.log('🔌 Socket.io disconnected:', reason);
       setConnected(false);
       setConnecting(false);
       
-      if (reason === 'io server disconnect') {
-        // Server initiated disconnect, try to reconnect
-        setTimeout(() => {
-          if (reconnectAttemptsRef.current < maxReconnectAttempts) {
-            reconnectAttemptsRef.current++;
-            connect();
-          }
-        }, 2000);
+      // Stop latency monitoring
+      stopLatencyMonitoring();
+      
+      if (reason === 'io server disconnect' || reason === 'io client disconnect') {
+        // Normal disconnection, will auto-reconnect
+        return;
       }
+      
+      // Handle unexpected disconnections
+      setTimeout(() => {
+        if (reconnectAttemptsRef.current < 5 && !isCleanupRef.current) {
+          reconnectAttemptsRef.current++;
+          connect();
+        }
+      }, Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000)); // Exponential backoff
     });
 
     newSocket.on('connect_error', (error) => {
+      if (isCleanupRef.current) return;
+      
       console.error('❌ Socket.io connection error:', error);
       setConnected(false);
       setConnecting(false);
       setError(error.message);
       
+      reconnectAttemptsRef.current++;
+      
       // Show error toast only on repeated failures
       if (reconnectAttemptsRef.current > 2) {
         toast.error('Connection issue', {
-          description: 'Real-time features may not work properly'
+          description: 'Real-time features may not work properly',
+          duration: 3000
         });
       }
     });
 
     newSocket.on('reconnect', (attemptNumber) => {
+      if (isCleanupRef.current) return;
+      
       console.log(`🔄 Socket.io reconnected after ${attemptNumber} attempts`);
       setConnected(true);
       setConnecting(false);
@@ -84,61 +183,195 @@ export function useSocket() {
       reconnectAttemptsRef.current = 0;
       
       toast.success('Connection restored', {
-        description: 'Real-time features are now working'
+        description: 'Real-time features are now working',
+        duration: 2000
       });
+      
+      // Restart latency monitoring
+      startLatencyMonitoring(newSocket);
     });
 
     newSocket.on('reconnect_error', (error) => {
-      console.error('❌ Socket.io reconnection error:', error);
-      reconnectAttemptsRef.current++;
+      if (isCleanupRef.current) return;
       
-      if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.error('❌ Socket.io reconnection error:', error);
+      
+      if (reconnectAttemptsRef.current >= 5) {
         setError('Failed to reconnect');
         toast.error('Connection failed', {
-          description: 'Please refresh the page to restore real-time features'
+          description: 'Please refresh the page to restore real-time features',
+          duration: 5000
         });
       }
     });
 
+    // Latency monitoring for performance
+    newSocket.on('pong', (latencyMs) => {
+      setLatency(latencyMs);
+    });
+
+    // Handle inactivity warnings from server
+    newSocket.on('inactivity_warning', (data) => {
+      if (isCleanupRef.current) return;
+      
+      toast.warning('Inactivity detected', {
+        description: data.message || 'You will be disconnected due to inactivity',
+        duration: data.timeout || 5000,
+        action: {
+          label: 'Stay connected',
+          onClick: () => {
+            // Send activity signal to server
+            newSocket.emit('user:active');
+            toast.dismiss();
+          }
+        }
+      });
+    });
+
+    // PWA-specific event listeners
+    if (typeof window !== 'undefined') {
+      // Listen for visibility changes (PWA backgrounding)
+      const handleVisibilityChange = () => {
+        if (document.hidden) {
+          newSocket.emit('user:away');
+        } else {
+          newSocket.emit('user:active');
+        }
+      };
+      
+      // Listen for online/offline status
+      const handleOnline = () => {
+        if (!newSocket.connected) {
+          connect();
+        }
+      };
+      
+      const handleOffline = () => {
+        setError('No internet connection');
+      };
+      
+      // Listen for service worker messages (notifications clicked)
+      const handleMessage = (event) => {
+        if (event.data?.type === 'NOTIFICATION_CLICKED') {
+          // Handle notification click navigation
+          if (event.data.navigate && window.location.pathname !== event.data.navigate) {
+            window.location.href = event.data.navigate;
+          }
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      navigator.serviceWorker?.addEventListener('message', handleMessage);
+      
+      // Store cleanup function
+      const cleanup = () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+        navigator.serviceWorker?.removeEventListener('message', handleMessage);
+      };
+      
+      // Cleanup on disconnect
+      newSocket.on('disconnect', cleanup);
+      
+      // Store cleanup for unmount
+      newSocket._pwaCleanup = cleanup;
+    }
+
     setSocket(newSocket);
-  }, [session, socket]);
+  }, [session?.accessToken, session?.user?.id]);
+
+  // Latency monitoring functions
+  const startLatencyMonitoring = useCallback((socket) => {
+    if (latencyRef.current) {
+      clearInterval(latencyRef.current);
+    }
+    
+    latencyRef.current = setInterval(() => {
+      if (socket?.connected && !isCleanupRef.current) {
+        const start = Date.now();
+        socket.emit('ping', start);
+      }
+    }, 30000); // Check every 30 seconds
+  }, []);
+
+  const stopLatencyMonitoring = useCallback(() => {
+    if (latencyRef.current) {
+      clearInterval(latencyRef.current);
+      latencyRef.current = null;
+    }
+  }, []);
 
   const disconnect = useCallback(() => {
+    isCleanupRef.current = true;
+    
     if (socket) {
       socket.emit('user:away');
-      socket.disconnect();
+      
+      // Clean up PWA event listeners
+      if (socket._pwaCleanup) {
+        socket._pwaCleanup();
+      }
+      
+      // Don't disconnect immediately if using pool
+      if (connectionIdRef.current) {
+        // Mark as away but keep connection for reuse
+        socketPool.getConnection(connectionIdRef.current)?.emit('user:away');
+      } else {
+        socket.disconnect();
+      }
+      
       setSocket(null);
       setConnected(false);
       setConnecting(false);
       setError(null);
     }
-  }, [socket]);
+    
+    stopLatencyMonitoring();
+  }, [socket, stopLatencyMonitoring]);
 
   // Initialize connection when session is available
   useEffect(() => {
-    if (session?.accessToken && !socket) {
+    if (session?.accessToken && !socket && !isCleanupRef.current) {
       connect();
     }
 
     return () => {
-      if (socket) {
-        socket.disconnect();
-      }
+      // Don't cleanup on session change, only on unmount
     };
-  }, [session, socket, connect]);
+  }, [session?.accessToken, socket, connect]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount only
   useEffect(() => {
     return () => {
-      disconnect();
+      isCleanupRef.current = true;
+      stopLatencyMonitoring();
+      
+      // Only fully disconnect on unmount, not on session changes
+      if (connectionIdRef.current) {
+        socketPool.destroyConnection(connectionIdRef.current);
+      }
     };
-  }, [disconnect]);
+  }, [stopLatencyMonitoring]);
+
+  // Connection health monitoring
+  const connectionHealth = useMemo(() => {
+    if (!connected) return 'disconnected';
+    if (latency > 1000) return 'poor';
+    if (latency > 500) return 'fair';
+    if (latency > 200) return 'good';
+    return 'excellent';
+  }, [connected, latency]);
 
   return {
     socket,
     connected,
     connecting,
     error,
+    latency,
+    connectionHealth,
     connect,
     disconnect
   };
@@ -149,6 +382,7 @@ export function useJobSocket(jobId) {
   const { socket, connected } = useSocket();
   const [jobUpdates, setJobUpdates] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [comments, setComments] = useState([]);
 
   useEffect(() => {
     if (!socket || !connected || !jobId) return;
@@ -179,13 +413,143 @@ export function useJobSocket(jobId) {
       }
     };
 
+    // Listen for comment events
+    const handleNewComment = (data) => {
+      setComments(prev => [...prev, data.comment]);
+      
+      toast.info('New comment', {
+        description: `${data.author.name} posted a comment`,
+        duration: 3000
+      });
+    };
+
+    const handleNewReply = (data) => {
+      setComments(prev => prev.map(comment => 
+        comment._id === data.commentId 
+          ? { ...comment, replies: [...(comment.replies || []), data.reply] }
+          : comment
+      ));
+      
+      toast.info('New reply', {
+        description: `${data.author.name} replied to a comment`,
+        duration: 3000
+      });
+    };
+
+    const handleCommentDeleted = (data) => {
+      if (data.type === 'comment') {
+        setComments(prev => prev.filter(comment => comment._id !== data.commentId));
+        toast.info('Comment deleted', { duration: 2000 });
+      } else if (data.type === 'reply') {
+        setComments(prev => prev.map(comment => 
+          comment._id === data.commentId 
+            ? { ...comment, replies: comment.replies?.filter(reply => reply._id !== data.replyId) || [] }
+            : comment
+        ));
+        toast.info('Reply deleted', { duration: 2000 });
+      }
+    };
+
+    const handleLikeToggled = (data) => {
+      if (data.type === 'comment') {
+        setComments(prev => prev.map(comment => 
+          comment._id === data.commentId 
+            ? { ...comment, likeCount: data.likeCount }
+            : comment
+        ));
+      } else if (data.type === 'reply') {
+        setComments(prev => prev.map(comment => 
+          comment._id === data.commentId 
+            ? { 
+                ...comment, 
+                replies: comment.replies?.map(reply => 
+                  reply._id === data.replyId 
+                    ? { ...reply, likeCount: data.likeCount }
+                    : reply
+                ) || []
+              }
+            : comment
+        ));
+      }
+    };
+
+    const handleReactionToggled = (data) => {
+      // Similar logic for reactions
+      const updateReactions = (item) => {
+        const reactionCounts = { ...item.reactionCounts };
+        if (data.reacted) {
+          reactionCounts[data.reactionType] = (reactionCounts[data.reactionType] || 0) + 1;
+        } else {
+          reactionCounts[data.reactionType] = Math.max(0, (reactionCounts[data.reactionType] || 1) - 1);
+        }
+        return { ...item, reactionCounts };
+      };
+
+      if (data.type === 'comment') {
+        setComments(prev => prev.map(comment => 
+          comment._id === data.commentId ? updateReactions(comment) : comment
+        ));
+      } else if (data.type === 'reply') {
+        setComments(prev => prev.map(comment => 
+          comment._id === data.commentId 
+            ? { 
+                ...comment, 
+                replies: comment.replies?.map(reply => 
+                  reply._id === data.replyId ? updateReactions(reply) : reply
+                ) || []
+              }
+            : comment
+        ));
+      }
+    };
+
+    const handleCommentEdited = (data) => {
+      if (data.type === 'comment') {
+        setComments(prev => prev.map(comment => 
+          comment._id === data.commentId 
+            ? { ...comment, message: data.editedContent, edited: { isEdited: true, editedAt: data.timestamp } }
+            : comment
+        ));
+      } else if (data.type === 'reply') {
+        setComments(prev => prev.map(comment => 
+          comment._id === data.commentId 
+            ? { 
+                ...comment, 
+                replies: comment.replies?.map(reply => 
+                  reply._id === data.replyId 
+                    ? { ...reply, message: data.editedContent, edited: { isEdited: true, editedAt: data.timestamp } }
+                    : reply
+                ) || []
+              }
+            : comment
+        ));
+      }
+      
+      toast.info('Content edited', {
+        description: `${data.userName} edited their ${data.type}`,
+        duration: 2000
+      });
+    };
+
     socket.on('job:updated', handleJobUpdate);
     socket.on('application:updated', handleApplicationUpdate);
+    socket.on('comment:new', handleNewComment);
+    socket.on('comment:reply', handleNewReply);
+    socket.on('comment:deleted', handleCommentDeleted);
+    socket.on('comment:like_toggled', handleLikeToggled);
+    socket.on('comment:reaction_toggled', handleReactionToggled);
+    socket.on('comment:edited', handleCommentEdited);
 
     return () => {
       socket.emit('leave:job', jobId);
       socket.off('job:updated', handleJobUpdate);
       socket.off('application:updated', handleApplicationUpdate);
+      socket.off('comment:new', handleNewComment);
+      socket.off('comment:reply', handleNewReply);
+      socket.off('comment:deleted', handleCommentDeleted);
+      socket.off('comment:like_toggled', handleLikeToggled);
+      socket.off('comment:reaction_toggled', handleReactionToggled);
+      socket.off('comment:edited', handleCommentEdited);
     };
   }, [socket, connected, jobId]);
 
@@ -204,6 +568,7 @@ export function useJobSocket(jobId) {
   return {
     jobUpdates,
     applications,
+    comments,
     updateJob,
     updateApplication
   };

@@ -27,16 +27,19 @@ export function SocketProvider({ children }) {
     if (isAuthenticated && connectionAttempts === 0) {
       setConnectionAttempts(1);
       
-      // Initialize Socket.io server
-      fetch('/api/socket')
+      // Check Socket.io server status
+      fetch('/api/socket/status')
         .then(res => res.json())
         .then(data => {
-          if (data.success) {
+          if (data.success && data.socketInitialized) {
             console.log('✅ Socket.io server ready');
+          } else {
+            console.warn('⚠️ Socket.io server not ready');
           }
         })
         .catch(error => {
-          console.error('❌ Failed to initialize Socket.io:', error);
+          console.warn('⚠️ Could not check Socket.io status:', error.message);
+          // Don't fail here, Socket.io is initialized on the server
         });
     }
   }, [isAuthenticated, connectionAttempts]);
