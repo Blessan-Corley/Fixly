@@ -6,7 +6,7 @@ import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
 import { validateSignupForm, detectFakeAccount, ValidationRules } from '../../../../utils/validation';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../[...nextauth]/route';
+import { authOptions } from '../../../../lib/auth';
 import { sendWelcomeEmail } from '../../../../lib/email';
 
 export async function POST(request) {

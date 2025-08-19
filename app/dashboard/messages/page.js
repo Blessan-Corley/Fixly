@@ -63,6 +63,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [editingMessage, setEditingMessage] = useState(null);
   
@@ -87,10 +88,12 @@ export default function MessagesPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, [selectedConversation]);
 
-  // Fetch conversations
-  const fetchConversations = async () => {
+  // Fetch conversations (background refresh)
+  const fetchConversations = async (isInitial = false) => {
     try {
-      startLoading('Loading conversations...');
+      if (isInitial) {
+        startLoading('Loading conversations...');
+      }
       const response = await fetch('/api/messages');
       const data = await response.json();
       
@@ -106,18 +109,25 @@ export default function MessagesPage() {
         }
       }
     } catch (error) {
-      console.error('Error fetching conversations:', error);
-      toast.error('Failed to load conversations');
+      if (isInitial) {
+        console.error('Error fetching conversations:', error);
+        toast.error('Failed to load conversations');
+      }
+      // Silent fail for background refreshes
     } finally {
-      setLoading(false);
-      stopLoading();
+      if (isInitial) {
+        setLoading(false);
+        stopLoading();
+      }
     }
   };
 
-  // Fetch messages for selected conversation
-  const fetchMessages = async (conversationId, page = 1) => {
+  // Fetch messages for selected conversation (background refresh)
+  const fetchMessages = async (conversationId, page = 1, isInitial = false) => {
     try {
-      setLoadingMessages(page === 1);
+      if (isInitial && page === 1) {
+        setLoadingMessages(true);
+      }
       const response = await fetch(`/api/messages?conversationId=${conversationId}&page=${page}`);
       const data = await response.json();
       
@@ -129,16 +139,21 @@ export default function MessagesPage() {
           setMessages(prev => [...data.conversation.messages, ...prev]);
         }
         
-        // Scroll to bottom for new messages
-        if (page === 1) {
+        // Scroll to bottom for new messages only on initial load
+        if (page === 1 && isInitial) {
           setTimeout(() => scrollToBottom(), 100);
         }
       }
     } catch (error) {
-      console.error('Error fetching messages:', error);
-      toast.error('Failed to load messages');
+      if (isInitial) {
+        console.error('Error fetching messages:', error);
+        toast.error('Failed to load messages');
+      }
+      // Silent fail for background refreshes
     } finally {
-      setLoadingMessages(false);
+      if (isInitial && page === 1) {
+        setLoadingMessages(false);
+      }
     }
   };
 
@@ -180,8 +195,8 @@ export default function MessagesPage() {
         setMessages(prev => [...prev, newMsg]);
         scrollToBottom();
         
-        // Update conversations list
-        fetchConversations();
+        // Update conversations list (background)
+        fetchConversations(false);
       } else {
         toast.error(data.message || 'Failed to send message');
         setNewMessage(messageContent); // Restore message
@@ -199,7 +214,7 @@ export default function MessagesPage() {
   const selectConversation = (conversation) => {
     setSelectedConversation(conversation);
     setMessages([]);
-    fetchMessages(conversation._id);
+    fetchMessages(conversation._id, 1, true);
     
     if (isMobile) {
       setShowConversationsList(false);
@@ -229,7 +244,7 @@ export default function MessagesPage() {
       
       if (data.success) {
         // Refresh conversations and select the new one
-        await fetchConversations();
+        await fetchConversations(false);
         const conversation = conversations.find(c => c._id === data.conversationId);
         if (conversation) {
           selectConversation(conversation);
@@ -292,7 +307,7 @@ export default function MessagesPage() {
   // Initial load
   useEffect(() => {
     if (session) {
-      fetchConversations();
+      fetchConversations(true);
       
       // Check if starting conversation with specific user
       if (userParam) {
@@ -301,12 +316,14 @@ export default function MessagesPage() {
     }
   }, [session, userParam]);
 
-  // Set up polling for real-time updates
+  // Set up polling for real-time updates (background only)
   useEffect(() => {
     if (selectedConversation && session) {
-      const interval = setInterval(() => {
-        fetchMessages(selectedConversation._id);
-      }, 3000); // Poll every 3 seconds
+      const interval = setInterval(async () => {
+        setBackgroundRefreshing(true);
+        await fetchMessages(selectedConversation._id, 1, false); // Background refresh
+        setTimeout(() => setBackgroundRefreshing(false), 500); // Brief indication
+      }, 5000); // Poll every 5 seconds (reduced frequency)
       
       setPollingInterval(interval);
       
@@ -464,6 +481,12 @@ export default function MessagesPage() {
           <>
             {/* Chat Header */}
             <div className="p-4 border-b border-fixly-border bg-white">
+              {/* Subtle background refresh indicator */}
+              {backgroundRefreshing && (
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-fixly-accent opacity-70">
+                  <div className="h-full bg-fixly-accent-dark animate-pulse"></div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   {isMobile && (
@@ -521,12 +544,6 @@ export default function MessagesPage() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-fixly-bg-light">
-              {loadingMessages && (
-                <div className="text-center py-4">
-                  <Loader className="h-6 w-6 animate-spin text-fixly-accent mx-auto" />
-                </div>
-              )}
-              
               {messages.map((message, index) => {
                 const isOwn = message.sender._id === session.user.id;
                 const showAvatar = index === 0 || messages[index - 1].sender._id !== message.sender._id;

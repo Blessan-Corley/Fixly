@@ -78,7 +78,7 @@ export default function NotificationCenter({
   className = '',
   showCount = true,
   autoRefresh = true,
-  refreshInterval = 30000 // 30 seconds
+  refreshInterval = 60000 // 60 seconds - reduced frequency
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -103,12 +103,18 @@ export default function NotificationCenter({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Auto refresh notifications
+  // Auto refresh notifications - only when open and not connected to real-time
   useEffect(() => {
     if (autoRefresh && isOpen) {
-      refreshIntervalRef.current = setInterval(() => {
-        fetchNotifications(1, filter, false);
-      }, refreshInterval);
+      // Check if we have real-time connection
+      const isRealTimeAvailable = window.socket?.connected;
+      
+      // Only use polling if real-time is not available
+      if (!isRealTimeAvailable) {
+        refreshIntervalRef.current = setInterval(() => {
+          fetchNotifications(1, filter, false);
+        }, refreshInterval);
+      }
     }
 
     return () => {

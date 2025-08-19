@@ -235,7 +235,7 @@
     }
   }
 
-  /* Dark mode mobile improvements */
+  /* Enhanced Mobile + Dark Mode Integration */
   @media (max-width: 768px) {
     .dark {
       /* Better contrast for mobile dark mode */
@@ -247,6 +247,40 @@
     .dark input, .dark textarea, .dark select {
       background-color: rgb(31, 41, 55);
       border-color: rgb(55, 65, 81);
+    }
+
+    /* Mobile + Real-time + Dark Mode optimizations */
+    .mobile-realtime-optimized.dark {
+      /* Real-time notification optimizations for mobile dark mode */
+      --notification-mobile-bg: rgb(31, 41, 55);
+      --notification-mobile-border: rgb(55, 65, 81);
+      --notification-mobile-text: rgb(241, 245, 249);
+      --notification-mobile-accent: rgb(20, 184, 166);
+    }
+
+    .mobile-realtime-optimized.dark .notification {
+      background-color: var(--notification-mobile-bg) !important;
+      border-color: var(--notification-mobile-border) !important;
+      color: var(--notification-mobile-text) !important;
+      min-height: 44px !important;
+      padding: 16px !important;
+    }
+
+    .mobile-realtime-optimized.dark .notification.unread {
+      background-color: rgba(20, 184, 166, 0.1) !important;
+      border-left-color: var(--notification-mobile-accent) !important;
+      border-left-width: 4px !important;
+    }
+
+    .mobile-realtime-optimized.dark .notification-bell {
+      filter: brightness(1.2) contrast(1.1);
+    }
+
+    .mobile-realtime-optimized.dark .notification-dropdown {
+      background-color: rgb(17, 24, 39) !important;
+      border-color: rgb(55, 65, 81) !important;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
     }
   }
 

@@ -1,11 +1,11 @@
 // app/api/dashboard/recent-jobs/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../lib/db';
-import Job from '../../../../models/Job';
-import User from '../../../../models/User';
-import { rateLimit } from '../../../../utils/rateLimiting';
+import { authOptions } from '../../../../lib/auth.js';
+import connectDB from '../../../../lib/db.js';
+import Job from '../../../../models/Job.js';
+import User from '../../../../models/User.js';
+import { rateLimit } from '../../../../utils/rateLimiting.js';
 
 export const dynamic = 'force-dynamic';
 

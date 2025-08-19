@@ -382,59 +382,12 @@ export function MobileScrollToTop() {
   );
 }
 
-// Mobile Pull to Refresh
+// Mobile Pull to Refresh (Disabled for better UX)
 export function MobilePullToRefresh({ onRefresh, children, className = '' }) {
-  const [isPulling, setIsPulling] = useState(false);
-  const [pullDistance, setPullDistance] = useState(0);
-  const containerRef = useRef(null);
-  const startY = useRef(0);
-
-  const handleTouchStart = (e) => {
-    if (window.scrollY === 0) {
-      startY.current = e.touches[0].clientY;
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    if (window.scrollY === 0 && startY.current) {
-      const currentY = e.touches[0].clientY;
-      const distance = currentY - startY.current;
-      
-      if (distance > 0) {
-        setPullDistance(Math.min(distance, 100));
-        setIsPulling(distance > 60);
-      }
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (isPulling && onRefresh) {
-      onRefresh();
-    }
-    setPullDistance(0);
-    setIsPulling(false);
-    startY.current = 0;
-  };
-
+  // Disabled pull-to-refresh UI - all refreshing happens in background
+  // This provides a seamless user experience without visible loading indicators
   return (
-    <div
-      ref={containerRef}
-      className={className}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      style={{
-        transform: `translateY(${pullDistance * 0.5}px)`,
-        transition: pullDistance === 0 ? 'transform 0.3s ease' : 'none'
-      }}
-    >
-      {pullDistance > 0 && (
-        <div className="flex justify-center py-2">
-          <div className={`transition-transform ${isPulling ? 'rotate-180' : ''}`}>
-            <ArrowUp className="h-5 w-5 text-fixly-accent" />
-          </div>
-        </div>
-      )}
+    <div className={className}>
       {children}
     </div>
   );

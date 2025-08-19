@@ -128,3 +128,31 @@ storybook-static
 DEPLOYMENT.md
 SECURITY.md
 TESTING_CHECKLIST.md
+
+# Analysis, Test Reports & Performance Files
+SCALABILITY_REPORT.md
+performance-analysis-report.json
+scripts/performance-analysis.js
+scripts/comprehensive-feature-test.js
+scripts/test-realtime.js
+*-analysis-report.json
+*-test-report.json
+*-performance-report.*
+*-scalability-report.*
+
+# Generated Documentation & Reports
+/docs/generated/
+/reports/
+performance-*.json
+scalability-*.md
+test-results-*.json
+benchmark-*.log
+capacity-analysis.*
+infrastructure-report.*
+
+# Development & Testing Artifacts  
+jest-test-results.json
+coverage-*.json
+benchmark-results.json
+load-test-*.log
+stress-test-*.json

@@ -5,6 +5,8 @@ import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../../lib/db';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
+import { cache } from '../../../../../lib/redis';
+import { getNotificationService } from '../../../../../lib/notifications';
 
 export async function POST(request) {
   try {
@@ -35,46 +37,51 @@ export async function POST(request) {
       );
     }
 
-    await connectDB();
+    // Use the new notification service
+    const notificationService = await getNotificationService();
+    
+    let idsToMark = [];
+    if (notificationIds && Array.isArray(notificationIds)) {
+      idsToMark = notificationIds;
+    } else if (notificationId) {
+      idsToMark = [notificationId];
+    } else {
+      // Mark all as read
+      idsToMark = [];
+    }
 
-    const user = await User.findById(session.user.id);
-    if (!user) {
+    const success = await notificationService.markAsRead(session.user.id, idsToMark);
+    
+    if (!success) {
       return NextResponse.json(
-        { message: 'User not found' },
-        { status: 404 }
+        { message: 'Failed to mark notifications as read' },
+        { status: 500 }
       );
     }
 
-    // Handle single notification
-    if (notificationId) {
-      const notification = user.notifications.id(notificationId);
-      if (notification) {
-        notification.read = true;
-        notification.readAt = new Date();
-      }
+    // Get updated unread count
+    const unreadCount = await notificationService.getUnreadCount(session.user.id);
+
+    // Invalidate cache for this user
+    try {
+      const cachePattern = `notifications:${session.user.id}:*`;
+      await cache.invalidatePattern(cachePattern);
+    } catch (cacheError) {
+      console.log('Cache invalidation error:', cacheError.message);
     }
 
-    // Handle multiple notifications
-    if (notificationIds && Array.isArray(notificationIds)) {
-      notificationIds.forEach(id => {
-        const notification = user.notifications.id(id);
-        if (notification) {
-          notification.read = true;
-          notification.readAt = new Date();
-        }
-      });
-    }
-
-    await user.save();
-
-    // Count remaining unread notifications
-    const unreadCount = user.notifications.filter(notif => !notif.read).length;
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      message: 'Notification(s) marked as read',
+      message: notificationIds 
+        ? `${notificationIds.length} notification(s) marked as read`
+        : 'Notification marked as read',
       unreadCount
     });
+
+    // Set cache headers
+    response.headers.set('Cache-Control', 'no-cache');
+    
+    return response;
 
   } catch (error) {
     console.error('Mark notification read error:', error);

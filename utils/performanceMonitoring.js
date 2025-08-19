@@ -1,7 +1,7 @@
 // utils/performanceMonitoring.js - Comprehensive performance monitoring system
 'use client';
 
-import { analytics, EventTypes } from '../lib/analytics';
+import { analytics, EventTypes } from '../lib/analytics-client';
 
 // Performance metrics collection
 export class PerformanceMonitor {

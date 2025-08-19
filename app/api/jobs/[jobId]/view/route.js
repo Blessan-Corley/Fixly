@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import connectDB from '@/lib/db';
 import Job from '@/models/Job';
-import User from '@/models/User';
+import { analytics } from '@/lib/analytics';
 
 export async function POST(request, { params }) {
   try {
@@ -26,9 +26,7 @@ export async function POST(request, { params }) {
 
     await connectDB();
 
-    const user = await User.findById(session.user.id);
     const job = await Job.findById(jobId);
-
     if (!job) {
       return NextResponse.json(
         { message: 'Job not found' },
@@ -36,47 +34,78 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Don't count views from the job creator
-    if (job.createdBy.toString() === user._id.toString()) {
-      return NextResponse.json({ success: true });
+    // Get client info for analytics
+    const userAgent = request.headers.get('user-agent') || '';
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ipAddress = forwarded ? forwarded.split(',')[0] : 
+                     request.headers.get('x-real-ip') || 
+                     'unknown';
+
+    // Add view to job using new analytics method
+    const viewCount = job.addView(session.user.id, ipAddress, userAgent);
+    if (viewCount > 0) {
+      await job.save();
+
+      // Track in analytics system
+      await analytics.trackEvent('job_viewed', {
+        jobId: job._id,
+        jobTitle: job.title,
+        jobCategory: job.skillsRequired[0],
+        jobBudget: job.budget.amount,
+        jobBudgetType: job.budget.type,
+        viewCount: viewCount,
+        userAgent: userAgent,
+        ipAddress: ipAddress
+      }, session.user.id);
     }
 
-    // Check if user already viewed this job today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const alreadyViewedToday = job.viewedBy?.some(view => 
-      view.user.toString() === user._id.toString() &&
-      new Date(view.viewedAt) >= today
-    );
-
-    if (!alreadyViewedToday) {
-      // Increment view count and add to viewedBy array
-      job.views = (job.views || 0) + 1;
-      
-      if (!job.viewedBy) {
-        job.viewedBy = [];
-      }
-      
-      job.viewedBy.push({
-        user: user._id,
-        viewedAt: new Date()
-      });
-
-      // Keep only last 100 views to prevent array from growing too large
-      if (job.viewedBy.length > 100) {
-        job.viewedBy = job.viewedBy.slice(-100);
-      }
-
-      await job.save({ validateBeforeSave: false });
-    }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      viewCount: job.views?.count || 0,
+      message: 'View tracked successfully'
+    });
 
   } catch (error) {
-    console.error('Job view tracking error:', error);
+    console.error('Track view error:', error);
     return NextResponse.json(
       { message: 'Failed to track view' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(request, { params }) {
+  try {
+    const { jobId } = params;
+    if (!jobId) {
+      return NextResponse.json(
+        { message: 'Job ID is required' },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const job = await Job.findById(jobId).select('views');
+    if (!job) {
+      return NextResponse.json(
+        { message: 'Job not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      views: {
+        total: job.views?.count || 0,
+        uniqueViewers: job.views?.uniqueViewers?.length || 0,
+        dailyViews: job.views?.dailyViews || []
+      }
+    });
+
+  } catch (error) {
+    console.error('Get view stats error:', error);
+    return NextResponse.json(
+      { message: 'Failed to get view statistics' },
       { status: 500 }
     );
   }

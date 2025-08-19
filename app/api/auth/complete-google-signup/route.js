@@ -1,7 +1,7 @@
 // app/api/auth/complete-google-signup/route.js - Complete Google OAuth signup
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../[...nextauth]/route';
+import { authOptions } from '../../../../lib/auth';
 import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
 

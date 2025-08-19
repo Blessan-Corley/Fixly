@@ -5,7 +5,7 @@ import { useQuery, useMutation, useInfiniteQuery, useQueryClient } from '@tansta
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { queryKeys, optimisticUpdates, prefetchHelpers } from '../lib/reactQuery';
-import { analytics, EventTypes } from '../lib/analytics';
+import { analytics, EventTypes } from '../lib/analytics-client';
 
 // Generic API fetcher with error handling
 const fetcher = async (url, options = {}) => {

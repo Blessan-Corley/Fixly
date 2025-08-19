@@ -5,7 +5,7 @@ import Job from '../../../../models/Job';
 import { withErrorHandler, validateRequired, AuthenticationError } from '../../../../lib/errorHandling';
 import { cache, analytics } from '../../../../lib/redis';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { authOptions } from '../../../../lib/auth';
 
 export const GET = withErrorHandler(async (request) => {
   await connectDB();

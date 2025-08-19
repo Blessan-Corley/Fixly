@@ -260,10 +260,12 @@
                 statusEl.className = 'connection-status online';
                 statusEl.innerHTML = '🟢 Connection restored!';
                 
-                // Automatically redirect after 2 seconds
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 2000);
+                // Only redirect if user initiated the check
+                if (window.manualCheck) {
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
+                }
             } else {
                 statusEl.className = 'connection-status offline';
                 statusEl.innerHTML = '🔴 No internet connection detected';
@@ -272,16 +274,22 @@
         
         // Check connection when button is clicked
         function checkConnection() {
+            window.manualCheck = true;
             const button = document.querySelector('.retry-button');
             button.innerHTML = 'Checking...';
             button.disabled = true;
             
-            // Simple connectivity check
+            // Simple connectivity check with timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
             fetch('/api/health', { 
                 method: 'HEAD',
-                cache: 'no-cache'
+                cache: 'no-cache',
+                signal: controller.signal
             })
             .then(() => {
+                clearTimeout(timeoutId);
                 // Connection is back
                 updateConnectionStatus();
                 button.innerHTML = 'Connected! Redirecting...';
@@ -290,10 +298,12 @@
                 }, 1000);
             })
             .catch(() => {
+                clearTimeout(timeoutId);
                 // Still offline
                 button.innerHTML = 'Try Again';
                 button.disabled = false;
                 updateConnectionStatus();
+                window.manualCheck = false;
             });
         }
         
@@ -304,8 +314,8 @@
         // Initial status check
         updateConnectionStatus();
         
-        // Periodic connection check
-        setInterval(updateConnectionStatus, 5000);
+        // Less aggressive periodic connection check to prevent loops
+        setInterval(updateConnectionStatus, 10000);
         
         // Register service worker if not already registered
         if ('serviceWorker' in navigator) {

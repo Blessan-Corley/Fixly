@@ -1,24 +1,34 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import connectDB from '@/lib/db';
-import Job from '@/models/Job';
-import User from '@/models/User';
-import { rateLimit } from '@/utils/rateLimiting';
+import { authOptions } from '../../../../lib/auth.js';
+import connectDB from '../../../../lib/db.js';
+import Job from '../../../../models/Job.js';
+import User from '../../../../models/User.js';
+import { rateLimit } from '../../../../utils/rateLimiting.js';
 
 export const dynamic = 'force-dynamic'; 
 export async function GET(request) {
+  console.log('🔍 Dashboard stats API called');
   try {
     // Apply rate limiting
     const rateLimitResult = await rateLimit(request, 'dashboard_stats', 30, 60); // 30 requests per minute
     if (!rateLimitResult.success) {
+      console.log('❌ Rate limit exceeded');
       return NextResponse.json(
         { message: 'Too many requests. Please try again later.' },
         { status: 429 }
       );
     }
 
+    console.log('✅ Rate limit passed');
     const session = await getServerSession(authOptions);
+    console.log('📋 Session check:', {
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      hasUserId: !!session?.user?.id,
+      userId: session?.user?.id
+    });
+    
     if (!session?.user?.id) {
       console.log('❌ No session or user ID found');
       return NextResponse.json(
@@ -96,9 +106,16 @@ export async function GET(request) {
     return NextResponse.json(stats);
 
   } catch (error) {
-    console.error('Dashboard stats error:', error);
+    console.error('❌ Dashboard stats error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { 
+        message: 'Internal server error',
+        error: process.env.NODE_ENV === 'development' ? error.message : 'Server error'
+      },
       { status: 500 }
     );
   }
