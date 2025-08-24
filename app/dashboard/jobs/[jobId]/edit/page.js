@@ -70,6 +70,11 @@ function EditJobContent({ params }) {
   const [errors, setErrors] = useState({});
   const [originalJob, setOriginalJob] = useState(null);
   
+  // Subscription states
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  const [showProModal, setShowProModal] = useState(false);
+  const [loadingSubscription, setLoadingSubscription] = useState(true);
+
   // Search states
   const [citySearch, setCitySearch] = useState('');
   const [cityResults, setCityResults] = useState([]);
@@ -80,7 +85,22 @@ function EditJobContent({ params }) {
 
   useEffect(() => {
     fetchJobDetails();
+    fetchSubscriptionInfo();
   }, [jobId]);
+
+  const fetchSubscriptionInfo = async () => {
+    try {
+      const response = await fetch('/api/subscription/hirer');
+      if (response.ok) {
+        const data = await response.json();
+        setSubscriptionInfo(data);
+      }
+    } catch (error) {
+      console.error('Error fetching subscription info:', error);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
 
   // City search
   useEffect(() => {
@@ -539,15 +559,45 @@ function EditJobContent({ params }) {
               <label className="block text-sm font-medium text-fixly-text mb-2">
                 Urgency Level
               </label>
-              <select
-                value={formData.urgency}
-                onChange={(e) => handleInputChange('urgency', e.target.value)}
-                className="select-field"
-              >
-                <option value="flexible">Flexible</option>
-                <option value="asap">ASAP</option>
-                <option value="scheduled">Scheduled</option>
-              </select>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { value: 'asap', label: 'ASAP', desc: 'Within 24 hours', requiresPro: true },
+                  { value: 'flexible', label: 'Flexible', desc: 'Within a few days' },
+                  { value: 'scheduled', label: 'Scheduled', desc: 'On specific date' }
+                ].map(({ value, label, desc, requiresPro }) => {
+                  const isPro = subscriptionInfo?.isPro;
+                  const canSelect = !requiresPro || isPro;
+                  
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        if (requiresPro && !isPro) {
+                          setShowProModal(true);
+                        } else {
+                          handleInputChange('urgency', value);
+                        }
+                      }}
+                      className={`p-4 rounded-lg border-2 transition-colors text-left relative ${
+                        formData.urgency === value
+                          ? 'border-fixly-accent bg-fixly-accent/10'
+                          : canSelect 
+                            ? 'border-fixly-border hover:border-fixly-accent'
+                            : 'border-fixly-border opacity-60'
+                      }`}
+                    >
+                      <div className="font-medium text-fixly-text">{label}</div>
+                      {requiresPro && (
+                        <div className="text-xs text-fixly-accent font-medium mt-1">
+                          {isPro ? '✓ Pro' : '🔒 Pro Required'}
+                        </div>
+                      )}
+                      <div className="text-sm text-fixly-text-muted">{desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -575,6 +625,62 @@ function EditJobContent({ params }) {
           </div>
         </motion.div>
       </div>
+
+      {/* Pro Modal */}
+      {showProModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-lg max-w-md w-full p-6"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-fixly-text">Pro Feature Required</h3>
+              <button
+                onClick={() => setShowProModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-fixly-text-muted mb-3">
+                The ASAP urgency option is a Pro feature that helps you get faster responses from fixers.
+              </p>
+              
+              <div className="bg-fixly-accent/10 p-3 rounded-lg mb-4">
+                <h4 className="font-medium text-fixly-text mb-2">🚀 Pro Benefits:</h4>
+                <ul className="text-sm text-fixly-text-muted space-y-1">
+                  <li>• ASAP job posting for urgent needs</li>
+                  <li>• Unlimited job posting</li>
+                  <li>• Job boosting for more visibility</li>
+                  <li>• Priority support</li>
+                  <li>• Advanced analytics</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowProModal(false)}
+                className="btn-ghost flex-1"
+              >
+                Maybe Later
+              </button>
+              <button
+                onClick={() => {
+                  setShowProModal(false);
+                  router.push('/dashboard/subscription');
+                }}
+                className="btn-primary flex-1"
+              >
+                Upgrade to Pro
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

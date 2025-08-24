@@ -25,8 +25,8 @@ import {
   PieChart,
   LineChart
 } from 'lucide-react';
-import { useSocket } from '../../hooks/useSocket';
-import { cache } from '../../lib/redis';
+import { useRealtime } from '../../hooks/useRealtime';
+import { cache } from '../../lib/cache';
 import { LoadingSpinner, LoadingSkeleton } from '../ui/LoadingStates';
 import { OptimizedImage } from '../ui/OptimizedImage';
 
@@ -43,40 +43,16 @@ export default function AdminDashboard() {
     analytics: {}
   });
 
-  const { socket, connected } = useSocket();
+  const { connected } = useRealtime('admin');
 
-  // Real-time data subscription
+  // Real-time data updates (simplified)
   useEffect(() => {
-    if (connected && socket) {
-      // Join admin room for real-time updates
-      socket.emit('join_admin_room');
-
-      // Listen for real-time dashboard updates
-      socket.on('dashboard_update', (data) => {
-        setRealTimeData(prev => ({ ...prev, ...data }));
-      });
-
-      socket.on('user_activity', (activity) => {
-        setRealTimeData(prev => ({
-          ...prev,
-          latestActivity: [activity, ...(prev.latestActivity || [])].slice(0, 10)
-        }));
-      });
-
-      socket.on('new_job_posted', (job) => {
-        setRealTimeData(prev => ({
-          ...prev,
-          recentJobs: [job, ...(prev.recentJobs || [])].slice(0, 10)
-        }));
-      });
-
-      return () => {
-        socket.off('dashboard_update');
-        socket.off('user_activity');
-        socket.off('new_job_posted');
-      };
+    if (connected) {
+      // Poll for admin dashboard updates every 30 seconds
+      const interval = setInterval(fetchDashboardData, 30000);
+      return () => clearInterval(interval);
     }
-  }, [connected, socket]);
+  }, [connected]);
 
   // Fetch dashboard data
   const fetchDashboardData = async () => {

@@ -1,141 +1,290 @@
-// hooks/useRealTime.js
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNetworkStatus } from './useNetworkStatus';
+import { toast } from 'sonner';
 
-export function useRealTime(endpoint, interval = 3000, options = {}) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const intervalRef = useRef(null);
-  const lastFetchRef = useRef(0);
-  const backgroundUpdateRef = useRef(false);
-  const { isOnline } = useNetworkStatus();
-  
+export function useRealtime(userId, options = {}) {
   const {
-    enabled = true,
-    silent = true, // Default to silent for background updates
-    onUpdate = null,
-    dependencies = [],
-    showInitialLoading = false // Only show loading on initial fetch
+    autoConnect = true,
+    enableNotifications = true,
+    enablePushNotifications = true,
+    reconnectAttempts = 5,
+    reconnectDelay = 2000
   } = options;
-
-  const fetchData = useCallback(async (isInitial = false) => {
-    // Check if auto-refresh is disabled via settings
-    const autoRefreshEnabled = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('autoRefresh='))
-      ?.split('=')[1] !== 'false';
-
-    if (!enabled || (!isInitial && !autoRefreshEnabled) || (!isInitial && !isOnline)) {
-      return;
-    }
-
-    // Prevent too frequent requests
-    const now = Date.now();
-    if (!isInitial && now - lastFetchRef.current < 1000) {
-      return;
-    }
-    lastFetchRef.current = now;
-
+  
+  // Connection state
+  const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState(null);
+  const [reconnectCount, setReconnectCount] = useState(0);
+  
+  // Data state
+  const [notifications, setNotifications] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [userPresence, setUserPresence] = useState(new Map());
+  
+  // Refs
+  const eventSourceRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  
+  // Connect to SSE
+  const connect = useCallback(() => {
+    if (!userId || connecting || connected) return;
+    
+    setConnecting(true);
+    setError(null);
+    
+    console.log(`🔗 Connecting to real-time service for user: ${userId}`);
+    
     try {
-      // Only show loading for initial fetch if explicitly requested
-      if (isInitial && showInitialLoading) setLoading(true);
+      // Create EventSource connection
+      const eventSource = new EventSource(
+        `/api/realtime/connect?userId=${encodeURIComponent(userId)}`
+      );
+      eventSourceRef.current = eventSource;
       
-      const response = await fetch(endpoint);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      // Connection opened
+      eventSource.onopen = () => {
+        console.log('✅ Real-time connection established');
+        setConnected(true);
+        setConnecting(false);
+        setError(null);
+        setReconnectCount(0);
+        
+        if (enableNotifications && 'Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().then(permission => {
+            console.log('📱 Notification permission:', permission);
+          });
+        }
+      };
       
-      const newData = await response.json();
+      // Message received
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleRealtimeMessage(data);
+        } catch (error) {
+          console.error('Error parsing real-time message:', error);
+        }
+      };
       
-      // Only update if data has actually changed (deep comparison for better efficiency)
-      const hasChanged = JSON.stringify(newData) !== JSON.stringify(data);
-      if (hasChanged) {
-        setData(newData);
-        backgroundUpdateRef.current = !isInitial; // Track if this was a background update
-        if (onUpdate) onUpdate(newData, backgroundUpdateRef.current);
-      }
+      // Connection error
+      eventSource.onerror = (error) => {
+        console.error('❌ Real-time connection error:', error);
+        setConnected(false);
+        setConnecting(false);
+        setError(error);
+        
+        // Attempt reconnection
+        if (reconnectCount < reconnectAttempts) {
+          const delay = reconnectDelay * Math.pow(2, reconnectCount);
+          console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectCount + 1}/${reconnectAttempts})`);
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            setReconnectCount(prev => prev + 1);
+            cleanup();
+            connect();
+          }, delay);
+        } else {
+          console.error('❌ Max reconnection attempts reached');
+          toast.error('Real-time connection lost. Please refresh the page.');
+        }
+      };
       
-      setError(null);
-    } catch (err) {
-      // Only log errors for initial fetches, silently handle background errors
-      if (isInitial) {
-        setError(err.message);
-        console.error('Real-time fetch error:', err);
-      }
-    } finally {
-      if (isInitial && showInitialLoading) setLoading(false);
+    } catch (error) {
+      console.error('Failed to establish real-time connection:', error);
+      setConnecting(false);
+      setError(error);
     }
-  }, [endpoint, enabled, silent, onUpdate, data]);
-
-  // Initial fetch
-  useEffect(() => {
-    if (enabled) {
-      fetchData(true);
+  }, [userId, connecting, connected, reconnectCount, reconnectAttempts, reconnectDelay, enableNotifications]);
+  
+  // Disconnect
+  const disconnect = useCallback(() => {
+    cleanup();
+    setConnected(false);
+    setConnecting(false);
+    console.log('🔌 Real-time connection disconnected');
+  }, []);
+  
+  // Cleanup connections and timers
+  const cleanup = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
-  }, [enabled, ...dependencies]);
-
-  // Set up polling
-  useEffect(() => {
-    if (!enabled) return;
-
-    intervalRef.current = setInterval(() => {
-      fetchData(false);
-    }, interval);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+  }, []);
+  
+  // Handle incoming real-time messages
+  const handleRealtimeMessage = useCallback((data) => {
+    switch (data.type) {
+      case 'connection':
+        sessionIdRef.current = data.sessionId;
+        console.log('📡 Real-time session established:', data.sessionId);
+        break;
+        
+      case 'notification':
+        handleNotification(data.data);
+        break;
+        
+      case 'message_received':
+        handleMessage(data.data);
+        break;
+        
+      case 'job_update':
+        handleJobUpdate(data.data);
+        break;
+        
+      default:
+        console.log('📨 Real-time message:', data.type, data);
+    }
+  }, []);
+  
+  // Handle notifications
+  const handleNotification = useCallback((notification) => {
+    setNotifications(prev => [notification, ...prev.slice(0, 99)]);
+    
+    // Show toast notification
+    toast(notification.title, {
+      description: notification.message,
+      action: notification.actions?.[0] ? {
+        label: notification.actions[0].label,
+        onClick: () => window.location.href = notification.actions[0].url
+      } : undefined
+    });
+    
+    // Show browser notification if permission granted
+    if (enableNotifications && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const browserNotification = new Notification(notification.title, {
+          body: notification.message,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: notification.id,
+          requireInteraction: notification.priority >= 3
+        });
+        
+        if (notification.actions?.[0]?.url) {
+          browserNotification.onclick = () => {
+            window.focus();
+            window.location.href = notification.actions[0].url;
+            browserNotification.close();
+          };
+        }
+        
+        if (notification.priority < 3) {
+          setTimeout(() => browserNotification.close(), 5000);
+        }
+      } catch (error) {
+        console.error('Failed to show browser notification:', error);
       }
-    };
-  }, [fetchData, interval, enabled]);
-
-  // Manual refresh function
-  const refresh = useCallback(() => {
-    fetchData(true);
-  }, [fetchData]);
-
-  return {
-    data,
-    loading,
-    error,
-    refresh
-  };
-}
-
-// Hook for real-time notifications - completely silent background updates
-export function useRealTimeNotifications() {
-  return useRealTime('/api/user/notifications', 8000, {
-    silent: true,
-    showInitialLoading: false,
-    onUpdate: (data, isBackgroundUpdate) => {
-      // Silently update notification badges
-      const event = new CustomEvent('notificationsUpdated', { 
-        detail: { ...data, isBackgroundUpdate } 
+    }
+  }, [enableNotifications]);
+  
+  // Handle messages
+  const handleMessage = useCallback((message) => {
+    setMessages(prev => [message, ...prev.slice(0, 199)]);
+    
+    toast('New Message', {
+      description: `${message.senderName || 'Someone'}: ${message.content.substring(0, 50)}${message.content.length > 50 ? '...' : ''}`,
+      action: {
+        label: 'View',
+        onClick: () => window.location.href = `/dashboard/messages/${message.conversationId}`
+      }
+    });
+  }, []);
+  
+  // Handle job updates
+  const handleJobUpdate = useCallback((data) => {
+    toast('Job Update', {
+      description: `Job ${data.status}: ${data.jobTitle || 'Your job'}`,
+      action: {
+        label: 'View',
+        onClick: () => window.location.href = `/dashboard/jobs/${data.jobId}`
+      }
+    });
+  }, []);
+  
+  // API methods
+  const sendMessage = useCallback(async (recipientId, content, type = 'text', metadata = {}) => {
+    try {
+      const response = await fetch('/api/realtime/messages/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderId: userId,
+          recipientId,
+          content,
+          type,
+          metadata
+        })
       });
-      window.dispatchEvent(event);
+      
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      
+      return result.data;
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      toast.error('Failed to send message');
+      throw error;
     }
-  });
-}
-
-// Hook for real-time messages - silent background updates
-export function useRealTimeMessages(jobId) {
-  return useRealTime(`/api/jobs/${jobId}/messages`, 2000, {
-    silent: true,
-    showInitialLoading: false,
-    enabled: !!jobId,
-    dependencies: [jobId]
-  });
-}
-
-// Hook for real-time comments - silent background updates
-export function useRealTimeComments(jobId) {
-  return useRealTime(`/api/jobs/${jobId}/comments`, 3000, {
-    silent: true,
-    showInitialLoading: false,
-    enabled: !!jobId,
-    dependencies: [jobId]
-  });
+  }, [userId]);
+  
+  const markNotificationAsRead = useCallback(async (notificationId) => {
+    try {
+      setNotifications(prev => prev.map(notif => 
+        notif.id === notificationId 
+          ? { ...notif, read: true, readAt: Date.now() }
+          : notif
+      ));
+      
+      await fetch('/api/realtime/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, notificationId })
+      });
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  }, [userId]);
+  
+  // Auto-connect on mount
+  useEffect(() => {
+    if (autoConnect && userId && !connected && !connecting) {
+      connect();
+    }
+    
+    return cleanup;
+  }, [autoConnect, userId, connected, connecting, connect, cleanup]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
+  
+  return {
+    connected,
+    connecting,
+    error,
+    sessionId: sessionIdRef.current,
+    notifications,
+    messages,
+    unreadNotifications: notifications.filter(n => !n.read).length,
+    unreadMessages: messages.filter(m => !m.read).length,
+    connect,
+    disconnect,
+    sendMessage,
+    markNotificationAsRead
+  };
 }

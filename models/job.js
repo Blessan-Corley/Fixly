@@ -616,23 +616,6 @@ const jobSchema = new mongoose.Schema({
     }
   },
   
-  // Analytics
-  views: {
-    type: Number,
-    default: 0,
-    min: [0, 'Views cannot be negative']
-  },
-  viewedBy: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    viewedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  
   // Dispute
   dispute: {
     raised: {

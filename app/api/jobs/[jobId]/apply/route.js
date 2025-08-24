@@ -7,7 +7,8 @@ import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
 import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
-import { analytics } from '@/lib/analytics';
+import { analytics } from '@/lib/cache';
+import notificationService from '@/lib/realtime/NotificationService';
 import nodemailer from 'nodemailer';
 
 // Email transporter
@@ -245,6 +246,36 @@ export async function POST(request, { params }) {
     }, user._id);
     
     await job.save();
+
+    // Get the newly created application
+    const newApplication = job.applications[job.applications.length - 1];
+
+    // Emit real-time event for new application
+    emitToJob(jobId, 'application:new', {
+      jobId: job._id,
+      applicationId: newApplication._id,
+      fixer: {
+        _id: user._id,
+        name: user.name,
+        username: user.username,
+        photoURL: user.photoURL,
+        rating: user.rating
+      },
+      proposedAmount: newApplication.proposedAmount,
+      priceVariance: newApplication.priceVariance,
+      priceVariancePercentage: newApplication.priceVariancePercentage,
+      timeEstimate: newApplication.timeEstimate,
+      timestamp: new Date()
+    });
+
+    // Emit to job owner specifically
+    emitToUser(job.createdBy._id.toString(), 'notification:new', {
+      type: 'job_applied',
+      jobId: job._id,
+      fromUser: user._id,
+      message: `${user.name} has applied to your job "${job.title}"`,
+      timestamp: new Date()
+    });
 
     // Add notification to hirer
     const hirer = job.createdBy;

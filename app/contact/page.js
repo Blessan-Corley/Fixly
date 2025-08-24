@@ -108,6 +108,14 @@ export default function ContactPage() {
       primary: true
     },
     {
+      icon: MessageSquare,
+      title: 'WhatsApp Support',
+      description: 'Chat with us on WhatsApp for quick help',
+      value: '+91 9976768211',
+      action: 'https://wa.me/919976768211?text=Hi! I need help with Fixly.',
+      primary: true
+    },
+    {
       icon: MapPin,
       title: 'Location',
       description: 'We\'re based in Tamil Nadu, India',
@@ -461,7 +469,7 @@ export default function ContactPage() {
             excellent customer service and support.
           </p>
           
-          <div className="flex flex-col md:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a 
               href="mailto:blessancorley@gmail.com"
               className="btn-primary flex items-center justify-center"
@@ -474,7 +482,16 @@ export default function ContactPage() {
               className="btn-secondary flex items-center justify-center"
             >
               <Phone className="h-5 w-5 mr-2" />
-              Call and Whatsapp Support 
+              Call Now
+            </a>
+            <a 
+              href="https://wa.me/919976768211?text=Hi! I need help with Fixly."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-accent flex items-center justify-center"
+            >
+              <MessageSquare className="h-5 w-5 mr-2" />
+              WhatsApp Chat
             </a>
           </div>
         </motion.div>

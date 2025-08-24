@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
   MapPin,
+  MessageSquare,
   Github,
   Linkedin,
   Twitter
@@ -369,6 +370,19 @@ export default function AboutUsPage() {
                 <h3 className="font-semibold text-fixly-text mb-2">Call Us</h3>
                 <a 
                   href="tel:+919976768211" 
+                  className="text-fixly-accent hover:text-fixly-accent-dark transition-colors"
+                >
+                  +91 9976768211
+                </a>
+              </div>
+
+              <div className="flex flex-col items-center p-6">
+                <MessageSquare className="h-8 w-8 text-fixly-accent mb-3" />
+                <h3 className="font-semibold text-fixly-text mb-2">WhatsApp</h3>
+                <a 
+                  href="https://wa.me/919976768211?text=Hi! I'd like to know more about Fixly." 
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-fixly-accent hover:text-fixly-accent-dark transition-colors"
                 >
                   +91 9976768211

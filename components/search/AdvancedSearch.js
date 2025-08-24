@@ -15,8 +15,8 @@ import {
   Navigation,
   Target
 } from 'lucide-react';
-import { cache } from '../../lib/redis';
-import { useSocket } from '../../hooks/useSocket';
+import { cache } from '../../lib/cache';
+// Real-time search updates handled by main search hook
 
 export default function AdvancedSearch({ 
   onSearch, 

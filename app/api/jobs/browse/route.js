@@ -1,13 +1,28 @@
 // app/api/jobs/browse/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../lib/db';
+import { authOptions } from '../../../../lib/auth';
+import connectDB from '../../../../lib/mongodb';
 import Job from '../../../../models/Job';
 import User from '../../../../models/User';
+import LocationPreference from '../../../../models/LocationPreference';
 import { rateLimit } from '../../../../utils/rateLimiting';
 
 export const dynamic = 'force-dynamic';
+
+// Helper function to calculate distance using Haversine formula
+function calculateDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 export async function GET(request) {
   try {
@@ -35,7 +50,7 @@ export async function GET(request) {
       {
         status: 'open',
         deadline: { $lt: new Date() },
-        applications: { $size: 0 } // Only jobs with no applications
+        applications: { $size: 0 }
       },
       {
         $set: { status: 'expired' }
@@ -60,20 +75,19 @@ export async function GET(request) {
     const budgetMax = searchParams.get('budgetMax') ? parseInt(searchParams.get('budgetMax')) : null;
     const urgency = searchParams.get('urgency') || '';
     const sortBy = searchParams.get('sortBy') || 'newest';
+    const maxDistance = searchParams.get('maxDistance') ? parseInt(searchParams.get('maxDistance')) : null;
 
     // Build query based on user role
     let query = {};
     
     if (user.role === 'hirer') {
-      // Hirers can only see their own jobs
       query = {
         createdBy: user._id
       };
     } else {
-      // Fixers can see only open jobs (not expired ones)
       query = { 
         status: 'open',
-        deadline: { $gte: new Date() } // Only show jobs that haven't expired
+        deadline: { $gte: new Date() }
       };
     }
 
@@ -115,8 +129,26 @@ export async function GET(request) {
       query.urgency = urgency;
     }
 
+    // Get user location for distance-based operations
+    let userLocation = null;
+    if (sortBy === 'distance' || maxDistance) {
+      try {
+        const locationPrefs = await LocationPreference.findOne({ user: user._id });
+        if (locationPrefs?.currentLocation?.lat && locationPrefs?.currentLocation?.lng) {
+          userLocation = {
+            lat: locationPrefs.currentLocation.lat,
+            lng: locationPrefs.currentLocation.lng
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching user location:', error);
+      }
+    }
+
     // Sorting
     let sort = {};
+    let needsDistanceCalculation = false;
+    
     switch (sortBy) {
       case 'newest':
         sort = { featured: -1, createdAt: -1 };
@@ -130,12 +162,13 @@ export async function GET(request) {
       case 'budget_low':
         sort = { 'budget.amount': 1, featured: -1 };
         break;
+      case 'distance':
       case 'nearest':
-        // For MVP, we'll sort by city match
-        if (user.location?.city) {
-          query['location.city'] = user.location.city;
+        if (userLocation) {
+          needsDistanceCalculation = true;
+        } else {
+          sort = { featured: -1, createdAt: -1 };
         }
-        sort = { featured: -1, createdAt: -1 };
         break;
       default:
         sort = { featured: -1, createdAt: -1 };
@@ -148,20 +181,47 @@ export async function GET(request) {
       Job.find(query)
         .populate('createdBy', 'name username photoURL rating location isVerified')
         .sort(sort)
-        .skip(skip)
-        .limit(limit)
+        .skip(needsDistanceCalculation ? 0 : skip)
+        .limit(needsDistanceCalculation ? 0 : limit)
         .lean(),
       Job.countDocuments(query)
     ]);
 
-    // Check if fixer can view full job details (has credits or is pro)
+    // Process jobs with distance calculations if needed
+    let processedJobs = jobs;
+
+    if (needsDistanceCalculation && userLocation) {
+      // Add distance to each job
+      processedJobs = jobs
+        .map(job => {
+          if (job.location?.lat && job.location?.lng) {
+            const distance = calculateDistance(
+              userLocation.lat,
+              userLocation.lng,
+              job.location.lat,
+              job.location.lng
+            );
+            return { ...job, distance };
+          }
+          return { ...job, distance: null };
+        })
+        .filter(job => !maxDistance || (job.distance && job.distance <= maxDistance))
+        .sort((a, b) => {
+          if (!a.distance && !b.distance) return 0;
+          if (!a.distance) return 1;
+          if (!b.distance) return -1;
+          return a.distance - b.distance;
+        })
+        .slice(skip, skip + limit);
+    }
+
+    // Check if fixer can view full job details
     const canViewFullDetails = user.role !== 'fixer' || 
                                user.plan?.type === 'pro' || 
                                (user.plan?.creditsUsed || 0) < 3;
 
-    // Enhance jobs with additional data for the user
-    const enhancedJobs = jobs.map(job => {
-      // Check if user has applied
+    // Enhance jobs with additional data
+    const enhancedJobs = processedJobs.map(job => {
       const hasApplied = job.applications?.some(
         app => app.fixer?.toString() === user._id.toString() && app.status !== 'withdrawn'
       ) || false;
@@ -171,12 +231,12 @@ export async function GET(request) {
         return {
           _id: job._id,
           title: job.title,
-          description: job.description.substring(0, 150) + '...', // Limited description
+          description: job.description.substring(0, 150) + '...',
           skillsRequired: job.skillsRequired,
           budget: job.budget.type === 'negotiable' ? { type: 'negotiable' } : {
             type: job.budget.type,
             amount: job.budget.amount ? '₹' + Math.floor(job.budget.amount / 1000) + 'k+' : null
-          }, // Approximated budget
+          },
           urgency: job.urgency,
           status: job.status,
           location: {
@@ -190,64 +250,67 @@ export async function GET(request) {
           applicationCount: job.applications?.length || 0,
           createdAt: job.createdAt,
           hasApplied: false,
-          skillMatchPercentage: 0,
-          isLocalJob: false,
-          restrictedView: true,
-          canApply: false
+          requiresCredit: true,
+          distance: job.distance
         };
       }
 
-      // Calculate skill match percentage for fixers
-      let skillMatchPercentage = 0;
-      if (user.role === 'fixer' && user.skills) {
-        const userSkills = user.skills || [];
-        const requiredSkills = job.skillsRequired || [];
-        const matchingSkills = requiredSkills.filter(skill => 
-          userSkills.includes(skill.toLowerCase())
-        );
-        skillMatchPercentage = requiredSkills.length > 0 
-          ? (matchingSkills.length / requiredSkills.length) * 100 
-          : 0;
-      }
-
-      // Check if it's a local job
-      const isLocalJob = user.location?.city?.toLowerCase() === 
-                        job.location?.city?.toLowerCase();
-
+      // Full job data
       return {
-        ...job,
-        hasApplied,
-        skillMatchPercentage: Math.round(skillMatchPercentage),
-        isLocalJob,
+        _id: job._id,
+        title: job.title,
+        description: job.description,
+        skillsRequired: job.skillsRequired,
+        budget: job.budget,
+        urgency: job.urgency,
+        type: job.type,
+        status: job.status,
+        deadline: job.deadline,
+        estimatedDuration: job.estimatedDuration,
+        experienceLevel: job.experienceLevel,
+        location: job.location,
+        createdBy: job.createdBy,
         applicationCount: job.applications?.length || 0,
-        applications: undefined // Remove applications from response
+        viewCount: job.viewCount || 0,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        hasApplied,
+        requiresCredit: false,
+        distance: job.distance,
+        attachments: job.attachments || []
       };
     });
 
+    const finalTotal = needsDistanceCalculation && maxDistance && userLocation 
+      ? enhancedJobs.length 
+      : total;
+
     return NextResponse.json({
+      success: true,
       jobs: enhancedJobs,
       pagination: {
         page,
         limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasMore: skip + jobs.length < total
+        total: finalTotal,
+        totalPages: Math.ceil(finalTotal / limit),
+        hasMore: page < Math.ceil(finalTotal / limit)
       },
-      filters: {
-        search,
-        skills,
-        location,
-        budgetMin,
-        budgetMax,
-        urgency,
-        sortBy
+      meta: {
+        canViewFullDetails,
+        userRole: user.role,
+        hasLocationEnabled: !!userLocation,
+        distanceFiltered: !!maxDistance && !!userLocation
       }
     });
 
   } catch (error) {
-    console.error('Browse jobs error:', error);
+    console.error('Error in browse jobs API:', error);
     return NextResponse.json(
-      { message: 'Failed to fetch jobs' },
+      { 
+        success: false,
+        message: 'Failed to fetch jobs',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

@@ -66,6 +66,10 @@ export default function TermsConditionsPage() {
         {
           subtitle: 'Communication',
           text: 'You agree to communicate respectfully with other users and respond promptly to messages related to your jobs or applications.'
+        },
+        {
+          subtitle: 'Location Services',
+          text: 'If you choose to enable location services, you consent to the collection and use of your GPS coordinates to provide location-based features. You can disable location sharing at any time through your account settings. Misuse of location data or providing false location information is prohibited.'
         }
       ]
     },

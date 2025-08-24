@@ -2,6 +2,8 @@
 import { NextResponse } from 'next/server';
 import { rateLimit } from '../../../utils/rateLimiting';
 import { sendEmail } from '../../../lib/email';
+import { sendWhatsAppNotification } from '../../../lib/whatsapp';
+import { notifyAdmin } from '../../../lib/admin-notifications';
 
 export async function POST(request) {
   try {
@@ -93,6 +95,21 @@ Reply directly to this email to respond to ${name}.
         { message: 'Failed to send message. Please try again later or contact us directly.' },
         { status: 500 }
       );
+    }
+
+    // Send admin notifications (email + WhatsApp)
+    try {
+      await notifyAdmin('CONTACT_FORM_SUBMISSION', {
+        name,
+        email,
+        phone,
+        category,
+        subject,
+        message
+      });
+    } catch (notificationError) {
+      // Admin notifications are optional - don't fail the request
+      console.warn('Admin notification failed:', notificationError.message);
     }
 
     // Send confirmation email to the user

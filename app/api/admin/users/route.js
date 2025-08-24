@@ -6,7 +6,7 @@ import connectDB from '../../../../lib/mongodb';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
 import { withErrorHandler, AuthenticationError } from '../../../../lib/errorHandling';
-import { cache, analytics } from '../../../../lib/redis';
+import { cache, analytics } from '../../../../lib/cache';
 
 export const dynamic = 'force-dynamic';
 

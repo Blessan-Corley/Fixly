@@ -18,6 +18,7 @@ import {
   Loader,
   Mail,
   Phone,
+  MessageSquare,
   ExternalLink,
   Heart,
   Sun,
@@ -785,6 +786,10 @@ function SettingsContent() {
               <a href="tel:+919976768211" className="flex items-center text-fixly-text-secondary hover:text-fixly-primary transition-colors text-sm">
                 <Phone className="h-4 w-4 mr-2" />
                 +91 9976768211
+              </a>
+              <a href="https://wa.me/919976768211?text=Hi! I need help with my Fixly account." target="_blank" rel="noopener noreferrer" className="flex items-center text-fixly-text-secondary hover:text-fixly-primary transition-colors text-sm">
+                <MessageSquare className="h-4 w-4 mr-2" />
+                WhatsApp Support
               </a>
               <a href="/support" className="flex items-center text-fixly-text-secondary hover:text-fixly-primary transition-colors text-sm">
                 <HelpCircle className="h-4 w-4 mr-2" />

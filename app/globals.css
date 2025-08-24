@@ -1,4 +1,18 @@
-/* Fonts are now loaded via Next.js font optimization */
+/* Enhanced Fonts with fallbacks and loading optimizations */
+/* Font fallback stack for better loading experience */
+@font-face {
+  font-family: 'FallbackSans';
+  src: local('system-ui'), local('-apple-system'), local('BlinkMacSystemFont'), 
+       local('Segoe UI'), local('Roboto'), local('Arial');
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'FallbackMono';
+  src: local('Monaco'), local('Menlo'), local('Ubuntu Mono'), 
+       local('Consolas'), local('Courier New');
+  font-display: block;
+}
 
 @tailwind base;
 @tailwind components;
@@ -609,7 +623,29 @@ button, a, input, textarea, select, .card, .badge {
   animation: soft-pulse 3s ease-in-out infinite;
 }
 
-/* Mobile Optimizations */
+/* Enhanced Font Loading and Typography */
+@layer base {
+  /* Progressive font loading with better fallbacks */
+  html {
+    font-family: var(--font-manrope), FallbackSans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  
+  code, pre, .font-mono {
+    font-family: var(--font-pt-mono), FallbackMono, Monaco, Menlo, 'Ubuntu Mono', Consolas, 'Courier New', monospace;
+  }
+  
+  /* Prevent font loading flashes */
+  .font-loading {
+    font-display: fallback;
+    visibility: hidden;
+  }
+  
+  .font-loaded {
+    visibility: visible;
+  }
+}
+
+/* Enhanced Mobile Optimizations */
 @media (max-width: 640px) {
   .card {
     @apply rounded-xl p-4;
@@ -620,6 +656,103 @@ button, a, input, textarea, select, .card, .badge {
   }
   
   .input-field, .textarea-field, .select-field {
-    @apply px-3 py-2.5 rounded-lg;
+    @apply px-3 py-2.5 rounded-lg text-base; /* Prevents zoom on iOS */
+  }
+  
+  /* Enhanced hamburger menu animations */
+  .hamburger-menu {
+    @apply relative w-6 h-6 transition-all duration-300 ease-in-out cursor-pointer;
+  }
+  
+  .hamburger-line {
+    @apply absolute w-full h-0.5 bg-current transition-all duration-300 ease-in-out;
+  }
+  
+  .hamburger-line:nth-child(1) {
+    top: 25%;
+  }
+  
+  .hamburger-line:nth-child(2) {
+    top: 50%;
+  }
+  
+  .hamburger-line:nth-child(3) {
+    top: 75%;
+  }
+  
+  /* Active hamburger (X shape) */
+  .hamburger-menu.active .hamburger-line:nth-child(1) {
+    top: 50%;
+    transform: rotate(45deg);
+  }
+  
+  .hamburger-menu.active .hamburger-line:nth-child(2) {
+    opacity: 0;
+  }
+  
+  .hamburger-menu.active .hamburger-line:nth-child(3) {
+    top: 50%;
+    transform: rotate(-45deg);
+  }
+  
+  /* Mobile navigation improvements */
+  .mobile-nav-backdrop {
+    @apply fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300;
+  }
+  
+  .mobile-nav-panel {
+    @apply fixed left-0 top-0 h-full w-80 max-w-[85vw] bg-white dark:bg-gray-900 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out;
+  }
+  
+  .mobile-nav-open {
+    @apply translate-x-0;
+  }
+  
+  .mobile-nav-closed {
+    @apply -translate-x-full;
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .card {
+    @apply rounded-2xl p-5;
+  }
+  
+  /* Better tablet navigation */
+  .navbar {
+    @apply px-6 py-4;
+  }
+  
+  .sidebar {
+    @apply w-64;
+  }
+}
+
+/* Desktop optimizations */
+@media (min-width: 1025px) {
+  /* Enhanced hover effects on desktop only */
+  .hover-desktop:hover {
+    @apply -translate-y-1 shadow-fixly-lg;
+  }
+  
+  /* Better desktop forms */
+  .form-grid {
+    @apply grid grid-cols-2 gap-6;
+  }
+}
+
+/* Print optimizations */
+@media print {
+  .navbar, .sidebar, .mobile-nav, .floating-action, .btn-ghost {
+    @apply hidden;
+  }
+  
+  .card {
+    @apply shadow-none border border-gray-300 break-inside-avoid;
+  }
+  
+  body {
+    @apply text-black bg-white;
   }
 }

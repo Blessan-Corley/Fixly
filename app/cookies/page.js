@@ -48,7 +48,20 @@ export default function CookiesPage() {
         'Language and region preferences',
         'Display settings and themes',
         'Notification preferences',
+        'Location sharing preferences',
         'Saved searches and favorites'
+      ]
+    },
+    {
+      title: 'Location Cookies',
+      description: 'These cookies store your location preferences and GPS coordinates when enabled.',
+      icon: Globe,
+      examples: [
+        'GPS coordinates for nearby job matching',
+        'Location sharing preferences (enabled/disabled)',
+        'City and state information',
+        'Travel distance preferences',
+        'Last known location timestamp'
       ]
     },
     {

@@ -29,10 +29,13 @@ import {
   Wrench
 } from 'lucide-react';
 import { useApp, ProtectedRoute } from '../providers';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useRealtime } from '../../hooks/useRealtime';
 import { toast } from 'sonner';
 import { toastMessages } from '../../utils/toast';
 import ThemeToggle from '../../components/ui/ThemeToggle';
+import ProBadge from '../../components/ui/ProBadge';
+import MobileNav, { MobileBottomNav, useMobileNav } from '../../components/ui/MobileNav';
+import { useMobileDevice } from '../../components/ui/MobileOptimized';
 
 export default function DashboardLayout({ children }) {
   return (
@@ -46,12 +49,27 @@ function DashboardContent({ children }) {
   const { user } = useApp();
   const { 
     notifications, 
-    unreadCount, 
-    markAsRead, 
-    markAllAsRead,
-    handleNotificationClick,
-    isRealTimeConnected 
-  } = useNotifications();
+    unreadNotifications: unreadCount, 
+    markNotificationAsRead: markAsRead,
+    connected: isRealTimeConnected
+  } = useRealtime(user?.id);
+
+  // Helper functions for notifications
+  const markAllAsRead = async () => {
+    for (const notification of notifications.filter(n => !n.read)) {
+      await markAsRead(notification.id);
+    }
+  };
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification.read) {
+      await markAsRead(notification.id);
+    }
+    // Navigate to notification action if available
+    if (notification.actions && notification.actions[0]) {
+      router.push(notification.actions[0].url);
+    }
+  };
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -59,6 +77,11 @@ function DashboardContent({ children }) {
   const [notificationDropdownOpen, setNotificationDropdownOpen] = useState(false);
   const [notificationCounts, setNotificationCounts] = useState({});
   const [badgeStyle, setBadgeStyle] = useState('numbers'); // Load from cookies
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  
+  // Enhanced mobile support
+  const deviceInfo = useMobileDevice();
+  const mobileNav = useMobileNav();
 
   // Load badge style preference from cookies
   useEffect(() => {
@@ -68,6 +91,26 @@ function DashboardContent({ children }) {
       ?.split('=')[1] || 'numbers';
     setBadgeStyle(savedBadgeStyle);
   }, []);
+
+  // Fetch subscription info
+  useEffect(() => {
+    const fetchSubscriptionInfo = async () => {
+      if (user?.role) {
+        try {
+          const endpoint = user.role === 'hirer' ? '/api/subscription/hirer' : '/api/subscription/fixer';
+          const response = await fetch(endpoint);
+          if (response.ok) {
+            const data = await response.json();
+            setSubscriptionInfo(data);
+          }
+        } catch (error) {
+          console.error('Error fetching subscription info:', error);
+        }
+      }
+    };
+
+    fetchSubscriptionInfo();
+  }, [user?.role]);
 
   // Fetch notification counts for badges
   useEffect(() => {
@@ -243,6 +286,15 @@ function DashboardContent({ children }) {
 
   return (
     <div className="min-h-screen bg-fixly-bg">
+      {/* Enhanced Mobile Navigation */}
+      {deviceInfo.isMobile && (
+        <MobileNav 
+          isOpen={mobileNav.isOpen}
+          onClose={mobileNav.close}
+          navigationItems={navigationItems}
+        />
+      )}
+      
       {/* Mobile sidebar backdrop */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -284,8 +336,9 @@ function DashboardContent({ children }) {
                 className="h-10 w-10 rounded-full object-cover"
               />
               <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-medium text-fixly-text truncate">
+                <p className="text-sm font-medium text-fixly-text truncate flex items-center">
                   {user?.name}
+                  <ProBadge isPro={subscriptionInfo?.isPro} size="xs" />
                 </p>
                 <p className="text-xs text-fixly-text-muted truncate">
                   {user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)}
@@ -365,9 +418,10 @@ function DashboardContent({ children }) {
         {/* Top bar */}
         <header className="navbar px-4 lg:px-6 py-4">
           <div className="flex items-center justify-between">
+            {/* Mobile menu button - enhanced for mobile nav */}
             <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 hover:bg-fixly-accent/10 rounded"
+              onClick={deviceInfo.isMobile ? mobileNav.open : () => setSidebarOpen(true)}
+              className="lg:hidden p-2 hover:bg-fixly-accent/10 rounded-lg transition-colors"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -587,8 +641,9 @@ function DashboardContent({ children }) {
                       className="absolute right-0 mt-2 w-48 bg-fixly-card border border-fixly-border rounded-lg shadow-fixly-lg z-50"
                     >
                       <div className="p-4 border-b border-fixly-border">
-                        <p className="font-medium text-fixly-text truncate">
+                        <p className="font-medium text-fixly-text truncate flex items-center">
                           {user?.name}
+                          <ProBadge isPro={subscriptionInfo?.isPro} size="xs" />
                         </p>
                         <p className="text-sm text-fixly-text-muted truncate">
                           @{user?.username}
@@ -645,10 +700,18 @@ function DashboardContent({ children }) {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="min-h-[calc(100vh-80px)]">
+        {/* Page content with mobile optimizations */}
+        <main className={`min-h-[calc(100vh-80px)] ${deviceInfo.isMobile ? 'pb-20' : ''}`}>
           {children}
         </main>
+        
+        {/* Mobile Bottom Navigation */}
+        {deviceInfo.isMobile && (
+          <MobileBottomNav 
+            navigationItems={navigationItems.slice(0, 5)} // Show top 5 items
+            className="safe-area-pb"
+          />
+        )}
       </div>
     </div>
   );
