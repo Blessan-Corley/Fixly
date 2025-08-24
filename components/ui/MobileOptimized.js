@@ -382,13 +382,105 @@ export function MobileScrollToTop() {
   );
 }
 
-// Mobile Pull to Refresh (Disabled for better UX)
-export function MobilePullToRefresh({ onRefresh, children, className = '' }) {
-  // Disabled pull-to-refresh UI - all refreshing happens in background
-  // This provides a seamless user experience without visible loading indicators
+// Enhanced Mobile Pull to Refresh with Visual Feedback
+export function MobilePullToRefresh({ onRefresh, children, className = '', disabled = false }) {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [startY, setStartY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef(null);
+  const maxPullDistance = 80;
+  const triggerDistance = 60;
+
+  const handleTouchStart = (e) => {
+    if (disabled || window.scrollY > 0) return;
+    setStartY(e.touches[0].clientY);
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging || disabled || window.scrollY > 0) return;
+    
+    const currentY = e.touches[0].clientY;
+    const distance = Math.max(0, currentY - startY);
+    const limitedDistance = Math.min(distance * 0.5, maxPullDistance);
+    
+    setPullDistance(limitedDistance);
+    
+    // Prevent default scrolling only when pulling down
+    if (distance > 10) {
+      e.preventDefault();
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!isDragging || disabled) return;
+    
+    setIsDragging(false);
+    
+    if (pullDistance >= triggerDistance) {
+      setIsRefreshing(true);
+      try {
+        await onRefresh?.();
+      } catch (error) {
+        console.error('Refresh failed:', error);
+      } finally {
+        setIsRefreshing(false);
+      }
+    }
+    
+    setPullDistance(0);
+  };
+
   return (
-    <div className={className}>
-      {children}
+    <div 
+      ref={containerRef}
+      className={`relative ${className}`}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull to refresh indicator */}
+      <AnimatePresence>
+        {(pullDistance > 0 || isRefreshing) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute top-0 left-1/2 transform -translate-x-1/2 z-10 flex flex-col items-center pt-4"
+            style={{ transform: `translateX(-50%) translateY(${pullDistance}px)` }}
+          >
+            <div className="bg-white dark:bg-gray-800 rounded-full shadow-lg p-3 border border-gray-200 dark:border-gray-700">
+              {isRefreshing ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-5 h-5 border-2 border-teal-500 border-t-transparent rounded-full"
+                />
+              ) : (
+                <motion.div
+                  animate={{ rotate: pullDistance >= triggerDistance ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <ArrowUp className="w-5 h-5 text-teal-500" />
+                </motion.div>
+              )}
+            </div>
+            <span className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+              {isRefreshing ? 'Refreshing...' : pullDistance >= triggerDistance ? 'Release to refresh' : 'Pull to refresh'}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Content with dynamic transform */}
+      <motion.div
+        animate={{ y: isRefreshing ? 60 : 0 }}
+        transition={{ duration: 0.3 }}
+        style={{ transform: `translateY(${Math.min(pullDistance, maxPullDistance)}px)` }}
+      >
+        {children}
+      </motion.div>
     </div>
   );
 }
@@ -428,6 +520,285 @@ export function MobileTimeAgo({ date, className = '' }) {
   );
 }
 
+// Advanced Mobile Device Detection Hook
+export function useMobileDevice() {
+  const [deviceInfo, setDeviceInfo] = useState({
+    isMobile: false,
+    isTablet: false,
+    isDesktop: false,
+    isIOS: false,
+    isAndroid: false,
+    hasTouch: false,
+    orientation: 'portrait',
+    screenSize: 'small',
+    safeAreaInsets: { top: 0, bottom: 0, left: 0, right: 0 }
+  });
+
+  useEffect(() => {
+    const updateDeviceInfo = () => {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isMobile = /mobi|android/i.test(userAgent);
+      const isTablet = /tablet|ipad/i.test(userAgent) || (isMobile && window.innerWidth > 768);
+      const isIOS = /iphone|ipad|ipod/.test(userAgent);
+      const isAndroid = /android/.test(userAgent);
+      const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      
+      const orientation = window.innerHeight > window.innerWidth ? 'portrait' : 'landscape';
+      const screenSize = window.innerWidth < 640 ? 'small' : 
+                         window.innerWidth < 1024 ? 'medium' : 'large';
+
+      // Detect safe area insets for iOS devices
+      const safeAreaInsets = {
+        top: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-top') || '0'),
+        bottom: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom') || '0'),
+        left: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-left') || '0'),
+        right: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-right') || '0')
+      };
+
+      setDeviceInfo({
+        isMobile: isMobile && !isTablet,
+        isTablet,
+        isDesktop: !isMobile && !isTablet,
+        isIOS,
+        isAndroid,
+        hasTouch,
+        orientation,
+        screenSize,
+        safeAreaInsets
+      });
+    };
+
+    updateDeviceInfo();
+    
+    window.addEventListener('resize', updateDeviceInfo);
+    window.addEventListener('orientationchange', updateDeviceInfo);
+    
+    return () => {
+      window.removeEventListener('resize', updateDeviceInfo);
+      window.removeEventListener('orientationchange', updateDeviceInfo);
+    };
+  }, []);
+
+  return deviceInfo;
+}
+
+// Enhanced Mobile Touch Gestures Hook
+export function useTouchGestures({ 
+  onSwipeLeft, 
+  onSwipeRight, 
+  onSwipeUp, 
+  onSwipeDown,
+  onTap,
+  onDoubleTap,
+  onLongPress,
+  threshold = 50,
+  timeout = 300 
+}) {
+  const touchRef = useRef(null);
+  const [touchState, setTouchState] = useState({
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+    lastTap: 0
+  });
+
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    const now = Date.now();
+    
+    setTouchState({
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startTime: now,
+      lastTap: touchState.lastTap
+    });
+
+    // Long press detection
+    if (onLongPress) {
+      setTimeout(() => {
+        if (touchState.startTime === now) {
+          onLongPress(e);
+        }
+      }, 500);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    const touch = e.changedTouches[0];
+    const now = Date.now();
+    const deltaX = touch.clientX - touchState.startX;
+    const deltaY = touch.clientY - touchState.startY;
+    const deltaTime = now - touchState.startTime;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    // Tap detection
+    if (distance < 10 && deltaTime < timeout) {
+      // Double tap detection
+      if (onDoubleTap && now - touchState.lastTap < 300) {
+        onDoubleTap(e);
+        setTouchState(prev => ({ ...prev, lastTap: 0 }));
+        return;
+      }
+      
+      if (onTap) {
+        onTap(e);
+      }
+      
+      setTouchState(prev => ({ ...prev, lastTap: now }));
+      return;
+    }
+
+    // Swipe detection
+    if (distance > threshold && deltaTime < timeout) {
+      const isHorizontal = Math.abs(deltaX) > Math.abs(deltaY);
+      
+      if (isHorizontal) {
+        if (deltaX > 0 && onSwipeRight) {
+          onSwipeRight(e);
+        } else if (deltaX < 0 && onSwipeLeft) {
+          onSwipeLeft(e);
+        }
+      } else {
+        if (deltaY > 0 && onSwipeDown) {
+          onSwipeDown(e);
+        } else if (deltaY < 0 && onSwipeUp) {
+          onSwipeUp(e);
+        }
+      }
+    }
+  };
+
+  return {
+    touchRef,
+    onTouchStart: handleTouchStart,
+    onTouchEnd: handleTouchEnd,
+    touchState
+  };
+}
+
+// Mobile-optimized Virtual List for Performance
+export function MobileVirtualList({ 
+  items, 
+  renderItem, 
+  itemHeight = 80, 
+  className = '',
+  onEndReached,
+  endReachedThreshold = 200
+}) {
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 10 });
+  const [scrollTop, setScrollTop] = useState(0);
+  const containerRef = useRef(null);
+  const listRef = useRef(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const containerHeight = container.clientHeight;
+      
+      const start = Math.floor(scrollTop / itemHeight);
+      const visibleCount = Math.ceil(containerHeight / itemHeight);
+      const end = Math.min(start + visibleCount + 2, items.length); // Buffer of 2 items
+      
+      setScrollTop(scrollTop);
+      setVisibleRange({ start: Math.max(0, start - 1), end });
+      
+      // End reached detection
+      if (onEndReached && container.scrollHeight - scrollTop - containerHeight < endReachedThreshold) {
+        onEndReached();
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Initial calculation
+
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [items.length, itemHeight, onEndReached, endReachedThreshold]);
+
+  const visibleItems = items.slice(visibleRange.start, visibleRange.end);
+  const totalHeight = items.length * itemHeight;
+  const offsetY = visibleRange.start * itemHeight;
+
+  return (
+    <div 
+      ref={containerRef}
+      className={`overflow-auto ${className}`}
+      style={{ height: '100%' }}
+    >
+      <div 
+        ref={listRef}
+        style={{ 
+          height: totalHeight,
+          position: 'relative'
+        }}
+      >
+        <div 
+          style={{ 
+            transform: `translateY(${offsetY}px)`,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0
+          }}
+        >
+          {visibleItems.map((item, index) => (
+            <div 
+              key={visibleRange.start + index}
+              style={{ height: itemHeight }}
+            >
+              {renderItem(item, visibleRange.start + index)}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mobile Haptic Feedback Hook
+export function useHapticFeedback() {
+  const vibrate = (pattern = [10]) => {
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (error) {
+        console.warn('Haptic feedback not supported:', error);
+      }
+    }
+  };
+
+  const feedback = {
+    light: () => vibrate([10]),
+    medium: () => vibrate([20]),
+    heavy: () => vibrate([30]),
+    success: () => vibrate([10, 50, 10]),
+    error: () => vibrate([50, 50, 50]),
+    warning: () => vibrate([30, 30])
+  };
+
+  return feedback;
+}
+
+// Enhanced Mobile Safe Area Component
+export function MobileSafeArea({ children, className = '', edges = ['top', 'bottom', 'left', 'right'] }) {
+  const safeAreaClasses = {
+    top: 'pt-safe-area-top',
+    bottom: 'pb-safe-area-bottom', 
+    left: 'pl-safe-area-left',
+    right: 'pr-safe-area-right'
+  };
+
+  const appliedClasses = edges.map(edge => safeAreaClasses[edge]).join(' ');
+
+  return (
+    <div className={`${appliedClasses} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 export default {
   MobileHeader,
   MobileBottomNav,
@@ -437,5 +808,10 @@ export default {
   MobileContactActions,
   MobileScrollToTop,
   MobilePullToRefresh,
-  MobileTimeAgo
+  MobileTimeAgo,
+  MobileVirtualList,
+  MobileSafeArea,
+  useMobileDevice,
+  useTouchGestures,
+  useHapticFeedback
 };

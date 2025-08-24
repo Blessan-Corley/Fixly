@@ -362,7 +362,9 @@ export default function HomePage() {
                   <Facebook className="h-5 w-5" />
                 </a>
                 <a 
-                  href="https://wa.me/919976768211" 
+                  href="https://wa.me/919976768211?text=Hi! I'm interested in Fixly services." 
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="text-fixly-bg/60 hover:text-fixly-accent transition-colors duration-200"
                   aria-label="WhatsApp"
                 >

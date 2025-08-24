@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../../lib/db';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
-import { cache } from '../../../../../lib/redis';
+import { cache } from '../../../../../lib/cache';
 import { getNotificationService } from '../../../../../lib/notifications';
 
 export async function POST(request) {

@@ -83,6 +83,12 @@ export default function JobDetailsPage({ params }) {
   // Application form
   const [applicationData, setApplicationData] = useState({
     proposedAmount: '',
+    budgetBreakdown: {
+      enabled: false,
+      laborCost: '',
+      materialsCost: '',
+      serviceFee: ''
+    },
     timeEstimate: { value: '', unit: 'hours' },
     materialsList: [],
     coverLetter: '',
@@ -91,6 +97,10 @@ export default function JobDetailsPage({ params }) {
     requirements: '',
     specialNotes: ''
   });
+
+  // Image lightbox states
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     fetchJobDetails();
@@ -1150,6 +1160,97 @@ export default function JobDetailsPage({ params }) {
                   </div>
                 </div>
 
+                {/* Media Attachments */}
+                {job.attachments && job.attachments.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-fixly-text mb-4">
+                      Photos & Videos
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {job.attachments.map((attachment, index) => (
+                        <div key={attachment.id || index} className="relative group">
+                          {attachment.isImage ? (
+                            <div 
+                              className="relative bg-fixly-card border border-fixly-border rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
+                              onClick={() => {
+                                setSelectedImage(attachment);
+                                setShowImageModal(true);
+                              }}
+                            >
+                              <img
+                                src={attachment.url}
+                                alt={attachment.name || `Image ${index + 1}`}
+                                className="w-full h-32 object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                <Eye className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </div>
+                              {attachment.name && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2">
+                                  <p className="text-xs truncate">{attachment.name}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : attachment.isVideo ? (
+                            <div className="relative bg-fixly-card border border-fixly-border rounded-lg overflow-hidden">
+                              <div className="relative">
+                                <video 
+                                  id={`video-${attachment.id || index}`}
+                                  className="w-full h-32 object-cover cursor-pointer"
+                                  poster={attachment.thumbnail}
+                                  preload="metadata"
+                                  onClick={(e) => {
+                                    const video = e.target;
+                                    const playButton = video.parentElement.querySelector('.play-button');
+                                    if (video.paused) {
+                                      video.play();
+                                      video.controls = true;
+                                      if (playButton) playButton.style.display = 'none';
+                                    } else {
+                                      video.pause();
+                                      video.controls = false;
+                                      if (playButton) playButton.style.display = 'flex';
+                                    }
+                                  }}
+                                  onEnded={(e) => {
+                                    const video = e.target;
+                                    const playButton = video.parentElement.querySelector('.play-button');
+                                    video.controls = false;
+                                    if (playButton) playButton.style.display = 'flex';
+                                  }}
+                                >
+                                  <source src={attachment.url} type={attachment.type} />
+                                  Your browser does not support the video tag.
+                                </video>
+                                <div className="play-button absolute inset-0 bg-black/20 flex items-center justify-center cursor-pointer pointer-events-none">
+                                  <div className="w-12 h-12 bg-fixly-accent/80 rounded-full flex items-center justify-center hover:bg-fixly-accent transition-colors">
+                                    <div className="w-0 h-0 border-l-[8px] border-l-white border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-1"></div>
+                                  </div>
+                                </div>
+                              </div>
+                              {attachment.name && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2">
+                                  <p className="text-xs truncate">{attachment.name}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="relative bg-fixly-card border border-fixly-border rounded-lg overflow-hidden p-4 h-32 flex items-center justify-center">
+                              <div className="text-center">
+                                <FileText className="h-8 w-8 text-fixly-accent mx-auto mb-2" />
+                                <p className="text-sm text-fixly-text-muted truncate">{attachment.name || 'File'}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-fixly-text-muted text-sm mt-3">
+                      Click on videos to play them, images to view full size
+                    </p>
+                  </div>
+                )}
+
                 {/* Location Details */}
                 <div>
                   <h3 className="text-lg font-semibold text-fixly-text mb-4">
@@ -2021,12 +2122,12 @@ export default function JobDetailsPage({ params }) {
       {/* Application Modal */}
       <AnimatePresence>
         {showApplicationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-fixly-card border border-fixly-border rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-fixly-text">
@@ -2042,31 +2143,53 @@ export default function JobDetailsPage({ params }) {
 
               <div className="space-y-4">
                 {/* Job Summary */}
-                <div className="bg-fixly-bg p-4 rounded-lg">
-                  <h3 className="font-medium text-fixly-text mb-2">{job.title}</h3>
-                  <div className="text-sm text-fixly-text-muted space-y-1">
-                    <p>Budget: {job.budget.type === 'negotiable' ? 'Negotiable' : `₹${job.budget.amount?.toLocaleString()}`}</p>
-                    <p>Location: {job.location.city}, {job.location.state}</p>
-                    <p>Deadline: {new Date(job.deadline).toLocaleDateString()}</p>
+                <div className="bg-gradient-to-r from-fixly-accent-bg to-fixly-primary-bg border border-fixly-accent/20 p-5 rounded-xl">
+                  <h3 className="font-semibold text-fixly-text mb-3 flex items-center">
+                    <Briefcase className="w-5 h-5 mr-2 text-fixly-accent" />
+                    {job.title}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                    <div className="flex items-center text-fixly-text-muted">
+                      <DollarSign className="w-4 h-4 mr-2 text-fixly-accent" />
+                      <span className="font-medium">Budget:</span>
+                      <span className="ml-1">{job.budget.type === 'negotiable' ? 'Negotiable' : `₹${job.budget.amount?.toLocaleString()}`}</span>
+                    </div>
+                    <div className="flex items-center text-fixly-text-muted">
+                      <MapPin className="w-4 h-4 mr-2 text-fixly-accent" />
+                      <span className="font-medium">Location:</span>
+                      <span className="ml-1">{job.location.city}, {job.location.state}</span>
+                    </div>
+                    <div className="flex items-center text-fixly-text-muted">
+                      <Calendar className="w-4 h-4 mr-2 text-fixly-accent" />
+                      <span className="font-medium">Deadline:</span>
+                      <span className="ml-1">{new Date(job.deadline).toLocaleDateString()}</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Proposed Amount */}
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Your Proposed Amount *
+                <div className="bg-fixly-bg-secondary/20 border border-fixly-border/50 rounded-xl p-4">
+                  <label className="block text-sm font-semibold text-fixly-text mb-3 flex items-center flex-wrap">
+                    <DollarSign className="w-4 h-4 mr-2 text-fixly-accent" />
+                    💰 Your Proposed Amount *
                     {job.budget.type === 'negotiable' && (
-                      <span className="text-green-600 ml-2">(Negotiable - Propose your price)</span>
+                      <span className="text-fixly-success text-xs ml-2 bg-fixly-success-bg px-2 py-1 rounded-full">
+                        Negotiable - Propose your price
+                      </span>
                     )}
                     {job.budget.type === 'fixed' && (
-                      <span className="text-blue-600 ml-2">(Fixed - Match or propose alternative)</span>
+                      <span className="text-fixly-info text-xs ml-2 bg-fixly-info-bg px-2 py-1 rounded-full">
+                        Fixed - Match or propose alternative
+                      </span>
                     )}
                     {job.budget.type === 'hourly' && (
-                      <span className="text-purple-600 ml-2">(Hourly - Your rate per hour)</span>
+                      <span className="text-fixly-accent text-xs ml-2 bg-fixly-accent-bg px-2 py-1 rounded-full">
+                        Hourly - Your rate per hour
+                      </span>
                     )}
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted">₹</span>
+                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-fixly-accent font-semibold">₹</span>
                     <input
                       type="number"
                       value={applicationData.proposedAmount}
@@ -2074,7 +2197,7 @@ export default function JobDetailsPage({ params }) {
                         ...prev,
                         proposedAmount: e.target.value
                       }))}
-                      className="input pl-8"
+                      className="input-field pl-10 text-lg font-semibold text-fixly-accent"
                       placeholder={
                         job.budget.type === 'negotiable' ? "Enter your price" : 
                         job.budget.type === 'hourly' ? "Your hourly rate" :
@@ -2089,7 +2212,7 @@ export default function JobDetailsPage({ params }) {
                     <p className="text-xs text-fixly-text-muted mt-1">
                       Client's budget: ₹{job.budget.amount.toLocaleString()} 
                       {parseInt(applicationData.proposedAmount) !== job.budget.amount && applicationData.proposedAmount && (
-                        <span className="text-orange-600 ml-2">
+                        <span className="text-fixly-warning ml-2 font-medium">
                           (Your proposal: ₹{parseInt(applicationData.proposedAmount).toLocaleString()})
                         </span>
                       )}
@@ -2097,33 +2220,178 @@ export default function JobDetailsPage({ params }) {
                   )}
                 </div>
 
-                {/* Materials Inclusion Toggle */}
-                <div>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={applicationData.materialsIncluded}
-                      onChange={(e) => setApplicationData(prev => ({
-                        ...prev,
-                        materialsIncluded: e.target.checked
-                      }))}
-                      className="rounded border-fixly-border text-fixly-accent focus:border-fixly-accent focus:ring-fixly-accent"
-                    />
-                    <span className="text-sm font-medium text-fixly-text">
-                      Materials are included in my price
-                    </span>
-                  </label>
-                  <p className="text-xs text-fixly-text-muted mt-1">
-                    Check this if your quoted price includes all materials and supplies needed
-                  </p>
+                {/* Budget Breakdown Option */}
+                <div className="border border-fixly-border rounded-xl p-5 bg-fixly-bg-secondary/30">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-fixly-text mb-1">💰 Budget Breakdown</h4>
+                      <p className="text-sm text-fixly-text-muted">Optional detailed cost breakdown for transparency</p>
+                    </div>
+                    <label className="flex items-center space-x-3 cursor-pointer ml-4">
+                      <input
+                        type="checkbox"
+                        checked={applicationData.budgetBreakdown.enabled}
+                        onChange={(e) => setApplicationData(prev => ({
+                          ...prev,
+                          budgetBreakdown: { ...prev.budgetBreakdown, enabled: e.target.checked }
+                        }))}
+                        className="w-4 h-4 rounded border-fixly-border text-fixly-accent focus:border-fixly-accent focus:ring-fixly-accent"
+                      />
+                      <span className="text-sm font-medium text-fixly-text">Enable</span>
+                    </label>
+                  </div>
+                  
+                  {!applicationData.budgetBreakdown.enabled ? (
+                    <div className="bg-fixly-accent-bg/50 border border-fixly-accent/20 rounded-lg p-4">
+                      <p className="text-sm text-fixly-text-muted leading-relaxed">
+                        💡 <strong>Pro tip:</strong> Breaking down your costs helps clients understand your pricing and builds trust. Include labor costs, materials, and any service fees.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-5">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-fixly-text mb-2">
+                            Labor Cost
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted">₹</span>
+                            <input
+                              type="number"
+                              value={applicationData.budgetBreakdown.laborCost}
+                              onChange={(e) => {
+                                const newBreakdown = { ...applicationData.budgetBreakdown, laborCost: e.target.value };
+                                const total = (parseFloat(newBreakdown.laborCost) || 0) + 
+                                            (parseFloat(newBreakdown.materialsCost) || 0) + 
+                                            (parseFloat(newBreakdown.serviceFee) || 0);
+                                setApplicationData(prev => ({
+                                  ...prev,
+                                  budgetBreakdown: newBreakdown,
+                                  proposedAmount: total.toString()
+                                }));
+                              }}
+                              className="input pl-8"
+                              placeholder="Your work charges"
+                            />
+                          </div>
+                        </div>
+                        
+                        {!job.budget.materialsIncluded && (
+                          <div>
+                            <label className="block text-sm font-medium text-fixly-text mb-2">
+                              Materials Cost
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted">₹</span>
+                              <input
+                                type="number"
+                                value={applicationData.budgetBreakdown.materialsCost}
+                                onChange={(e) => {
+                                  const newBreakdown = { ...applicationData.budgetBreakdown, materialsCost: e.target.value };
+                                  const total = (parseFloat(newBreakdown.laborCost) || 0) + 
+                                              (parseFloat(newBreakdown.materialsCost) || 0) + 
+                                              (parseFloat(newBreakdown.serviceFee) || 0);
+                                  setApplicationData(prev => ({
+                                    ...prev,
+                                    budgetBreakdown: newBreakdown,
+                                    proposedAmount: total.toString()
+                                  }));
+                                }}
+                                className="input pl-8"
+                                placeholder="Material expenses"
+                              />
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-fixly-text mb-2">
+                            Service Fee
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted">₹</span>
+                            <input
+                              type="number"
+                              value={applicationData.budgetBreakdown.serviceFee}
+                              onChange={(e) => {
+                                const newBreakdown = { ...applicationData.budgetBreakdown, serviceFee: e.target.value };
+                                const total = (parseFloat(newBreakdown.laborCost) || 0) + 
+                                            (parseFloat(newBreakdown.materialsCost) || 0) + 
+                                            (parseFloat(newBreakdown.serviceFee) || 0);
+                                setApplicationData(prev => ({
+                                  ...prev,
+                                  budgetBreakdown: newBreakdown,
+                                  proposedAmount: total.toString()
+                                }));
+                              }}
+                              className="input pl-8"
+                              placeholder="Additional charges"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Auto-calculated total */}
+                      <div className="bg-fixly-accent/10 border border-fixly-accent/20 rounded-lg p-3">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium text-fixly-accent">Calculated Total:</span>
+                          <span className="text-lg font-semibold text-fixly-accent">
+                            ₹{(
+                              (parseFloat(applicationData.budgetBreakdown.laborCost) || 0) + 
+                              (parseFloat(applicationData.budgetBreakdown.materialsCost) || 0) + 
+                              (parseFloat(applicationData.budgetBreakdown.serviceFee) || 0)
+                            ).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="text-xs text-fixly-accent/70 mt-1">
+                          This amount will be used as your proposed total above
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Materials Information */}
+                <div className={`p-4 rounded-xl border-2 ${
+                  job.budget.materialsIncluded 
+                    ? 'border-fixly-success/30 bg-fixly-success-bg dark:bg-fixly-success/10' 
+                    : 'border-fixly-warning/30 bg-fixly-warning-bg dark:bg-fixly-warning/10'
+                }`}>
+                  <div className="flex items-start">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center mr-3 mt-0.5 ${
+                      job.budget.materialsIncluded ? 'bg-fixly-success' : 'bg-fixly-warning'
+                    }`}>
+                      {job.budget.materialsIncluded ? (
+                        <CheckCircle className="w-4 h-4 text-white" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className={`font-semibold text-sm mb-2 ${
+                        job.budget.materialsIncluded ? 'text-fixly-success-text' : 'text-fixly-warning-text'
+                      }`}>
+                        {job.budget.materialsIncluded ? '✅ Materials Provided by Hirer' : '⚠️ Materials Not Provided'}
+                      </h4>
+                      <p className={`text-sm leading-relaxed ${
+                        job.budget.materialsIncluded ? 'text-fixly-success-text/80' : 'text-fixly-warning-text/80'
+                      }`}>
+                        {job.budget.materialsIncluded 
+                          ? 'Great news! The hirer will provide all required materials. Once your proposal is accepted, you can chat with them to coordinate material collection.'
+                          : 'You\'ll need to arrange your own materials. Please include material costs in your budget breakdown above, and get materials before starting the job.'
+                        }
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Time Estimate */}
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Time Estimate
+                <div className="bg-fixly-bg-secondary/20 border border-fixly-border/50 rounded-xl p-4">
+                  <label className="block text-sm font-semibold text-fixly-text mb-3 flex items-center">
+                    <Clock className="w-4 h-4 mr-2 text-fixly-accent" />
+                    ⏱️ Time Estimate
                   </label>
-                  <div className="flex space-x-2">
+                  <div className="flex space-x-3">
                     <input
                       type="number"
                       value={applicationData.timeEstimate.value}
@@ -2131,7 +2399,7 @@ export default function JobDetailsPage({ params }) {
                         ...prev,
                         timeEstimate: { ...prev.timeEstimate, value: e.target.value }
                       }))}
-                      className="input flex-1"
+                      className="input-field flex-1"
                       placeholder="Duration"
                       min="1"
                     />
@@ -2141,7 +2409,7 @@ export default function JobDetailsPage({ params }) {
                         ...prev,
                         timeEstimate: { ...prev.timeEstimate, unit: e.target.value }
                       }))}
-                      className="input w-24"
+                      className="input-field w-28"
                     >
                       <option value="hours">Hours</option>
                       <option value="days">Days</option>
@@ -2151,54 +2419,68 @@ export default function JobDetailsPage({ params }) {
                 </div>
 
                 {/* Work Plan */}
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Work Plan & Approach *
+                <div className="bg-fixly-bg-secondary/20 border border-fixly-border/50 rounded-xl p-4">
+                  <label className="block text-sm font-semibold text-fixly-text mb-3 flex items-center">
+                    <Briefcase className="w-4 h-4 mr-2 text-fixly-accent" />
+                    🎯 Work Plan & Approach *
                     {job.budget.type === 'negotiable' && (
-                      <span className="text-green-600 ml-1">(Detailed plan required for negotiable jobs)</span>
+                      <span className="text-fixly-accent text-xs ml-2 bg-fixly-accent-bg px-2 py-1 rounded-full">
+                        Detailed plan required
+                      </span>
                     )}
                   </label>
                   <textarea
-                    rows={4}
+                    rows={5}
                     value={applicationData.workPlan}
                     onChange={(e) => setApplicationData(prev => ({
                       ...prev,
                       workPlan: e.target.value
                     }))}
-                    className="input"
+                    className="textarea-field"
                     placeholder={
                       job.budget.type === 'negotiable' 
-                        ? "Describe your detailed plan: How will you approach this job? What steps will you take? What's your methodology?"
-                        : "Explain your approach to completing this job. What steps will you take?"
+                        ? "📝 Describe your detailed approach: How will you tackle this job? What's your step-by-step methodology? Include timeline, tools, and quality measures."
+                        : "📋 Explain your approach: What steps will you take to complete this job successfully?"
                     }
                     maxLength={1500}
                     required
                   />
-                  <p className="text-xs text-fixly-text-muted mt-1">
-                    {applicationData.workPlan.length}/1500 characters
-                  </p>
+                  <div className="flex justify-between items-center mt-2">
+                    <p className="text-xs text-fixly-text-muted">
+                      💡 Be specific - clients love detailed plans!
+                    </p>
+                    <p className="text-xs text-fixly-text-muted font-mono">
+                      {applicationData.workPlan.length}/1500
+                    </p>
+                  </div>
                 </div>
 
                 {/* Cover Letter */}
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Why Choose You? *
+                <div className="bg-fixly-bg-secondary/20 border border-fixly-border/50 rounded-xl p-4">
+                  <label className="block text-sm font-semibold text-fixly-text mb-3 flex items-center">
+                    <Star className="w-4 h-4 mr-2 text-fixly-accent" />
+                    🌟 Why Choose You? *
                   </label>
                   <textarea
-                    rows={3}
+                    rows={4}
                     value={applicationData.coverLetter}
                     onChange={(e) => setApplicationData(prev => ({
                       ...prev,
                       coverLetter: e.target.value
                     }))}
-                    className="input"
-                    placeholder="Why are you the best fit for this job? Highlight your relevant experience and skills."
+                    className="textarea-field"
+                    placeholder="🚀 What makes you the perfect choice? Highlight your relevant experience, skills, and what sets you apart from other fixers."
                     maxLength={800}
                     required
                   />
-                  <p className="text-xs text-fixly-text-muted mt-1">
-                    {applicationData.coverLetter.length}/800 characters
-                  </p>
+                  <div className="flex justify-between items-center mt-2">
+                    <p className="text-xs text-fixly-text-muted">
+                      💪 Show your expertise and enthusiasm!
+                    </p>
+                    <p className="text-xs text-fixly-text-muted font-mono">
+                      {applicationData.coverLetter.length}/800
+                    </p>
+                  </div>
                 </div>
 
                 {/* Requirements from Hirer */}
@@ -2314,23 +2596,59 @@ export default function JobDetailsPage({ params }) {
                   <h4 className="font-medium text-fixly-text mb-3">Proposal Summary</h4>
                   
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Service Charge:</span>
-                      <span className="font-medium">₹{parseInt(applicationData.proposedAmount || 0).toLocaleString()}</span>
-                    </div>
-                    
-                    {applicationData.materialsList.length > 0 && !applicationData.materialsIncluded && (
-                      <div className="flex justify-between">
-                        <span>Additional Materials:</span>
-                        <span>₹{applicationData.materialsList.reduce((total, material) => total + (material.estimatedCost || 0), 0).toLocaleString()}</span>
-                      </div>
-                    )}
-                    
-                    {applicationData.materialsIncluded && (
-                      <div className="flex justify-between text-green-600">
-                        <span>Materials:</span>
-                        <span>Included in service</span>
-                      </div>
+                    {applicationData.budgetBreakdown.enabled ? (
+                      // Show detailed breakdown
+                      <>
+                        {applicationData.budgetBreakdown.laborCost && (
+                          <div className="flex justify-between">
+                            <span>Labor Cost:</span>
+                            <span className="font-medium">₹{parseFloat(applicationData.budgetBreakdown.laborCost).toLocaleString()}</span>
+                          </div>
+                        )}
+                        
+                        {applicationData.budgetBreakdown.materialsCost && !job.budget.materialsIncluded && (
+                          <div className="flex justify-between">
+                            <span>Materials Cost:</span>
+                            <span className="font-medium">₹{parseFloat(applicationData.budgetBreakdown.materialsCost).toLocaleString()}</span>
+                          </div>
+                        )}
+                        
+                        {job.budget.materialsIncluded && (
+                          <div className="flex justify-between text-green-600">
+                            <span>Materials:</span>
+                            <span>Provided by hirer</span>
+                          </div>
+                        )}
+                        
+                        {applicationData.budgetBreakdown.serviceFee && (
+                          <div className="flex justify-between">
+                            <span>Service Fee:</span>
+                            <span className="font-medium">₹{parseFloat(applicationData.budgetBreakdown.serviceFee).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      // Show simple breakdown
+                      <>
+                        <div className="flex justify-between">
+                          <span>Service Charge:</span>
+                          <span className="font-medium">₹{parseInt(applicationData.proposedAmount || 0).toLocaleString()}</span>
+                        </div>
+                        
+                        {job.budget.materialsIncluded && (
+                          <div className="flex justify-between text-green-600">
+                            <span>Materials:</span>
+                            <span>Provided by hirer</span>
+                          </div>
+                        )}
+                        
+                        {applicationData.materialsList.length > 0 && !job.budget.materialsIncluded && (
+                          <div className="flex justify-between">
+                            <span>Additional Materials:</span>
+                            <span>₹{applicationData.materialsList.reduce((total, material) => total + (material.estimatedCost || 0), 0).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </>
                     )}
                     
                     <hr className="my-2" />
@@ -2338,17 +2656,12 @@ export default function JobDetailsPage({ params }) {
                     <div className="flex justify-between font-semibold text-base">
                       <span>Total Estimate:</span>
                       <span className="text-fixly-accent">
-                        ₹{(
-                          parseInt(applicationData.proposedAmount || 0) + 
-                          (applicationData.materialsIncluded ? 0 : 
-                            applicationData.materialsList.reduce((total, material) => total + (material.estimatedCost || 0), 0)
-                          )
-                        ).toLocaleString()}
+                        ₹{parseInt(applicationData.proposedAmount || 0).toLocaleString()}
                       </span>
                     </div>
                     
                     <div className="text-xs text-fixly-text-muted mt-2">
-                      <p>• Price includes: {applicationData.materialsIncluded ? 'Service + Materials' : 'Service only'}</p>
+                      <p>• Price includes: {job.budget.materialsIncluded ? 'Service (materials provided by hirer)' : (applicationData.budgetBreakdown.enabled && applicationData.budgetBreakdown.materialsCost ? 'Service + Materials' : 'Service only')}</p>
                       {applicationData.timeEstimate.value && (
                         <p>• Estimated time: {applicationData.timeEstimate.value} {applicationData.timeEstimate.unit}</p>
                       )}
@@ -2535,6 +2848,51 @@ export default function JobDetailsPage({ params }) {
         onClose={() => setShowInstagramComments(false)}
         initialCommentCount={comments.length}
       />
+
+      {/* Image Lightbox Modal */}
+      <AnimatePresence>
+        {showImageModal && selectedImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowImageModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="relative max-w-4xl max-h-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.name || 'Job attachment'}
+                className="max-w-full max-h-[80vh] object-contain rounded-lg"
+              />
+              
+              {/* Close button */}
+              <button
+                onClick={() => setShowImageModal(false)}
+                className="absolute top-4 right-4 w-10 h-10 bg-black/70 hover:bg-black/90 text-white rounded-full flex items-center justify-center transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              
+              {/* Image info */}
+              {selectedImage.name && (
+                <div className="absolute bottom-4 left-4 right-4 bg-black/70 text-white p-4 rounded-lg">
+                  <p className="font-medium">{selectedImage.name}</p>
+                  <p className="text-sm text-gray-300">
+                    {(selectedImage.size / 1024 / 1024).toFixed(1)} MB
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

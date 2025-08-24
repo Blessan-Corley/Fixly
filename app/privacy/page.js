@@ -26,6 +26,10 @@ export default function PrivacyPolicyPage() {
         {
           subtitle: 'Communication Data',
           text: 'We store messages, job applications, reviews, and other communications made through our platform to facilitate service delivery and dispute resolution.'
+        },
+        {
+          subtitle: 'Location Information',
+          text: 'With your explicit consent, we collect and store your GPS location to show you nearby job opportunities and improve service matching. You can enable or disable location sharing at any time in your settings. Location data is stored securely and is never shared without your permission.'
         }
       ]
     },
@@ -45,6 +49,10 @@ export default function PrivacyPolicyPage() {
         {
           subtitle: 'Safety and Security',
           text: 'We use your information to verify identities, prevent fraud, ensure platform safety, and comply with legal obligations.'
+        },
+        {
+          subtitle: 'Location-Based Services',
+          text: 'When you enable location sharing, we use your GPS coordinates to: (1) Show you job opportunities near your location, (2) Calculate and display distances to job locations, (3) Sort search results by proximity, and (4) Provide location-based filtering options. Your location data is processed locally and stored securely with encryption.'
         }
       ]
     },
@@ -87,6 +95,25 @@ export default function PrivacyPolicyPage() {
       ]
     },
     {
+      id: 'data-retention',
+      title: 'Data Retention',
+      icon: Lock,
+      content: [
+        {
+          subtitle: 'Account Data',
+          text: 'We retain your personal information for as long as your account is active or as needed to provide services. When you delete your account, most data is removed within 30 days.'
+        },
+        {
+          subtitle: 'Location Data',
+          text: 'Location information is cached for 6 hours in your browser (refreshed as you move) and stored in your account preferences until you disable location sharing. Recent locations are tracked to improve job matching. You can clear all location data at any time through your account settings.'
+        },
+        {
+          subtitle: 'Transaction Records',
+          text: 'Job completion records, payments, and reviews may be retained longer for business operations, legal compliance, and dispute resolution purposes.'
+        }
+      ]
+    },
+    {
       id: 'user-rights',
       title: 'Your Rights',
       icon: Eye,
@@ -102,6 +129,10 @@ export default function PrivacyPolicyPage() {
         {
           subtitle: 'Data Portability',
           text: 'You can request a copy of your personal data in a commonly used format.'
+        },
+        {
+          subtitle: 'Location Control',
+          text: 'You have complete control over location sharing: enable or disable at any time, view stored location data, delete location history, and choose between exact or approximate location sharing. Location access requires explicit consent and can be revoked immediately.'
         }
       ]
     }

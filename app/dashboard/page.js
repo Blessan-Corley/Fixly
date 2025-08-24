@@ -26,6 +26,7 @@ import { usePageLoading } from '../../contexts/LoadingContext';
 import { GlobalLoading } from '../../components/ui/GlobalLoading';
 import { toast } from 'sonner';
 import VerificationPrompt from '@/components/dashboard/VerificationPrompt';
+import { MobileCard, MobilePullToRefresh, useMobileDevice } from '../../components/ui/MobileOptimized';
 
 export default function DashboardPage() {
   const { user, loading } = useApp();
@@ -39,6 +40,9 @@ export default function DashboardPage() {
     startLoading, 
     stopLoading 
   } = usePageLoading('dashboard');
+  
+  // Mobile device detection
+  const deviceInfo = useMobileDevice();
 
   useEffect(() => {
     if (user) {
@@ -217,8 +221,8 @@ export default function DashboardPage() {
   };
 
   const renderHirerStats = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <div className="card card-hover">
+    <div className={`grid ${deviceInfo.isMobile ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'} gap-6 mb-8`}>
+      <DashboardCard hover={!deviceInfo.isMobile}>
         <div className="flex items-center">
           <div className="p-3 bg-fixly-accent/10 rounded-lg">
             <Briefcase className="h-6 w-6 text-fixly-accent" />
@@ -230,9 +234,9 @@ export default function DashboardPage() {
             <div className="text-sm text-fixly-text-muted">Total Jobs Posted</div>
           </div>
         </div>
-      </div>
+      </DashboardCard>
 
-      <div className="card card-hover">
+      <DashboardCard hover={!deviceInfo.isMobile}>
         <div className="flex items-center">
           <div className="p-3 bg-green-100 rounded-lg">
             <CheckCircle className="h-6 w-6 text-green-600" />
@@ -244,9 +248,9 @@ export default function DashboardPage() {
             <div className="text-sm text-fixly-text-muted">Completed Jobs</div>
           </div>
         </div>
-      </div>
+      </DashboardCard>
 
-      <div className="card card-hover">
+      <DashboardCard hover={!deviceInfo.isMobile}>
         <div className="flex items-center">
           <div className="p-3 bg-orange-100 rounded-lg">
             <Clock className="h-6 w-6 text-orange-600" />
@@ -258,9 +262,9 @@ export default function DashboardPage() {
             <div className="text-sm text-fixly-text-muted">Active Jobs</div>
           </div>
         </div>
-      </div>
+      </DashboardCard>
 
-      <div className="card card-hover">
+      <DashboardCard hover={!deviceInfo.isMobile}>
         <div className="flex items-center">
           <div className="p-3 bg-blue-100 rounded-lg">
             <DollarSign className="h-6 w-6 text-blue-600" />
@@ -272,7 +276,7 @@ export default function DashboardPage() {
             <div className="text-sm text-fixly-text-muted">Total Spent</div>
           </div>
         </div>
-      </div>
+      </DashboardCard>
     </div>
   );
 
@@ -497,34 +501,43 @@ export default function DashboardPage() {
     );
   }
 
+  const handleRefresh = async () => {
+    await fetchDashboardData();
+  };
+
+  const DashboardCard = deviceInfo.isMobile ? MobileCard : ({ children, className, hover, ...props }) => (
+    <div className={`card ${hover ? 'card-hover' : ''} ${className || ''}`} {...props}>{children}</div>
+  );
+
   return (
-    <div className="p-6 lg:p-8">
-      {/* Welcome Header */}
-      <div className="mb-8">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between"
-        >
-          <div>
-            <h1 className="text-3xl font-bold text-fixly-text">
-              {getGreeting()}, {user?.name?.split(' ')[0]}! 👋
-            </h1>
-            <p className="text-fixly-text-light mt-1">
-              {user?.role === 'hirer' && "Ready to get your projects done?"}
-              {user?.role === 'fixer' && "Time to find some great work opportunities!"}
-              {user?.role === 'admin' && "Here's what's happening on the platform"}
-            </p>
-          </div>
-          
-          {user?.role === 'fixer' && user?.availableNow && (
-            <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-              Available Now
+    <MobilePullToRefresh onRefresh={handleRefresh} className="min-h-full">
+      <div className={`${deviceInfo.isMobile ? 'mobile-p-4' : 'p-6 lg:p-8'}`}>
+        {/* Welcome Header */}
+        <div className="mb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`${deviceInfo.isMobile ? 'flex flex-col space-y-4' : 'flex items-center justify-between'}`}
+          >
+            <div>
+              <h1 className={`${deviceInfo.isMobile ? 'text-2xl' : 'text-3xl'} font-bold text-fixly-text`}>
+                {getGreeting()}, {user?.name?.split(' ')[0]}! 👋
+              </h1>
+              <p className="text-fixly-text-light mt-1">
+                {user?.role === 'hirer' && "Ready to get your projects done?"}
+                {user?.role === 'fixer' && "Time to find some great work opportunities!"}
+                {user?.role === 'admin' && "Here's what's happening on the platform"}
+              </p>
             </div>
-          )}
-        </motion.div>
-      </div>
+            
+            {user?.role === 'fixer' && user?.availableNow && (
+              <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                Available Now
+              </div>
+            )}
+          </motion.div>
+        </div>
 
       {/* Important Notices */}
       {user?.role === 'fixer' && user?.plan?.creditsUsed >= 3 && (
@@ -559,14 +572,14 @@ export default function DashboardPage() {
       {/* Stats Section */}
       {renderStats()}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className={`grid ${deviceInfo.isMobile ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'} gap-8`}>
         {/* Quick Actions */}
-        <div className="lg:col-span-2">
+        <div className={`${deviceInfo.isMobile ? '' : 'lg:col-span-2'}`}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-fixly-text">Quick Actions</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div className={`grid ${deviceInfo.isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'} gap-4 mb-8`}>
             {quickActions.map((action, index) => {
               const Icon = action.icon;
               return (
@@ -790,6 +803,7 @@ export default function DashboardPage() {
           </motion.div>
         </div>
       </div>
-    </div>
+      </div>
+    </MobilePullToRefresh>
   );
 }

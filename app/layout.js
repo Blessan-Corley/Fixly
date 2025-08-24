@@ -6,20 +6,25 @@ import { DarkModeEnhancer } from '../components/ui/DarkModeFixups';
 import PWAInstallPrompt from '../components/ui/PWAInstallPrompt';
 import './globals.css';
 
+// Enhanced font configuration with better fallbacks and error handling
 const manrope = Manrope({ 
   subsets: ['latin'],
   weight: ['200', '300', '400', '500', '600', '700', '800'],
-  display: 'swap',
+  display: 'fallback', // Changed from 'swap' to 'fallback' for better performance
   variable: '--font-manrope',
-  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+  fallback: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
+  adjustFontFallback: false, // Disable to prevent layout shifts
+  preload: true
 });
 
 const ptMono = PT_Mono({ 
   subsets: ['latin'],
   weight: ['400'],
-  display: 'swap',
+  display: 'fallback',
   variable: '--font-pt-mono',
-  fallback: ['Monaco', 'Menlo', 'Ubuntu Mono', 'monospace']
+  fallback: ['Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', 'monospace'],
+  adjustFontFallback: false,
+  preload: false // PT_Mono is less critical, don't preload
 });
 
 export const metadata = {

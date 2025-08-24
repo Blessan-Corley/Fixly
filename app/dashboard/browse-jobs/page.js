@@ -9,12 +9,25 @@ import {
   AlertCircle,
   Loader,
   RefreshCw,
-  TrendingUp
+  TrendingUp,
+  MapPin,
+  Navigation,
+  Clock,
+  DollarSign,
+  Calendar
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 import { searchCities, getAllSkills } from '../../../data/cities';
 import JobCardRectangular from '../../../components/JobCardRectangular';
+import LocationPermission from '../../../components/ui/LocationPermission';
+import { 
+  sortJobsByDistance, 
+  filterJobsByRadius, 
+  formatDistance, 
+  DISTANCE_RANGES,
+  loadUserLocation 
+} from '../../../utils/locationUtils';
 
 export default function BrowseJobsPage() {
   return (
@@ -38,6 +51,10 @@ function BrowseJobsContent() {
     total: 0
   });
 
+  // Location state
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationEnabled, setLocationEnabled] = useState(false);
+
   // Filters
   const [filters, setFilters] = useState({
     search: '',
@@ -47,7 +64,8 @@ function BrowseJobsContent() {
     budgetMax: '',
     urgency: '',
     deadline: '',
-    sortBy: 'newest'
+    sortBy: 'newest',
+    maxDistance: null // null means no distance filter
   });
   const [showFilters, setShowFilters] = useState(false);
 
@@ -55,6 +73,41 @@ function BrowseJobsContent() {
   const [applyingJobs, setApplyingJobs] = useState(new Set());
   const [searchLoading, setSearchLoading] = useState(false);
   const [showRefreshMessage, setShowRefreshMessage] = useState(false);
+
+  // Initialize location on component mount
+  useEffect(() => {
+    const cachedLocation = loadUserLocation();
+    if (cachedLocation) {
+      setUserLocation(cachedLocation);
+      setLocationEnabled(true);
+      // Update default sort to distance when location is available
+      setFilters(prev => ({
+        ...prev,
+        sortBy: 'distance'
+      }));
+    }
+  }, []);
+
+  // Handle location update from LocationPermission component
+  const handleLocationUpdate = (location) => {
+    setUserLocation(location);
+    setLocationEnabled(!!location);
+    
+    if (location) {
+      // Auto-switch to distance sorting when location is enabled
+      setFilters(prev => ({
+        ...prev,
+        sortBy: 'distance'
+      }));
+    } else {
+      // Switch back to newest when location is disabled
+      setFilters(prev => ({
+        ...prev,
+        sortBy: 'newest',
+        maxDistance: null
+      }));
+    }
+  };
 
   useEffect(() => {
     // Show loading state when user is typing
@@ -114,10 +167,34 @@ function BrowseJobsContent() {
       }
 
       if (response.ok) {
+        let processedJobs = data.jobs;
+
+        // Apply location-based processing if user location is available
+        if (userLocation && locationEnabled) {
+          // Apply distance filter if set
+          if (filters.maxDistance) {
+            processedJobs = filterJobsByRadius(
+              processedJobs, 
+              userLocation.lat, 
+              userLocation.lng, 
+              filters.maxDistance
+            );
+          }
+
+          // Apply distance-based sorting
+          if (filters.sortBy === 'distance') {
+            processedJobs = sortJobsByDistance(
+              processedJobs,
+              userLocation.lat,
+              userLocation.lng
+            );
+          }
+        }
+
         if (reset) {
-          setJobs(data.jobs);
+          setJobs(processedJobs);
         } else {
-          setJobs(prev => [...prev, ...data.jobs]);
+          setJobs(prev => [...prev, ...processedJobs]);
         }
         setPagination(data.pagination);
       } else {
@@ -225,7 +302,8 @@ function BrowseJobsContent() {
       budgetMax: '',
       urgency: '',
       deadline: '',
-      sortBy: 'newest'
+      sortBy: locationEnabled ? 'distance' : 'newest',
+      maxDistance: null
     });
   };
 
@@ -297,6 +375,47 @@ function BrowseJobsContent() {
           )}
         </div>
       </div>
+
+      {/* Location Permission Banner */}
+      <LocationPermission 
+        onLocationUpdate={handleLocationUpdate}
+        showBanner={!locationEnabled}
+        className="mb-6"
+      />
+
+      {/* Location Sorting Indicator */}
+      {locationEnabled && filters.sortBy === 'distance' && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-fixly-accent/10 to-teal-50 border-2 border-fixly-accent/20 rounded-xl p-4 mb-6 shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="w-10 h-10 bg-fixly-accent/20 rounded-full flex items-center justify-center mr-4">
+                <MapPin className="h-5 w-5 text-fixly-accent" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-fixly-text flex items-center">
+                  🎯 Jobs sorted by proximity
+                  {filters.maxDistance && (
+                    <span className="ml-2 px-2 py-1 bg-fixly-accent/20 text-fixly-accent text-xs rounded-full">
+                      Within {filters.maxDistance}km
+                    </span>
+                  )}
+                </h3>
+                <p className="text-sm text-fixly-text-muted">
+                  Showing nearest opportunities first • {jobs.length} jobs found
+                </p>
+              </div>
+            </div>
+            <div className="hidden md:flex items-center text-sm text-fixly-accent">
+              <div className="w-2 h-2 bg-fixly-accent rounded-full animate-pulse mr-2"></div>
+              GPS Active
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Search and Filters */}
       <div className="card mb-8">
@@ -387,21 +506,59 @@ function BrowseJobsContent() {
                   </select>
                 </div>
 
+                {/* Distance Filter - Only show when location is enabled */}
+                {locationEnabled && (
+                  <div>
+                    <label className="block text-sm font-medium text-fixly-text mb-2">
+                      <span className="flex items-center">
+                        Distance Range
+                        <span className="ml-1 text-xs text-green-600">(GPS enabled)</span>
+                      </span>
+                    </label>
+                    <select
+                      value={filters.maxDistance || ''}
+                      onChange={(e) => handleFilterChange('maxDistance', e.target.value ? parseInt(e.target.value) : null)}
+                      className="select-field"
+                    >
+                      <option value="">Any distance</option>
+                      {DISTANCE_RANGES.slice(0, -1).map(range => (
+                        <option key={range.value} value={range.value}>
+                          {range.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-fixly-text mb-2">
                     Sort By
+                    {locationEnabled && filters.sortBy === 'distance' && (
+                      <span className="ml-2 inline-flex items-center px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                        <Navigation className="h-3 w-3 mr-1" />
+                        GPS Active
+                      </span>
+                    )}
                   </label>
                   <select
                     value={filters.sortBy}
                     onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                    className="select-field"
+                    className={`select-field ${filters.sortBy === 'distance' ? 'ring-2 ring-fixly-accent ring-opacity-50' : ''}`}
                   >
-                    <option value="newest">Newest First</option>
-                    <option value="deadline">Deadline</option>
-                    <option value="budget_high">Highest Budget</option>
-                    <option value="budget_low">Lowest Budget</option>
-                    <option value="nearest">Nearest to Me</option>
+                    <option value="newest">🕐 Newest First</option>
+                    <option value="deadline">📅 By Deadline</option>
+                    <option value="budget_high">💰 Highest Budget</option>
+                    <option value="budget_low">💸 Lowest Budget</option>
+                    <option value="distance" disabled={!locationEnabled}>
+                      {locationEnabled ? '📍 Nearest to Me' : '📍 Nearest to Me (Enable Location)'}
+                    </option>
                   </select>
+                  {filters.sortBy === 'distance' && locationEnabled && (
+                    <p className="text-xs text-green-600 mt-1 flex items-center">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                      Sorting by distance from your location
+                    </p>
+                  )}
                 </div>
               </div>
 

@@ -1,10 +1,10 @@
 // app/api/jobs/[jobId]/view/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
-import connectDB from '@/lib/db';
-import Job from '@/models/Job';
-import { analytics } from '@/lib/analytics';
+import { authOptions } from '../../../../lib/auth';
+import connectDB from '../../../../lib/mongodb';
+import Job from '../../../../models/Job';
+import { analytics } from '../../../../lib/cache';
 
 export async function POST(request, { params }) {
   try {

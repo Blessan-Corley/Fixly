@@ -6,8 +6,7 @@ import { SessionProvider, useSession } from 'next-auth/react';
 import { Toaster } from 'sonner';
 import { LoadingProvider } from '../contexts/LoadingContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
-import { SocketProvider } from '../contexts/SocketContext';
-import { NotificationProvider } from '../contexts/NotificationContext';
+// Real-time providers removed - using SSE instead
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import QueryProvider, { QueryPerformanceMonitor, QueryErrorBoundary } from '../components/providers/QueryProvider';
 
@@ -334,12 +333,8 @@ export function Providers({ children }) {
           <ThemeProvider>
             <LoadingProvider>
               <AppProviderContent>
-                <SocketProvider>
-                  <NotificationProvider>
-                    {children}
-                    <QueryPerformanceMonitor />
-                  </NotificationProvider>
-                </SocketProvider>
+                {children}
+                <QueryPerformanceMonitor />
                 <Toaster 
                   position="top-right"
                   toastOptions={{

@@ -156,3 +156,11 @@ coverage-*.json
 benchmark-results.json
 load-test-*.log
 stress-test-*.json
+
+# Test Scripts - Development Only
+scripts/socket-test.js
+scripts/comprehensive-socket-diagnostic.js
+scripts/production-test.js
+scripts/verify-production.js
+scripts/production-load-test.js
+scripts/final-system-verification.js

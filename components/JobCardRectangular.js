@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { toastMessages } from '../utils/toast';
 import InstagramCommentsRealtime from './InstagramCommentsRealtime';
+import { formatDistance } from '../utils/locationUtils';
 
 export default function JobCardRectangular({ job, user, onApply, isApplying = false }) {
   const router = useRouter();
@@ -161,7 +162,22 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
             <div className="flex items-center gap-4 text-sm text-fixly-text-muted mb-2">
               <div className="flex items-center gap-1">
                 <MapPin className="h-4 w-4" />
-                <span>{job.location.city}, {job.location.state}</span>
+                <span>
+                  {job.location?.city && job.location?.state 
+                    ? `${job.location.city}, ${job.location.state}`
+                    : job.location?.address || 'Location not specified'
+                  }
+                </span>
+                {job.distance && (
+                  <span className="ml-2 px-2 py-1 bg-fixly-accent/10 text-fixly-accent text-xs font-medium rounded-full">
+                    {formatDistance(job.distance)} away
+                  </span>
+                )}
+                {!job.distance && job.location?.lat && job.location?.lng && (
+                  <span className="ml-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
+                    Distance unavailable
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />

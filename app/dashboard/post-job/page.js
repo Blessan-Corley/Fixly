@@ -43,6 +43,8 @@ import {
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 import { searchCities, skillCategories, searchSkills } from '../../../data/cities';
+import LocationPermission from '../../../components/ui/LocationPermission';
+import { loadUserLocation, getUserLocation } from '../../../utils/locationUtils';
 
 export default function PostJobPage() {
   return (
@@ -92,6 +94,11 @@ function PostJobContent() {
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 4;
   
+  // Media upload states
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({});
+  const [dragOver, setDragOver] = useState(false);
+  
   // Subscription states
   const [subscriptionInfo, setSubscriptionInfo] = useState(null);
   const [showProModal, setShowProModal] = useState(false);
@@ -105,9 +112,22 @@ function PostJobContent() {
   const [skillResults, setSkillResults] = useState([]);
   const [showSkillDropdown, setShowSkillDropdown] = useState(false);
 
+  // Location states
+  const [userLocation, setUserLocation] = useState(null);
+  const [locationEnabled, setLocationEnabled] = useState(false);
+
   // Fetch subscription info
   useEffect(() => {
     fetchSubscriptionInfo();
+  }, []);
+
+  // Load user location on component mount
+  useEffect(() => {
+    const savedLocation = loadUserLocation();
+    if (savedLocation) {
+      setUserLocation(savedLocation);
+      setLocationEnabled(true);
+    }
   }, []);
 
   const fetchSubscriptionInfo = async () => {
@@ -190,6 +210,125 @@ function PostJobContent() {
     });
     setCitySearch('');
     setShowCityDropdown(false);
+  };
+
+  // Location handling functions
+  const handleLocationUpdate = (location) => {
+    setUserLocation(location);
+    setLocationEnabled(!!location);
+  };
+
+  const useCurrentLocation = async () => {
+    try {
+      const location = await getUserLocation();
+      
+      // Update form with GPS coordinates
+      handleInputChange('location', {
+        ...formData.location,
+        lat: location.lat,
+        lng: location.lng
+      });
+
+      setUserLocation(location);
+      setLocationEnabled(true);
+      toast.success('GPS location added to job posting');
+    } catch (error) {
+      console.error('Error getting current location:', error);
+      toast.error('Unable to get current location: ' + error.message);
+    }
+  };
+
+  // Media upload functions
+  const handleFileSelect = async (files) => {
+    const validFiles = Array.from(files).filter(file => {
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      const maxSize = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024; // 100MB for video, 10MB for image
+      
+      if (!isImage && !isVideo) {
+        toast.error(`${file.name}: Only image and video files are allowed`);
+        return false;
+      }
+      
+      if (file.size > maxSize) {
+        toast.error(`${file.name}: File size too large (max ${isVideo ? '100MB' : '10MB'})`);
+        return false;
+      }
+      
+      return true;
+    });
+
+    if (validFiles.length === 0) return;
+
+    setUploading(true);
+    const newAttachments = [];
+
+    for (const file of validFiles) {
+      try {
+        const fileId = Date.now() + Math.random();
+        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+
+        // Create preview URL
+        const previewUrl = URL.createObjectURL(file);
+        
+        // Simulate upload progress (replace with actual upload logic)
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            const currentProgress = prev[fileId] || 0;
+            const newProgress = Math.min(currentProgress + 10, 90);
+            return { ...prev, [fileId]: newProgress };
+          });
+        }, 100);
+
+        // Simulate upload to server (replace with actual API call)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        clearInterval(progressInterval);
+        setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+
+        newAttachments.push({
+          id: fileId,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          url: previewUrl, // In real app, this would be the server URL
+          isImage: file.type.startsWith('image/'),
+          isVideo: file.type.startsWith('video/')
+        });
+
+      } catch (error) {
+        console.error('Upload error:', error);
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    handleInputChange('attachments', [...formData.attachments, ...newAttachments]);
+    setUploading(false);
+    setUploadProgress({});
+  };
+
+  const removeAttachment = (attachmentId) => {
+    const attachment = formData.attachments.find(att => att.id === attachmentId);
+    if (attachment && attachment.url.startsWith('blob:')) {
+      URL.revokeObjectURL(attachment.url);
+    }
+    handleInputChange('attachments', formData.attachments.filter(att => att.id !== attachmentId));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFileSelect(e.dataTransfer.files);
   };
 
   const validateStep = (step) => {
@@ -501,6 +640,41 @@ function PostJobContent() {
         </label>
       </div>
 
+      {/* Location Helper */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <MapPin className="h-5 w-5 text-blue-600 mr-2" />
+            <div>
+              <p className="text-sm font-medium text-blue-900">Add precise location</p>
+              <p className="text-xs text-blue-700">
+                {formData.location.lat && formData.location.lng ? (
+                  `GPS coordinates added (${formData.location.lat.toFixed(4)}, ${formData.location.lng.toFixed(4)})`
+                ) : (
+                  'Add GPS coordinates to help fixers find the exact location'
+                )}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={useCurrentLocation}
+            className="btn-primary text-xs px-3 py-2 flex items-center"
+          >
+            <Navigation className="h-3 w-3 mr-1" />
+            Use Current Location
+          </button>
+        </div>
+        {!locationEnabled && (
+          <div className="mt-3 pt-3 border-t border-blue-200">
+            <LocationPermission 
+              onLocationUpdate={handleLocationUpdate}
+              showBanner={false}
+            />
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-fixly-text mb-2">
           Complete Address *
@@ -708,7 +882,7 @@ function PostJobContent() {
               }
             }}
             placeholder="Duration"
-            className="input-field flex-1"
+            className="input-field w-24"
             min="1"
             max={
               formData.estimatedDuration.unit === 'hours' ? 24 :
@@ -718,13 +892,132 @@ function PostJobContent() {
           <select
             value={formData.estimatedDuration.unit}
             onChange={(e) => handleInputChange('estimatedDuration.unit', e.target.value)}
-            className="select-field w-32"
+            className="select-field flex-1"
           >
             <option value="hours">Hours</option>
             <option value="days">Days</option>
             <option value="weeks">Weeks</option>
           </select>
         </div>
+      </div>
+
+      {/* Media Upload Section */}
+      <div>
+        <label className="block text-sm font-medium text-fixly-text mb-2">
+          Photos & Videos (Optional)
+        </label>
+        <p className="text-fixly-text-muted text-sm mb-4">
+          Upload photos and videos to help fixers understand your requirements better
+        </p>
+
+        {/* Upload Area */}
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            dragOver
+              ? 'border-fixly-accent bg-fixly-accent/5'
+              : 'border-fixly-border hover:border-fixly-accent'
+          }`}
+        >
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 bg-fixly-accent/10 rounded-full flex items-center justify-center mb-4">
+              <Upload className="h-6 w-6 text-fixly-accent" />
+            </div>
+            <h3 className="font-medium text-fixly-text mb-2">
+              {dragOver ? 'Drop files here' : 'Upload photos and videos'}
+            </h3>
+            <p className="text-fixly-text-muted text-sm mb-4">
+              Drag and drop files here, or click to browse
+            </p>
+            <div className="flex items-center gap-4 text-xs text-fixly-text-muted">
+              <span>• Images: max 10MB</span>
+              <span>• Videos: max 100MB</span>
+              <span>• Formats: JPG, PNG, MP4, MOV</span>
+            </div>
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              onChange={(e) => handleFileSelect(e.target.files)}
+              className="hidden"
+              id="file-upload"
+            />
+            <label
+              htmlFor="file-upload"
+              className="btn-primary mt-4 cursor-pointer"
+            >
+              <Camera className="h-4 w-4 mr-2" />
+              Choose Files
+            </label>
+          </div>
+        </div>
+
+        {/* Uploaded Files Preview */}
+        {formData.attachments.length > 0 && (
+          <div className="mt-6">
+            <h4 className="font-medium text-fixly-text mb-4">
+              Uploaded Files ({formData.attachments.length})
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {formData.attachments.map((attachment) => (
+                <div key={attachment.id} className="relative group">
+                  <div className="relative bg-fixly-card border border-fixly-border rounded-lg overflow-hidden">
+                    {attachment.isImage ? (
+                      <img
+                        src={attachment.url}
+                        alt={attachment.name}
+                        className="w-full h-24 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-24 bg-fixly-surface flex items-center justify-center">
+                        <div className="text-center">
+                          <FileText className="h-8 w-8 text-fixly-accent mx-auto mb-1" />
+                          <p className="text-xs text-fixly-text-muted">Video</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* File info overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2">
+                      <p className="text-xs truncate">{attachment.name}</p>
+                      <p className="text-xs text-gray-300">
+                        {(attachment.size / 1024 / 1024).toFixed(1)} MB
+                      </p>
+                    </div>
+
+                    {/* Remove button */}
+                    <button
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="absolute top-2 right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Upload Progress */}
+        {uploading && Object.keys(uploadProgress).length > 0 && (
+          <div className="mt-4 space-y-2">
+            {Object.entries(uploadProgress).map(([fileId, progress]) => (
+              <div key={fileId} className="flex items-center gap-3">
+                <Loader className="h-4 w-4 animate-spin text-fixly-accent" />
+                <div className="flex-1 bg-fixly-surface rounded-full h-2">
+                  <div 
+                    className="bg-fixly-accent h-full rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <span className="text-xs text-fixly-text-muted">{progress}%</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -791,6 +1084,33 @@ function PostJobContent() {
               </p>
             </div>
           </div>
+
+          {/* Media attachments preview */}
+          {formData.attachments.length > 0 && (
+            <div className="mt-6">
+              <span className="font-medium block mb-3">Attachments ({formData.attachments.length})</span>
+              <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                {formData.attachments.map((attachment) => (
+                  <div key={attachment.id} className="relative bg-fixly-surface rounded-lg overflow-hidden">
+                    {attachment.isImage ? (
+                      <img
+                        src={attachment.url}
+                        alt={attachment.name}
+                        className="w-full h-16 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-16 bg-fixly-surface flex items-center justify-center">
+                        <FileText className="h-6 w-6 text-fixly-accent" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-1">
+                      <p className="text-xs truncate">{attachment.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

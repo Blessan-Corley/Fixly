@@ -3,7 +3,7 @@ import connectDB from '../../../../lib/mongodb';
 import User from '../../../../models/User';
 import Job from '../../../../models/Job';
 import { withErrorHandler, validateRequired, AuthenticationError } from '../../../../lib/errorHandling';
-import { cache, analytics } from '../../../../lib/redis';
+import { cache, analytics } from '../../../../lib/cache';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 

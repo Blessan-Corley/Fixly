@@ -1,6 +1,6 @@
 // utils/rateLimiting.js - Enhanced rate limiting with Redis support
 import { NextResponse } from 'next/server';
-import { redisRateLimit, redisHealthCheck } from '../lib/redis';
+import { redisRateLimit, redisHealthCheck } from '../lib/cache';
 
 // Fallback in-memory store when Redis is unavailable
 const rateLimitStore = new Map();
@@ -20,11 +20,11 @@ const rateLimitConfig = {
     windowMs: 60 * 60 * 1000, // 1 hour
     blockDuration: 6 * 60 * 60 * 1000 // 6 hours block
   },
-  // API requests
+  // API requests - More generous limits for development
   api_requests: {
-    maxAttempts: 100,
+    maxAttempts: 1000,
     windowMs: 15 * 60 * 1000, // 15 minutes
-    blockDuration: 60 * 60 * 1000 // 1 hour block
+    blockDuration: 5 * 60 * 1000 // 5 minutes block for development
   },
   // Password reset
   password_reset: {

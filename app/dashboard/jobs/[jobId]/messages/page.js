@@ -14,7 +14,7 @@ import {
 import { useApp } from '../../../../providers';
 import { toast } from 'sonner';
 import { toastMessages } from '../../../../../utils/toast';
-import { useRealTimeMessages } from '../../../../../hooks/useRealTime';
+import { useRealtime } from '../../../../../hooks/useRealtime';
 
 export default function MessagesPage({ params }) {
   const { jobId } = params;
@@ -38,7 +38,7 @@ export default function MessagesPage({ params }) {
     data: realTimeData, 
     loading: realTimeLoading,
     refresh: refreshMessages 
-  } = useRealTimeMessages(jobId);
+  } = useRealtime(user?.id); // Using general realtime hook
 
   // Update messages when real-time data changes with smooth animations
   useEffect(() => {

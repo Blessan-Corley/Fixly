@@ -15,7 +15,7 @@ import { useApp } from '../app/providers';
 import { toast } from 'sonner';
 import { toastMessages } from '../utils/toast';
 import ConfirmModal from './ui/ConfirmModal';
-import { useRealTimeComments } from '../hooks/useRealTime';
+import { useRealtime } from '../hooks/useRealtime';
 
 export default function InstagramCommentsRealtime({ 
   jobId, 
@@ -39,7 +39,7 @@ export default function InstagramCommentsRealtime({
     data: realTimeComments, 
     loading: realTimeLoading, 
     refresh: refreshComments 
-  } = useRealTimeComments(isOpen ? jobId : null);
+  } = useRealtime(isOpen ? jobId : null);
 
   // Update comments when real-time data changes with smooth animations
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function InstagramCommentsRealtime({
     loading: false 
   });
 
-  // Real-time comments are handled by the useRealTimeComments hook
+  // Real-time comments are handled by the useRealtime hook
   // No additional connection logic needed here
 
   // Post new comment with optimistic updates
