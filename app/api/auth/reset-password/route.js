@@ -1,185 +1,218 @@
-// app/api/auth/reset-password/route.js - Professional password reset completion
+// app/api/auth/reset-password/route.js - Password reset completion
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import connectDB from '@/lib/db';
-import User from '@/models/User';
-import { rateLimit } from '@/utils/rateLimiting';
-import { transporter } from '@/lib/email';
+import connectDB from '../../../../lib/db';
+import User from '../../../../models/User';
+import { rateLimit } from '../../../../utils/rateLimiting';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 export async function POST(request) {
   try {
-    // Apply strict rate limiting for reset attempts
-    const rateLimitResult = await rateLimit(request, 'reset_password', 5, 60 * 60 * 1000); // 5 attempts per hour
+    // ✅ RATE LIMITING: 10 attempts per hour
+    const rateLimitResult = await rateLimit(request, 'reset_password', 10, 60 * 60 * 1000);
     if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { 
-          success: false,
-          message: 'Too many reset attempts. Please try again later.',
-          remainingTime: rateLimitResult.remainingTime
-        },
-        { status: 429 }
-      );
-    }
-
-    let body;
-    try {
-      body = await request.json();
-    } catch (jsonError) {
       return NextResponse.json({
         success: false,
-        message: 'Invalid request body'
+        error: 'Too many password reset attempts. Please try again later.'
+      }, { status: 429 });
+    }
+
+    const { token, password, confirmPassword } = await request.json();
+
+    // ✅ VALIDATE TOKEN
+    if (!token) {
+      return NextResponse.json({
+        success: false,
+        error: 'Reset token is required'
       }, { status: 400 });
     }
 
-    const { token, password, confirmPassword } = body;
-
-    // Validate required fields
-    if (!token || !password || !confirmPassword) {
+    // ✅ VALIDATE PASSWORD
+    if (!password) {
       return NextResponse.json({
         success: false,
-        message: 'Token, password, and password confirmation are required',
-        errors: [
-          { field: 'token', error: !token ? 'Reset token is required' : null },
-          { field: 'password', error: !password ? 'Password is required' : null },
-          { field: 'confirmPassword', error: !confirmPassword ? 'Password confirmation is required' : null }
-        ].filter(error => error.error !== null)
+        error: 'New password is required'
       }, { status: 400 });
     }
 
-    // Validate password match
-    if (password !== confirmPassword) {
-      return NextResponse.json({
-        success: false,
-        message: 'Passwords do not match',
-        errors: [{ field: 'confirmPassword', error: 'Passwords do not match' }]
-      }, { status: 400 });
-    }
-
-    // Enhanced password validation
     if (password.length < 8) {
       return NextResponse.json({
         success: false,
-        message: 'Password must be at least 8 characters long',
-        errors: [{ field: 'password', error: 'Password must be at least 8 characters long' }]
+        error: 'Password must be at least 8 characters long'
       }, { status: 400 });
     }
 
-    // Production password requirements
-    if (process.env.NODE_ENV === 'production') {
-      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-      if (!passwordRegex.test(password)) {
-        return NextResponse.json({
-          success: false,
-          message: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
-          errors: [{ field: 'password', error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character' }]
-        }, { status: 400 });
-      }
+    if (password !== confirmPassword) {
+      return NextResponse.json({
+        success: false,
+        error: 'Passwords do not match'
+      }, { status: 400 });
+    }
+
+    // ✅ PASSWORD STRENGTH VALIDATION
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
+    if (!passwordRegex.test(password)) {
+      return NextResponse.json({
+        success: false,
+        error: 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+      }, { status: 400 });
     }
 
     await connectDB();
 
-    // Find user and verify reset token using User model method
-    const user = await User.findOne().select('+passwordResetToken +passwordResetExpires +passwordResetAttempts');
+    // ✅ FIND USER BY RESET TOKEN
+    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
     
-    // Search for user with matching reset token (hashed)
-    const users = await User.find({
-      passwordResetExpires: { $gt: Date.now() },
-      passwordResetAttempts: { $lt: 3 }
-    }).select('+passwordResetToken +passwordResetExpires +passwordResetAttempts');
+    const user = await User.findOne({
+      passwordResetToken: resetTokenHash,
+      passwordResetExpires: { $gt: Date.now() }, // Token not expired
+      isRegistered: true
+    });
 
-    let matchedUser = null;
-    for (const u of users) {
-      if (u.verifyPasswordResetToken(token)) {
-        matchedUser = u;
-        break;
-      }
-    }
-
-    if (!matchedUser) {
+    if (!user) {
       return NextResponse.json({
         success: false,
-        message: 'Invalid or expired reset token. Please request a new password reset.'
+        error: 'Invalid or expired reset token. Please request a new password reset.',
+        expired: true
       }, { status: 400 });
     }
 
-    // Check if user is banned
-    if (matchedUser.banned) {
+    // ✅ CHECK IF USER IS BANNED
+    if (user.banned) {
       return NextResponse.json({
         success: false,
-        message: 'Account is suspended. Please contact support.'
+        error: 'Account is suspended. Please contact support.'
       }, { status: 403 });
     }
 
-    // Increment attempts to prevent brute force
-    matchedUser.incrementPasswordResetAttempts();
+    // ✅ HASH NEW PASSWORD
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Hash new password using User model pre-save middleware
-    matchedUser.passwordHash = password; // Will be hashed by pre-save middleware
+    // ✅ UPDATE PASSWORD AND CLEAR RESET TOKEN
+    await User.findByIdAndUpdate(user._id, {
+      password: hashedPassword,
+      $unset: {
+        passwordResetToken: 1,
+        passwordResetExpires: 1
+      },
+      passwordChangedAt: new Date(),
+      lastActivityAt: new Date(),
+      updatedAt: new Date()
+    });
 
-    // Clear reset token
-    matchedUser.clearPasswordResetToken();
-
-    // Update last activity
-    matchedUser.lastActivityAt = new Date();
-
-    await matchedUser.save();
-
-    // Send professional confirmation email
+    // ✅ SEND CONFIRMATION EMAIL
     try {
-      const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+      const transporter = nodemailer.createTransporter({
+        host: process.env.EMAIL_HOST,
+        port: parseInt(process.env.EMAIL_PORT),
+        secure: false,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD
+        }
+      });
+
       await transporter.sendMail({
-        from: `"Fixly Team" <${process.env.EMAIL_USER}>`,
-        to: matchedUser.email,
-        subject: '✅ Your Fixly Password Has Been Reset Successfully',
+        from: `"Fixly Support" <${process.env.EMAIL_USER}>`,
+        to: user.email,
+        subject: '✅ Password Reset Successful',
         html: `
-          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-            <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-              <h1 style="margin: 0; font-size: 28px;">✅ Password Reset Successful</h1>
-              <p style="margin: 10px 0 0 0; font-size: 18px; opacity: 0.9;">Your account is now secure</p>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h2 style="color: #10B981; margin: 0;">🔧 Fixly</h2>
             </div>
             
-            <div style="padding: 30px;">
-              <h2 style="color: #1f2937; margin-bottom: 20px;">Hello ${matchedUser.name}!</h2>
-              
-              <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
-                Your Fixly account password has been successfully reset. You can now sign in with your new password.
-              </p>
-
-              <div style="background: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin-bottom: 25px;">
-                <p style="color: #065f46; margin: 0; font-size: 14px;">
-                  <strong>Security Reminder:</strong> If you didn't make this change, please contact our support team immediately at support@fixly.com
-                </p>
-              </div>
-
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${baseUrl}/auth/signin" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px;">
-                  Sign In to Your Account →
-                </a>
-              </div>
-
-              <p style="color: #4b5563; margin-top: 30px; font-size: 16px;">
-                Welcome back to Fixly!<br>
-                <strong>The Fixly Team</strong>
-              </p>
+            <h3 style="color: #333;">Password Reset Successful!</h3>
+            
+            <p>Hi ${user.name || 'there'},</p>
+            <p>Your password has been successfully reset. You can now sign in with your new password.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${process.env.NEXTAUTH_URL}/auth/signin" style="display: inline-block; padding: 12px 24px; background: #10B981; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Sign In Now</a>
             </div>
+            
+            <p style="color: #dc2626; font-size: 14px;"><strong>Security Note:</strong> If you didn't make this change, please contact support immediately.</p>
+            
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <p style="font-size: 12px; color: #666;">© ${new Date().getFullYear()} Fixly. All rights reserved.</p>
           </div>
         `
       });
-      
-    } catch (error) {
-      console.error('Failed to send password reset confirmation email:', error);
-      // Don't return error - password was still reset successfully
+    } catch (emailError) {
+      console.error('❌ Failed to send confirmation email:', emailError);
+      // Don't fail the request - password was still reset
     }
+
+    console.log('✅ Password reset successful for:', user.email);
 
     return NextResponse.json({
       success: true,
       message: 'Password reset successful! You can now sign in with your new password.'
     });
+
   } catch (error) {
-    console.error('Reset password error:', error);
+    console.error('❌ Reset password error:', error);
+    
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(e => e.message);
+      return NextResponse.json({
+        success: false,
+        error: 'Validation failed',
+        details: errors
+      }, { status: 400 });
+    }
+    
     return NextResponse.json({
       success: false,
-      message: 'An error occurred. Please try again.'
+      error: 'Something went wrong. Please try again.'
+    }, { status: 500 });
+  }
+}
+
+// ✅ GET REQUEST: Verify reset token validity
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const token = searchParams.get('token');
+
+    if (!token) {
+      return NextResponse.json({
+        success: false,
+        error: 'Reset token is required'
+      }, { status: 400 });
+    }
+
+    await connectDB();
+
+    // Check if token is valid
+    const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    
+    const user = await User.findOne({
+      passwordResetToken: resetTokenHash,
+      passwordResetExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid or expired reset token',
+        expired: true
+      }, { status: 400 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Token is valid',
+      email: user.email.replace(/(.{2}).*@/, '$1***@') // Partially hide email
+    });
+
+  } catch (error) {
+    console.error('❌ Token verification error:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Something went wrong'
     }, { status: 500 });
   }
 }

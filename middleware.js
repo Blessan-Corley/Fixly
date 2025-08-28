@@ -8,9 +8,33 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
+    // ✅ CRITICAL: Check for incomplete profiles
+    if (token && pathname.startsWith('/dashboard')) {
+      const isIncompleteProfile = !token.isRegistered || 
+                                !token.role || 
+                                !token.username || 
+                                token.username.startsWith('temp_');
+
+      // Allow access to signup completion page
+      if (pathname.startsWith('/auth/signup') && isIncompleteProfile) {
+        return NextResponse.next();
+      }
+
+      // Redirect incomplete profiles to complete signup
+      if (isIncompleteProfile && !pathname.startsWith('/auth/signup')) {
+        console.log('🚫 Redirecting incomplete profile:', token.email);
+        return NextResponse.redirect(new URL('/auth/signup?method=google', req.url));
+      }
+    }
+
+    // Only allow complete profiles beyond this point
+    if (!token || !token.isRegistered) {
+      return NextResponse.next(); // Let auth handle it
+    }
+
     // Admin routes protection
     if (pathname.startsWith('/dashboard/admin')) {
-      if (!token || token.role !== 'admin') {
+      if (token.role !== 'admin') {
         return NextResponse.redirect(new URL('/dashboard', req.url));
       }
     }
@@ -20,7 +44,7 @@ export default withAuth(
         pathname.startsWith('/dashboard/applications') ||
         pathname.startsWith('/dashboard/earnings') ||
         pathname.startsWith('/dashboard/subscription')) {
-      if (!token || token.role !== 'fixer') {
+      if (token.role !== 'fixer') {
         return NextResponse.redirect(new URL('/dashboard', req.url));
       }
     }
@@ -28,7 +52,7 @@ export default withAuth(
     // Hirer-only routes
     if (pathname.startsWith('/dashboard/post-job') ||
         pathname.startsWith('/dashboard/find-fixers')) {
-      if (!token || token.role !== 'hirer') {
+      if (token.role !== 'hirer') {
         return NextResponse.redirect(new URL('/dashboard', req.url));
       }
     }
@@ -36,7 +60,7 @@ export default withAuth(
     // Job routes - accessible by both hirers and fixers, but with restrictions
     if (pathname.startsWith('/dashboard/jobs')) {
       // Fixers can access job details and apply pages
-      if (token && token.role === 'fixer') {
+      if (token.role === 'fixer') {
         if (pathname.includes('/apply') || pathname.match(/^\/dashboard\/jobs\/[^\/]+$/)) {
           return NextResponse.next(); // Allow job details and apply pages
         } else {
@@ -44,7 +68,7 @@ export default withAuth(
         }
       }
       // Hirers can access all job routes
-      else if (token && token.role === 'hirer') {
+      else if (token.role === 'hirer') {
         return NextResponse.next();
       }
       // Block everyone else
@@ -60,14 +84,25 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const { pathname } = req.nextUrl;
         
-        // Allow access to auth pages for non-authenticated users
-        if (pathname.startsWith('/auth/') || pathname === '/') {
+        // Always allow public pages
+        if (pathname === '/' || 
+            pathname.startsWith('/auth/') || 
+            pathname.startsWith('/api/auth') ||
+            pathname.startsWith('/about') ||
+            pathname.startsWith('/help') ||
+            pathname.startsWith('/contact')) {
           return true;
         }
         
-        // Require authentication for dashboard routes
+        // Dashboard routes require authentication
         if (pathname.startsWith('/dashboard')) {
-          return !!token;
+          if (!token) {
+            console.log('🚫 No token, denying access to:', pathname);
+            return false;
+          }
+          
+          // Additional check for complete profiles will be done in main middleware
+          return true;
         }
         
         return true;

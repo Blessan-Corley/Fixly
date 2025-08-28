@@ -1,0 +1,191 @@
+[
+  {
+    "_id": "job_sf_1",
+    "title": "Frontend Developer",
+    "description": "Build responsive web applications using React and TypeScript. Work with a dynamic startup team.",
+    "location": {
+      "type": "Point",
+      "coordinates": [
+        -122.4194,
+        37.7749
+      ]
+    },
+    "address": {
+      "city": "San Francisco",
+      "state": "CA",
+      "country": "USA",
+      "formatted": "San Francisco, CA, USA"
+    },
+    "salary": {
+      "min": 80000,
+      "max": 120000,
+      "currency": "USD"
+    },
+    "skills": [
+      "React",
+      "TypeScript",
+      "JavaScript",
+      "CSS",
+      "Git"
+    ],
+    "jobType": "full-time",
+    "experienceLevel": "mid-level",
+    "isActive": true,
+    "isDeleted": false,
+    "createdAt": "2025-08-28T10:24:37.256Z",
+    "postedBy": "company_123",
+    "applicationCount": 12,
+    "viewCount": 89
+  },
+  {
+    "_id": "job_sf_2",
+    "title": "Plumber - Residential",
+    "description": "Experienced plumber needed for residential repairs and installations. Bay Area locations.",
+    "location": {
+      "type": "Point",
+      "coordinates": [
+        -122.4085,
+        37.7854
+      ]
+    },
+    "address": {
+      "city": "San Francisco",
+      "state": "CA",
+      "country": "USA",
+      "formatted": "San Francisco, CA, USA"
+    },
+    "salary": {
+      "min": 35,
+      "max": 55,
+      "currency": "USD",
+      "per": "hour"
+    },
+    "skills": [
+      "Plumbing",
+      "Pipe Installation",
+      "Leak Repair",
+      "Water Heaters"
+    ],
+    "jobType": "full-time",
+    "experienceLevel": "experienced",
+    "isActive": true,
+    "isDeleted": false,
+    "createdAt": "2025-08-27T10:24:37.256Z",
+    "postedBy": "contractor_456",
+    "applicationCount": 3,
+    "viewCount": 24
+  },
+  {
+    "_id": "job_oak_1",
+    "title": "Graphic Designer",
+    "description": "Create visual content for digital marketing campaigns. Remote-friendly position.",
+    "location": {
+      "type": "Point",
+      "coordinates": [
+        -122.2711,
+        37.8044
+      ]
+    },
+    "address": {
+      "city": "Oakland",
+      "state": "CA",
+      "country": "USA",
+      "formatted": "Oakland, CA, USA"
+    },
+    "salary": {
+      "min": 50000,
+      "max": 75000,
+      "currency": "USD"
+    },
+    "skills": [
+      "Adobe Creative Suite",
+      "Photoshop",
+      "Illustrator",
+      "Branding"
+    ],
+    "jobType": "contract",
+    "experienceLevel": "mid-level",
+    "isActive": true,
+    "isDeleted": false,
+    "createdAt": "2025-08-26T10:24:37.256Z",
+    "postedBy": "agency_789",
+    "applicationCount": 8,
+    "viewCount": 45
+  },
+  {
+    "_id": "job_sj_1",
+    "title": "Mobile App Developer",
+    "description": "iOS and Android development for fintech applications. Swift and Kotlin experience required.",
+    "location": {
+      "type": "Point",
+      "coordinates": [
+        -121.8863,
+        37.3382
+      ]
+    },
+    "address": {
+      "city": "San Jose",
+      "state": "CA",
+      "country": "USA",
+      "formatted": "San Jose, CA, USA"
+    },
+    "salary": {
+      "min": 95000,
+      "max": 140000,
+      "currency": "USD"
+    },
+    "skills": [
+      "Swift",
+      "Kotlin",
+      "iOS",
+      "Android",
+      "Firebase"
+    ],
+    "jobType": "full-time",
+    "experienceLevel": "senior",
+    "isActive": true,
+    "isDeleted": false,
+    "createdAt": "2025-08-25T10:24:37.256Z",
+    "postedBy": "fintech_101",
+    "applicationCount": 15,
+    "viewCount": 112
+  },
+  {
+    "_id": "job_ny_1",
+    "title": "Electrician - Commercial",
+    "description": "Commercial electrical installations and maintenance. NYC area projects.",
+    "location": {
+      "type": "Point",
+      "coordinates": [
+        -74.006,
+        40.7128
+      ]
+    },
+    "address": {
+      "city": "New York",
+      "state": "NY",
+      "country": "USA",
+      "formatted": "New York, NY, USA"
+    },
+    "salary": {
+      "min": 40,
+      "max": 65,
+      "currency": "USD",
+      "per": "hour"
+    },
+    "skills": [
+      "Electrical Installation",
+      "Wiring",
+      "Commercial Systems",
+      "Safety Protocols"
+    ],
+    "jobType": "full-time",
+    "experienceLevel": "experienced",
+    "isActive": true,
+    "isDeleted": false,
+    "createdAt": "2025-08-24T10:24:37.256Z",
+    "postedBy": "electrical_corp",
+    "applicationCount": 6,
+    "viewCount": 33
+  }
+]

@@ -157,10 +157,121 @@ benchmark-results.json
 load-test-*.log
 stress-test-*.json
 
-# Test Scripts - Development Only
+# Test Scripts - Development Only (All Test Files)
 scripts/socket-test.js
 scripts/comprehensive-socket-diagnostic.js
 scripts/production-test.js
 scripts/verify-production.js
 scripts/production-load-test.js
 scripts/final-system-verification.js
+scripts/comprehensive-validation-final.js
+scripts/final-system-test.js
+scripts/bidirectional-realtime-test.js
+scripts/complete-system-validation.js
+scripts/complete-user-workflow-test.js
+scripts/comprehensive-all-users-test.js
+scripts/comprehensive-gap-analysis.js
+scripts/comprehensive-location-test.js
+scripts/comprehensive-real-world-tests.js
+scripts/comprehensive-responsive-test.js
+scripts/comprehensive-system-test.js
+scripts/comprehensive-user-setup.js
+scripts/create-kit-user.js
+scripts/create-missing-users.js
+scripts/debug-user-session.js
+scripts/diagnostic-endpoint-test.js
+scripts/end-to-end-authentication-test.js
+scripts/final-comprehensive-authentication-test.js
+scripts/final-comprehensive-validation.js
+scripts/final-system-summary.js
+scripts/final-system-validation.js
+scripts/final-verification-test.js
+scripts/fix-kit-user-registration.js
+scripts/fix-user-username.js
+scripts/focused-auth-validation.js
+scripts/focused-real-world-test.js
+scripts/messaging-notification-test.js
+scripts/monitor-and-fix-users.js
+scripts/production-readiness-test.js
+scripts/quick-responsive-validation.js
+scripts/realtime-functionality-test.js
+scripts/reset-all-users-for-signin-requirement.js
+scripts/setup-geospatial-indexes.js
+scripts/system-test-final.js
+scripts/test-all-api-endpoints.js
+scripts/test-all-auth-flows.js
+scripts/test-db.js
+scripts/test-jobs-and-data-fetching.js
+scripts/test-kit-user-profile.js
+scripts/test-location-fixes.js
+scripts/test-location-no-reload.js
+scripts/test-profile-api.js
+scripts/test-realtime-messaging.js
+scripts/validate-system.js
+
+# Test Files - Development Only
+comprehensive-api-test.js
+job-workflow-test.js
+messaging-realtime-test.js
+
+# Test Results & Reports
+test-results/
+*-test-results.json
+*-validation-report.json
+*-system-test.json
+final-validation-report.json
+comprehensive-test-report.*
+
+# Development Files & Configs (Keep local only)
+next.config.cjs
+postcss.config.cjs
+sw-backup.js
+
+# Backup Files
+*.backup
+*.bak
+*.orig
+*~
+
+# Database & Cache Files
+*.db
+*.sqlite
+*.sqlite3
+.cache/
+.temp/
+
+# Development Notes & Documentation
+NOTES.md
+TODO.md
+CHANGELOG.local.md
+DEV_NOTES.md
+IMPLEMENTATION_NOTES.md
+
+# Service Worker Backup Files
+public/sw-backup.js
+public/sw.*.js.backup
+
+# Local Development Configs
+.env.development
+.env.staging
+.env.testing
+config.local.js
+settings.local.json
+
+# Generated Files During Development
+manifest.webmanifest.backup
+robots.txt.backup
+sitemap*.xml.backup
+
+# Temporary Development Files
+temp-*.*
+tmp-*.*
+debug-*.*
+test-*.*
+dev-*.*
+
+# Editor/IDE Specific
+*.code-workspace
+.history/
+.vscode/settings.json
+.vscode/launch.json

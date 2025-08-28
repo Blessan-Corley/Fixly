@@ -1,21 +1,41 @@
 // Message sending API endpoint
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../../../../lib/auth';
 import messageService from '../../../../../lib/realtime/MessageService.js';
+import { rateLimit } from '../../../../../utils/rateLimiting';
 
 export async function POST(request) {
   try {
+    // SECURITY: Authentication check
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user?.id) {
+      return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // SECURITY: Rate limiting
+    const rateLimitResult = await rateLimit(request, 'messaging', 50, 60 * 1000); // 50 messages per minute
+    if (!rateLimitResult.success) {
+      return Response.json({
+        success: false,
+        error: 'Too many messages. Please try again later.'
+      }, { status: 429 });
+    }
+
     const { 
-      senderId, 
       recipientId, 
       content, 
       type = 'text',
       metadata = {} 
     } = await request.json();
     
+    // Use authenticated user ID instead of client-provided senderId
+    const senderId = session.user.id;
+    
     // Validate required fields
-    if (!senderId || !recipientId || !content) {
+    if (!recipientId || !content) {
       return Response.json({
         success: false,
-        error: 'Missing required fields: senderId, recipientId, content'
+        error: 'Missing required fields: recipientId, content'
       }, { status: 400 });
     }
     
@@ -35,11 +55,7 @@ export async function POST(request) {
       }, { status: 400 });
     }
     
-    // TODO: Validate user permissions and authentication
-    // const isAuthorized = await validateUserAuth(senderId, request);
-    // if (!isAuthorized) {
-    //   return Response.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    // }
+    // Authentication already verified above
     
     console.log(`💬 Sending message from ${senderId} to ${recipientId}`);
     

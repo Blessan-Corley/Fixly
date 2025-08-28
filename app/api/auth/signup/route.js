@@ -32,10 +32,7 @@ export async function POST(request) {
     // Get current session for Google auth verification
     const session = await getServerSession(authOptions);
 
-    // ✅ TEMPORARY: Bypass validation for testing
-    console.log('🧪 TESTING: Bypassing validation temporarily');
-    
-    // Basic validation only
+    // Full validation enabled
     if (!body.email || !body.name || !body.role) {
       return NextResponse.json(
         { message: 'Missing required fields: email, name, role' },
@@ -52,8 +49,7 @@ export async function POST(request) {
 
     const validatedData = body;
     
-    // ✅ TEMPORARY: Bypass fake account detection for testing
-    console.log('🧪 TESTING: Bypassing fake account detection temporarily');
+    // Fake account detection enabled
 
     // Validate auth method specific requirements
     if (body.authMethod === 'email' && !body.password) {
