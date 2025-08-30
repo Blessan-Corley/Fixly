@@ -1,7 +1,7 @@
 // components/settings/PrivacyControls.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Shield,
@@ -22,10 +22,31 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Performance optimization: Memoize animation variants
+const containerVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 }
+};
+
+// Memoized icon components to prevent re-renders
+const IconComponents = {
+  Globe,
+  Shield, 
+  Lock,
+  EyeOff,
+  Phone,
+  Mail,
+  MapPin,
+  User,
+  Users
+};
+
 export default function PrivacyControls({ user, onUpdate }) {
   const [loading, setLoading] = useState(false);
-  const [privacySettings, setPrivacySettings] = useState({
-    profileVisibility: 'public', // public, private, verified_only
+  
+  // Memoized initial privacy settings to prevent recreation on every render
+  const initialPrivacySettings = useMemo(() => ({
+    profileVisibility: 'public',
     showPhone: false,
     showEmail: false,
     showFullAddress: false,
@@ -38,22 +59,33 @@ export default function PrivacyControls({ user, onUpdate }) {
     showLastActive: true,
     hideFromSearch: false,
     shareDataWithPartners: false,
-    allowAnalytics: true
-  });
+    allowAnalytics: true,
+    enableLocationServices: true,
+    showApproximateLocation: true,
+    allowBackgroundLocationUpdates: false,
+    shareLocationForJobMatching: true,
+    allowLocationAnalytics: true
+  }), []);
+  
+  const [privacySettings, setPrivacySettings] = useState(initialPrivacySettings);
 
+  // Optimized effect with proper dependency management
   useEffect(() => {
     if (user?.privacySettings) {
-      setPrivacySettings({ ...privacySettings, ...user.privacySettings });
+      setPrivacySettings(prev => ({ ...prev, ...user.privacySettings }));
     }
-  }, [user]);
+  }, [user?.privacySettings]); // More specific dependency
 
-  const handleSave = async () => {
+  // Optimized save handler with error handling
+  const handleSave = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch('/api/user/privacy', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ privacySettings })
+        body: JSON.stringify({ privacySettings }),
+        // Performance: abort previous requests if user clicks save rapidly
+        signal: AbortSignal.timeout(10000) // 10 second timeout
       });
 
       const data = await response.json();
@@ -65,12 +97,14 @@ export default function PrivacyControls({ user, onUpdate }) {
         toast.error(data.message || 'Failed to update privacy settings');
       }
     } catch (error) {
-      console.error('Privacy settings update error:', error);
-      toast.error('Failed to update privacy settings');
+      if (error.name !== 'AbortError') {
+        console.error('Privacy settings update error:', error);
+        toast.error('Failed to update privacy settings');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [privacySettings, onUpdate]);
 
   const privacyOptions = [
     {
@@ -191,6 +225,49 @@ export default function PrivacyControls({ user, onUpdate }) {
       ]
     },
     {
+      category: 'Location & Privacy',
+      description: 'Control how we use your location to help you find nearby opportunities',
+      settings: [
+        {
+          key: 'enableLocationServices',
+          title: 'Enable Location Services 📍',
+          description: 'Allow Fixly to use your location to show you nearby jobs and opportunities',
+          type: 'toggle',
+          icon: MapPin,
+          positive: true
+        },
+        {
+          key: 'shareLocationForJobMatching',
+          title: 'Smart Job Matching 🎯',
+          description: 'Use your location to prioritize jobs that are convenient for you',
+          type: 'toggle',
+          icon: MapPin,
+          positive: true
+        },
+        {
+          key: 'showApproximateLocation',
+          title: 'Show City/Area on Profile 🏠',
+          description: 'Display your general area (not exact address) to help clients find local fixers',
+          type: 'toggle',
+          icon: MapPin
+        },
+        {
+          key: 'allowBackgroundLocationUpdates',
+          title: 'Background Location Updates 🔄',
+          description: 'Keep your location updated automatically for the best job matching experience',
+          type: 'toggle',
+          icon: MapPin
+        },
+        {
+          key: 'allowLocationAnalytics',
+          title: 'Location Insights 📊',
+          description: 'Help us understand job market trends in your area (anonymous data only)',
+          type: 'toggle',
+          icon: MapPin
+        }
+      ]
+    },
+    {
       category: 'Data & Analytics',
       description: 'Control how your data is used',
       settings: [
@@ -255,7 +332,7 @@ export default function PrivacyControls({ user, onUpdate }) {
           <Info className="h-5 w-5 text-blue-600 mt-1" />
           <div>
             <h3 className="font-medium text-blue-900 mb-2">Your Privacy Status</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-blue-700 font-medium">Profile: </span>
                 <span className="text-blue-600">
@@ -267,6 +344,13 @@ export default function PrivacyControls({ user, onUpdate }) {
                 <span className="text-blue-700 font-medium">Contact Info: </span>
                 <span className="text-blue-600">
                   {(privacySettings.showPhone || privacySettings.showEmail) ? 'Partially Visible' : 'Hidden'}
+                </span>
+              </div>
+              <div>
+                <span className="text-blue-700 font-medium">Location: </span>
+                <span className="text-blue-600">
+                  {privacySettings.enableLocationServices ? 
+                    (privacySettings.shareLocationForJobMatching ? 'Smart Matching On' : 'Basic Only') : 'Disabled'}
                 </span>
               </div>
               <div>

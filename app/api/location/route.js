@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../lib/auth';
-import connectDB from '../../../lib/mongodb';
-import LocationPreference from '../../../models/LocationPreference';
-import User from '../../../models/User';
+import { authOptions } from '@/lib/auth';
+import connectDB from '@/lib/db';
+import LocationPreference from '@/models/LocationPreference';
+import User from '@/models/User';
+import { processLocationData, validateLocationUpdate, getLocationForContext, LOCATION_PRECISION } from '@/utils/locationPrecision';
+import { addSecurityHeaders } from '@/utils/validation';
 
 // Rate limiting for location updates
 const locationUpdateAttempts = new Map();
@@ -56,53 +58,76 @@ export async function GET(request) {
       });
     }
 
-    return NextResponse.json({
+    // Use new location precision system
+    const contextualLocation = getLocationForContext(
+      locationPrefs.currentLocation, 
+      { id: session.user.id }, 
+      'profile'
+    );
+
+    const response = NextResponse.json({
       success: true,
       data: {
         hasLocation: !!(locationPrefs.currentLocation?.lat && locationPrefs.currentLocation?.lng),
-        currentLocation: locationPrefs.privacy.shareApproximateLocation ? {
-          city: locationPrefs.currentLocation?.city,
-          state: locationPrefs.currentLocation?.state,
-          lat: locationPrefs.privacy.shareExactLocation ? locationPrefs.currentLocation?.lat : undefined,
-          lng: locationPrefs.privacy.shareExactLocation ? locationPrefs.currentLocation?.lng : undefined
-        } : null,
+        currentLocation: contextualLocation,
         preferences: locationPrefs.preferences,
         privacy: locationPrefs.privacy,
         lastUpdated: locationPrefs.lastLocationUpdate,
-        isRecent: locationPrefs.isLocationRecent()
+        isRecent: locationPrefs.isLocationRecent(),
+        precisionLevel: locationPrefs.currentLocation?.precisionLevel || LOCATION_PRECISION.MEDIUM
       }
     });
 
+    return addSecurityHeaders(response);
+
   } catch (error) {
-    console.error('Error fetching location preferences:', error);
-    return NextResponse.json(
+    console.error('Error fetching location preferences:', error.name);
+    const response = NextResponse.json(
       { success: false, message: 'Failed to fetch location preferences' },
       { status: 500 }
     );
+    return addSecurityHeaders(response);
   }
 }
 
-// POST - Update user location
+// POST - Update user location with enhanced precision and security
 export async function POST(request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { success: false, message: 'Unauthorized' }, 
         { status: 401 }
       );
+      return addSecurityHeaders(response);
     }
 
-    // Rate limiting
-    if (!checkRateLimit(session.user.id)) {
+    const body = await request.json();
+    const { 
+      lat, lng, accuracy, address, city, state, pincode, consent,
+      silent = false, // For background updates
+      source = 'gps',
+      backgroundUpdate = false,
+      precisionLevel = LOCATION_PRECISION.MEDIUM
+    } = body;
+
+    // Enhanced validation using new location system
+    const validation = validateLocationUpdate(body, { id: session.user.id });
+    if (!validation.valid) {
+      const response = NextResponse.json(
+        { success: false, message: validation.error },
+        { status: 400 }
+      );
+      return addSecurityHeaders(response);
+    }
+    
+    // Skip rate limiting for background updates
+    if (!backgroundUpdate && !checkRateLimit(session.user.id)) {
       return NextResponse.json(
         { success: false, message: 'Rate limit exceeded. Too many location updates.' },
         { status: 429 }
       );
     }
-
-    const body = await request.json();
-    const { lat, lng, accuracy, address, city, state, pincode, consent } = body;
 
     // Validate required fields
     if (!lat || !lng) {
@@ -120,8 +145,8 @@ export async function POST(request) {
       );
     }
 
-    // Validate consent
-    if (!consent) {
+    // Validate consent (skip for background updates from already consented users)
+    if (!consent && !backgroundUpdate) {
       return NextResponse.json(
         { success: false, message: 'Location sharing consent is required' },
         { status: 400 }
@@ -151,40 +176,67 @@ export async function POST(request) {
       });
     }
 
-    // Update location
-    await locationPrefs.updateLocation({
-      lat: parseFloat(lat),
-      lng: parseFloat(lng),
-      accuracy: accuracy ? parseFloat(accuracy) : undefined,
-      address: address || undefined,
-      city: city || undefined,
-      state: state || undefined,
-      pincode: pincode || undefined,
-      source: 'gps'
-    });
+    // Process location with enhanced precision system
+    const processedLocation = processLocationData(
+      { lat, lng, address, city, state, pincode },
+      precisionLevel,
+      {
+        source,
+        accuracy: accuracy ? parseFloat(accuracy) : null,
+        timestamp: new Date(),
+        userConsent: consent || backgroundUpdate
+      }
+    );
 
-    // Update consent
-    locationPrefs.preferences.locationSharingConsent = true;
-    locationPrefs.preferences.autoLocationEnabled = true;
+    // Update location using new format
+    await locationPrefs.updateLocation(processedLocation);
+
+    // Update consent (only if not a background update)
+    if (!backgroundUpdate) {
+      locationPrefs.preferences.locationSharingConsent = consent || true;
+      locationPrefs.preferences.autoLocationEnabled = true;
+    }
+    
     await locationPrefs.save();
 
-    return NextResponse.json({
+    // Also update the user's basic location for quick access
+    await User.findByIdAndUpdate(session.user.id, {
+      'location.lat': parseFloat(lat),
+      'location.lng': parseFloat(lng),
+      'location.city': city,
+      'location.state': state,
+      lastActivityAt: new Date()
+    });
+
+    // Log success (only for non-silent updates)
+    if (!silent) {
+      console.log(`✅ Location updated for user ${session.user.email}: ${city || `${lat}, ${lng}`} (${source})`);
+    }
+
+    const response = NextResponse.json({
       success: true,
-      message: 'Location updated successfully',
+      message: backgroundUpdate ? 'Location updated in background' : 'Location updated successfully',
       data: {
         hasLocation: true,
         lastUpdated: locationPrefs.lastLocationUpdate,
-        city: locationPrefs.currentLocation?.city,
-        state: locationPrefs.currentLocation?.state
+        city: processedLocation.city,
+        state: processedLocation.state,
+        precisionLevel: processedLocation.precisionLevel,
+        source: source,
+        backgroundUpdate: backgroundUpdate,
+        privacy: processedLocation.privacy
       }
     });
 
+    return addSecurityHeaders(response);
+
   } catch (error) {
-    console.error('Error updating location:', error);
-    return NextResponse.json(
+    console.error('Error updating location:', error.name, error.message);
+    const response = NextResponse.json(
       { success: false, message: 'Failed to update location' },
       { status: 500 }
     );
+    return addSecurityHeaders(response);
   }
 }
 

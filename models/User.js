@@ -208,19 +208,32 @@ const userSchema = new mongoose.Schema({
     ref: 'User'
   },
   
-  // Location
+  // Enhanced Location with precision and admin tracking
   location: {
     city: {
       type: String,
-      required: false, // Make optional for all users initially
+      required: false,
       trim: true,
       maxlength: [50, 'City name cannot exceed 50 characters']
     },
     state: {
       type: String,
-      required: false, // Make optional for all users initially
+      required: false,
       trim: true,
       maxlength: [50, 'State name cannot exceed 50 characters']
+    },
+    country: {
+      type: String,
+      default: 'India',
+      maxlength: [50, 'Country name cannot exceed 50 characters']
+    },
+    address: {
+      type: String,
+      maxlength: [200, 'Address cannot exceed 200 characters']
+    },
+    pincode: {
+      type: String,
+      match: [/^[0-9]{6}$/, 'Invalid pincode format (6 digits)']
     },
     lat: {
       type: Number,
@@ -231,6 +244,150 @@ const userSchema = new mongoose.Schema({
       type: Number,
       min: [-180, 'Invalid longitude'],
       max: [180, 'Invalid longitude']
+    },
+    // GeoJSON Point for geospatial queries
+    coordinates: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        validate: {
+          validator: function(coords) {
+            return coords.length === 2 && 
+                   coords[0] >= -180 && coords[0] <= 180 && // longitude
+                   coords[1] >= -90 && coords[1] <= 90;    // latitude
+          },
+          message: 'Invalid coordinates format [longitude, latitude]'
+        }
+      }
+    },
+    accuracy: Number, // GPS accuracy in meters
+    source: {
+      type: String,
+      enum: ['gps', 'geocoding', 'manual', 'ip_geolocation'],
+      default: 'manual'
+    },
+    precision: {
+      type: String,
+      enum: ['exact', 'approximate', 'city_level'],
+      default: 'approximate'
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    },
+    timezone: String
+  },
+  
+  // Admin metadata for comprehensive user management
+  adminMetadata: {
+    flaggedBy: [{
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      reason: String,
+      flaggedAt: { type: Date, default: Date.now },
+      status: { type: String, enum: ['pending', 'reviewed', 'resolved'], default: 'pending' },
+      severity: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' }
+    }],
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reviewedAt: Date,
+    adminNotes: String,
+    riskLevel: {
+      type: String,
+      enum: ['low', 'medium', 'high', 'critical'],
+      default: 'low'
+    },
+    qualityScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50
+    },
+    trustScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 50
+    },
+    tags: [String],
+    priorityLevel: {
+      type: String,
+      enum: ['low', 'normal', 'high', 'urgent'],
+      default: 'normal'
+    },
+    accountStatus: {
+      type: String,
+      enum: ['active', 'suspended', 'restricted', 'under_review'],
+      default: 'active'
+    },
+    suspensionReason: String,
+    suspendedUntil: Date,
+    lastModifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    lastModifiedAt: {
+      type: Date,
+      default: Date.now
+    },
+    verificationLevel: {
+      type: String,
+      enum: ['none', 'basic', 'verified', 'premium'],
+      default: 'none'
+    },
+    kycStatus: {
+      type: String,
+      enum: ['not_started', 'pending', 'approved', 'rejected'],
+      default: 'not_started'
+    },
+    kycDocuments: [{
+      type: String,
+      docType: String,
+      uploadedAt: Date,
+      verifiedAt: Date,
+      status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+      }
+    }]
+  },
+  
+  // Enhanced activity tracking for admin insights
+  activityMetrics: {
+    loginCount: { type: Number, default: 0 },
+    lastLoginIP: String,
+    lastUserAgent: String,
+    profileViews: { type: Number, default: 0 },
+    searchCount: { type: Number, default: 0 },
+    jobViewCount: { type: Number, default: 0 },
+    applicationCount: { type: Number, default: 0 },
+    messageCount: { type: Number, default: 0 },
+    averageSessionDuration: { type: Number, default: 0 }, // in minutes
+    deviceFingerprint: String,
+    preferredDevice: {
+      type: String,
+      enum: ['mobile', 'tablet', 'desktop'],
+      default: 'mobile'
+    },
+    locationHistory: [{
+      city: String,
+      state: String,
+      country: String,
+      coordinates: [Number],
+      timestamp: { type: Date, default: Date.now },
+      source: String
+    }],
+    suspicious: {
+      multipleAccounts: { type: Boolean, default: false },
+      unusualActivity: { type: Boolean, default: false },
+      rapidLocationChange: { type: Boolean, default: false },
+      deviceInconsistency: { type: Boolean, default: false }
     }
   },
   
@@ -671,10 +828,12 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Enhanced indexes for better query performance  
+// Comprehensive indexes for better query performance and admin searches
 // Note: email and username unique constraints are handled by schema field definitions
 userSchema.index({ role: 1 });
 userSchema.index({ 'location.city': 1, role: 1 });
+userSchema.index({ 'location.state': 1, role: 1 });
+userSchema.index({ 'location.country': 1 });
 userSchema.index({ skills: 1, role: 1 });
 userSchema.index({ availableNow: 1, role: 1 });
 userSchema.index({ banned: 1 });
@@ -683,9 +842,59 @@ userSchema.index({ phone: 1 });
 userSchema.index({ isActive: 1, deletedAt: 1 });
 userSchema.index({ authMethod: 1 });
 userSchema.index({ providers: 1 });
-userSchema.index({ 'rating.average': -1, 'rating.count': -1 }); // For sorting
-userSchema.index({ lastActivityAt: -1 }); // For activity tracking
-userSchema.index({ createdAt: -1 }); // For new users
+userSchema.index({ 'rating.average': -1, 'rating.count': -1 });
+userSchema.index({ lastActivityAt: -1 });
+userSchema.index({ createdAt: -1 });
+
+// Geospatial indexes for location-based queries
+userSchema.index({ 'location.coordinates': '2dsphere' });
+
+// Admin-specific indexes for comprehensive management
+userSchema.index({ username: 1, email: 1 }); // Combined search
+userSchema.index({ 'adminMetadata.riskLevel': 1, role: 1 });
+userSchema.index({ 'adminMetadata.qualityScore': -1 });
+userSchema.index({ 'adminMetadata.trustScore': -1 });
+userSchema.index({ 'adminMetadata.accountStatus': 1, lastActivityAt: -1 });
+userSchema.index({ 'adminMetadata.flaggedBy.status': 1, 'adminMetadata.flaggedBy.flaggedAt': -1 });
+userSchema.index({ 'adminMetadata.priorityLevel': 1, createdAt: -1 });
+userSchema.index({ 'adminMetadata.verificationLevel': 1, isVerified: 1 });
+userSchema.index({ 'adminMetadata.kycStatus': 1, role: 1 });
+userSchema.index({ 'adminMetadata.reviewedBy': 1, 'adminMetadata.reviewedAt': -1 });
+userSchema.index({ 'adminMetadata.lastModifiedBy': 1, 'adminMetadata.lastModifiedAt': -1 });
+userSchema.index({ 'adminMetadata.tags': 1 });
+
+// Activity tracking indexes
+userSchema.index({ 'activityMetrics.loginCount': -1, lastLoginAt: -1 });
+userSchema.index({ 'activityMetrics.lastLoginIP': 1 });
+userSchema.index({ 'activityMetrics.suspicious.multipleAccounts': 1 });
+userSchema.index({ 'activityMetrics.suspicious.unusualActivity': 1 });
+userSchema.index({ 'activityMetrics.preferredDevice': 1, role: 1 });
+
+// Composite indexes for admin queries
+userSchema.index({ role: 1, 'adminMetadata.accountStatus': 1, lastActivityAt: -1 });
+userSchema.index({ banned: 1, 'adminMetadata.riskLevel': 1, createdAt: -1 });
+userSchema.index({ isVerified: 1, 'adminMetadata.verificationLevel': 1, 'rating.average': -1 });
+
+// Text search index for comprehensive user search
+userSchema.index({
+  username: 'text',
+  name: 'text',
+  email: 'text',
+  'location.city': 'text',
+  'location.state': 'text',
+  skills: 'text',
+  bio: 'text'
+}, {
+  name: 'UserTextSearchIndex',
+  weights: {
+    username: 10,
+    name: 8,
+    email: 6,
+    skills: 5,
+    'location.city': 3,
+    bio: 2
+  }
+});
 
 // Virtual for full name
 userSchema.virtual('fullName').get(function() {
@@ -856,22 +1065,278 @@ userSchema.methods.updateBadges = function() {
   return this.save();
 };
 
-// Static method to find fixers by location and skills
-userSchema.statics.findNearbyFixers = function(city, skills = [], radius = 10) {
+// Enhanced static method to find fixers by location and skills with admin capabilities
+userSchema.statics.findNearbyFixers = function(city, skills = [], radius = 10, isAdmin = false) {
   const query = {
     role: 'fixer',
     banned: false,
     availableNow: true,
     isActive: true,
-    deletedAt: { $exists: false },
-    'location.city': new RegExp(city, 'i')
+    deletedAt: { $exists: false }
   };
   
-  if (skills.length > 0) {
-    query.skills = { $in: skills };
+  // Location query - handle both text and coordinates
+  if (city) {
+    query.$or = [
+      { 'location.city': new RegExp(city, 'i') },
+      { 'location.state': new RegExp(city, 'i') }
+    ];
   }
   
-  return this.find(query).sort({ 'rating.average': -1, jobsCompleted: -1 });
+  // Skills filter
+  if (skills.length > 0) {
+    query.skills = { $in: skills.map(skill => skill.toLowerCase()) };
+  }
+  
+  // Admin can see additional data
+  if (!isAdmin) {
+    query['adminMetadata.accountStatus'] = { $ne: 'suspended' };
+  }
+  
+  return this.find(query)
+    .populate(isAdmin ? 'adminMetadata.reviewedBy adminMetadata.lastModifiedBy' : '')
+    .sort({ 'rating.average': -1, jobsCompleted: -1 });
+};
+
+// Admin-specific static methods
+userSchema.statics.findByAdminCriteria = function(criteria = {}) {
+  const query = {};
+  
+  // Basic filters
+  if (criteria.role) query.role = criteria.role;
+  if (criteria.banned !== undefined) query.banned = criteria.banned;
+  if (criteria.verified !== undefined) query.isVerified = criteria.verified;
+  
+  // Admin metadata filters
+  if (criteria.riskLevel) {
+    query['adminMetadata.riskLevel'] = criteria.riskLevel;
+  }
+  
+  if (criteria.accountStatus) {
+    query['adminMetadata.accountStatus'] = criteria.accountStatus;
+  }
+  
+  if (criteria.flagged) {
+    query['adminMetadata.flaggedBy.0'] = { $exists: true };
+    query['adminMetadata.flaggedBy.status'] = 'pending';
+  }
+  
+  if (criteria.kycStatus) {
+    query['adminMetadata.kycStatus'] = criteria.kycStatus;
+  }
+  
+  if (criteria.qualityScoreMin) {
+    query['adminMetadata.qualityScore'] = { $gte: criteria.qualityScoreMin };
+  }
+  
+  if (criteria.trustScoreMin) {
+    query['adminMetadata.trustScore'] = { $gte: criteria.trustScoreMin };
+  }
+  
+  if (criteria.suspicious) {
+    query.$or = [
+      { 'activityMetrics.suspicious.multipleAccounts': true },
+      { 'activityMetrics.suspicious.unusualActivity': true },
+      { 'activityMetrics.suspicious.rapidLocationChange': true }
+    ];
+  }
+  
+  if (criteria.needsReview) {
+    query.$or = [
+      { 'adminMetadata.reviewedBy': { $exists: false } },
+      { 'adminMetadata.flaggedBy.0': { $exists: true } },
+      { 'adminMetadata.riskLevel': 'high' },
+      { 'adminMetadata.qualityScore': { $lt: 30 } }
+    ];
+  }
+  
+  // Date filters
+  if (criteria.createdAfter) {
+    query.createdAt = { $gte: new Date(criteria.createdAfter) };
+  }
+  
+  if (criteria.lastActiveAfter) {
+    query.lastActivityAt = { $gte: new Date(criteria.lastActiveAfter) };
+  }
+  
+  // Location filters
+  if (criteria.city) {
+    query['location.city'] = new RegExp(criteria.city, 'i');
+  }
+  
+  if (criteria.state) {
+    query['location.state'] = new RegExp(criteria.state, 'i');
+  }
+  
+  return this.find(query)
+    .populate('adminMetadata.reviewedBy', 'name username')
+    .populate('adminMetadata.lastModifiedBy', 'name username')
+    .populate('bannedBy', 'name username')
+    .sort({
+      'adminMetadata.priorityLevel': -1,
+      'adminMetadata.riskLevel': -1,
+      'adminMetadata.flaggedBy.flaggedAt': -1,
+      lastActivityAt: -1
+    });
+};
+
+userSchema.statics.findWithFilters = function(filters = {}, isAdmin = false) {
+  const query = {};
+  
+  // Basic filters
+  if (filters.role) query.role = filters.role;
+  if (filters.city) query['location.city'] = new RegExp(filters.city, 'i');
+  if (filters.state) query['location.state'] = new RegExp(filters.state, 'i');
+  if (filters.skills && filters.skills.length > 0) {
+    query.skills = { $in: filters.skills.map(skill => skill.toLowerCase()) };
+  }
+  
+  // Status filters
+  if (!isAdmin) {
+    query.banned = false;
+    query.isActive = true;
+    query.deletedAt = { $exists: false };
+  } else {
+    if (filters.banned !== undefined) query.banned = filters.banned;
+    if (filters.active !== undefined) query.isActive = filters.active;
+  }
+  
+  // Admin filters
+  if (isAdmin && filters.username) {
+    query.username = new RegExp(filters.username, 'i');
+  }
+  
+  if (isAdmin && filters.email) {
+    query.email = new RegExp(filters.email, 'i');
+  }
+  
+  // Text search
+  if (filters.search) {
+    query.$text = { $search: filters.search };
+  }
+  
+  // Date range
+  if (filters.dateFrom || filters.dateTo) {
+    query.createdAt = {};
+    if (filters.dateFrom) query.createdAt.$gte = new Date(filters.dateFrom);
+    if (filters.dateTo) query.createdAt.$lte = new Date(filters.dateTo);
+  }
+  
+  // Geospatial query
+  if (filters.near && filters.near.lat && filters.near.lng) {
+    const maxDistance = filters.near.radius ? filters.near.radius * 1000 : 25000; // Default 25km
+    query['location.coordinates'] = {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [filters.near.lng, filters.near.lat]
+        },
+        $maxDistance: maxDistance
+      }
+    };
+  }
+  
+  // Sorting
+  const sort = {};
+  if (filters.sortBy) {
+    switch (filters.sortBy) {
+      case 'newest':
+        sort.createdAt = -1;
+        break;
+      case 'oldest':
+        sort.createdAt = 1;
+        break;
+      case 'rating':
+        sort['rating.average'] = -1;
+        sort['rating.count'] = -1;
+        break;
+      case 'experience':
+        sort.jobsCompleted = -1;
+        break;
+      case 'activity':
+        sort.lastActivityAt = -1;
+        break;
+      case 'name':
+        sort.name = 1;
+        break;
+      case 'username':
+        sort.username = 1;
+        break;
+      case 'location':
+        sort['location.city'] = 1;
+        sort['location.state'] = 1;
+        break;
+      case 'quality':
+        if (isAdmin) sort['adminMetadata.qualityScore'] = -1;
+        break;
+      case 'trust':
+        if (isAdmin) sort['adminMetadata.trustScore'] = -1;
+        break;
+      case 'risk':
+        if (isAdmin) sort['adminMetadata.riskLevel'] = -1;
+        break;
+      case 'relevance':
+        if (filters.search) sort.score = { $meta: 'textScore' };
+        break;
+      default:
+        sort.lastActivityAt = -1;
+    }
+  } else {
+    sort['rating.average'] = -1;
+    sort.lastActivityAt = -1;
+  }
+  
+  let queryBuilder = this.find(query);
+  
+  if (isAdmin) {
+    queryBuilder = queryBuilder
+      .populate('adminMetadata.reviewedBy', 'name username')
+      .populate('adminMetadata.lastModifiedBy', 'name username')
+      .populate('bannedBy', 'name username');
+  }
+  
+  return queryBuilder.sort(sort);
+};
+
+// Get user statistics for admin dashboard
+userSchema.statics.getUserStats = function() {
+  return this.aggregate([
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        hirers: { $sum: { $cond: [{ $eq: ['$role', 'hirer'] }, 1, 0] } },
+        fixers: { $sum: { $cond: [{ $eq: ['$role', 'fixer'] }, 1, 0] } },
+        verified: { $sum: { $cond: ['$isVerified', 1, 0] } },
+        banned: { $sum: { $cond: ['$banned', 1, 0] } },
+        active: { $sum: { $cond: ['$isActive', 1, 0] } },
+        highRisk: { $sum: { $cond: [{ $eq: ['$adminMetadata.riskLevel', 'high'] }, 1, 0] } },
+        flagged: { $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ['$adminMetadata.flaggedBy', []] } }, 0] }, 1, 0] } },
+        avgRating: { $avg: '$rating.average' },
+        avgJobsCompleted: { $avg: '$jobsCompleted' }
+      }
+    }
+  ]);
+};
+
+// Get location statistics
+userSchema.statics.getLocationStats = function() {
+  return this.aggregate([
+    {
+      $group: {
+        _id: {
+          city: '$location.city',
+          state: '$location.state'
+        },
+        count: { $sum: 1 },
+        fixers: { $sum: { $cond: [{ $eq: ['$role', 'fixer'] }, 1, 0] } },
+        hirers: { $sum: { $cond: [{ $eq: ['$role', 'hirer'] }, 1, 0] } },
+        avgRating: { $avg: '$rating.average' }
+      }
+    },
+    { $sort: { count: -1 } },
+    { $limit: 50 }
+  ]);
 };
 
 // Static method to find by Google ID
@@ -903,41 +1368,254 @@ userSchema.statics.findByPhone = function(phone) {
   return this.findOne({ phone: formattedPhone });
 };
 
-// Pre-save middleware
+// Enhanced pre-save middleware with admin features and location handling
 userSchema.pre('save', async function(next) {
   try {
-  // Ensure phone number is properly formatted
-  if (this.phone && !this.phone.startsWith('+')) {
-    this.phone = '+91' + this.phone.replace(/[^\d]/g, '');
-  }
-  
-  // Convert skills to lowercase
-  if (this.skills) {
-    this.skills = this.skills.map(skill => skill.toLowerCase().trim());
-  }
+    // Ensure phone number is properly formatted
+    if (this.phone && !this.phone.startsWith('+')) {
+      this.phone = '+91' + this.phone.replace(/[^\d]/g, '');
+    }
+    
+    // Convert skills to lowercase
+    if (this.skills) {
+      this.skills = this.skills.map(skill => skill.toLowerCase().trim());
+    }
     
     // Hash password if modified and not empty
     if (this.isModified('passwordHash') && this.passwordHash) {
-      // Check if password is already hashed (starts with $2a$, $2b$, or $2y$)
+      // Check if password is already hashed
       if (!/^\$2[aby]\$\d{2}\$/.test(this.passwordHash)) {
-        // It's a raw password, validate and hash it
         if (this.passwordHash.length < 6) {
           throw new Error('Password must be at least 6 characters long');
         }
         const saltRounds = 12;
         this.passwordHash = await bcrypt.hash(this.passwordHash, saltRounds);
       }
-      // If already hashed, leave it as is
+    }
+    
+    // Set GeoJSON coordinates if lat/lng provided
+    if (this.isModified('location.lat') || this.isModified('location.lng')) {
+      if (this.location.lat && this.location.lng) {
+        this.location.coordinates = {
+          type: 'Point',
+          coordinates: [this.location.lng, this.location.lat]
+        };
+        this.location.lastUpdated = new Date();
+      }
+    }
+    
+    // Track location history for admin monitoring
+    if (this.isModified('location') && this.location.city) {
+      if (!this.activityMetrics) this.activityMetrics = {};
+      if (!this.activityMetrics.locationHistory) this.activityMetrics.locationHistory = [];
+      
+      // Only add if location actually changed
+      const lastLocation = this.activityMetrics.locationHistory[0];
+      const currentLocation = {
+        city: this.location.city,
+        state: this.location.state,
+        country: this.location.country || 'India'
+      };
+      
+      if (!lastLocation || 
+          lastLocation.city !== currentLocation.city || 
+          lastLocation.state !== currentLocation.state) {
+        
+        this.activityMetrics.locationHistory.unshift({
+          ...currentLocation,
+          coordinates: this.location.coordinates?.coordinates,
+          timestamp: new Date(),
+          source: this.location.source || 'manual'
+        });
+        
+        // Keep only last 10 location changes
+        if (this.activityMetrics.locationHistory.length > 10) {
+          this.activityMetrics.locationHistory = this.activityMetrics.locationHistory.slice(0, 10);
+        }
+        
+        // Check for rapid location changes (suspicious activity)
+        if (this.activityMetrics.locationHistory.length >= 2) {
+          const timeDiff = this.activityMetrics.locationHistory[0].timestamp - 
+                          this.activityMetrics.locationHistory[1].timestamp;
+          if (timeDiff < 24 * 60 * 60 * 1000) { // Less than 24 hours
+            this.activityMetrics.suspicious.rapidLocationChange = true;
+          }
+        }
+      }
+    }
+    
+    // Calculate quality and trust scores
+    if (this.isNew || this.isModified()) {
+      // Quality score calculation
+      let qualityScore = 0;
+      
+      // Profile completeness (50 points)
+      if (this.name) qualityScore += 5;
+      if (this.bio) qualityScore += 5;
+      if (this.location?.city) qualityScore += 10;
+      if (this.phone) qualityScore += 10;
+      if (this.profilePhoto || this.picture) qualityScore += 5;
+      if (this.skills && this.skills.length > 0) qualityScore += 10;
+      if (this.portfolio && this.portfolio.length > 0) qualityScore += 5;
+      
+      // Verification status (25 points)
+      if (this.emailVerified) qualityScore += 10;
+      if (this.phoneVerified) qualityScore += 10;
+      if (this.isVerified) qualityScore += 5;
+      
+      // Activity and engagement (25 points)
+      if (this.rating?.count > 0) qualityScore += 10;
+      if (this.jobsCompleted > 0) qualityScore += 10;
+      if (this.lastActivityAt && (Date.now() - this.lastActivityAt) < 7 * 24 * 60 * 60 * 1000) {
+        qualityScore += 5; // Active in last 7 days
+      }
+      
+      // Trust score calculation
+      let trustScore = 50; // Base trust score
+      
+      // Positive factors
+      if (this.isVerified) trustScore += 15;
+      if (this.emailVerified && this.phoneVerified) trustScore += 10;
+      if (this.rating?.average >= 4.0 && this.rating.count >= 5) trustScore += 15;
+      if (this.jobsCompleted >= 10) trustScore += 10;
+      
+      // Negative factors
+      if (this.activityMetrics?.suspicious?.multipleAccounts) trustScore -= 20;
+      if (this.activityMetrics?.suspicious?.unusualActivity) trustScore -= 15;
+      if (this.activityMetrics?.suspicious?.rapidLocationChange) trustScore -= 10;
+      if (this.adminMetadata?.flaggedBy?.length > 0) trustScore -= 25;
+      
+      if (!this.adminMetadata) this.adminMetadata = {};
+      this.adminMetadata.qualityScore = Math.max(0, Math.min(qualityScore, 100));
+      this.adminMetadata.trustScore = Math.max(0, Math.min(trustScore, 100));
+      
+      // Auto-set risk level based on trust score
+      if (this.adminMetadata.trustScore < 30) {
+        this.adminMetadata.riskLevel = 'high';
+      } else if (this.adminMetadata.trustScore < 50) {
+        this.adminMetadata.riskLevel = 'medium';
+      } else {
+        this.adminMetadata.riskLevel = 'low';
+      }
     }
     
     // Update last activity
     this.lastActivityAt = new Date();
-  
-  next();
+    
+    // Initialize admin metadata if not exists
+    if (!this.adminMetadata) {
+      this.adminMetadata = {
+        riskLevel: 'low',
+        qualityScore: 50,
+        trustScore: 50,
+        accountStatus: 'active',
+        priorityLevel: 'normal',
+        verificationLevel: 'none',
+        kycStatus: 'not_started',
+        lastModifiedAt: new Date()
+      };
+    }
+    
+    // Initialize activity metrics if not exists
+    if (!this.activityMetrics) {
+      this.activityMetrics = {
+        loginCount: 0,
+        profileViews: 0,
+        searchCount: 0,
+        jobViewCount: 0,
+        applicationCount: 0,
+        messageCount: 0,
+        averageSessionDuration: 0,
+        preferredDevice: 'mobile',
+        locationHistory: [],
+        suspicious: {
+          multipleAccounts: false,
+          unusualActivity: false,
+          rapidLocationChange: false,
+          deviceInconsistency: false
+        }
+      };
+    }
+    
+    next();
   } catch (error) {
     next(error);
   }
 });
+
+// Admin methods for user management
+userSchema.methods.flagUser = function(adminId, reason, severity = 'medium') {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  if (!this.adminMetadata.flaggedBy) this.adminMetadata.flaggedBy = [];
+  
+  this.adminMetadata.flaggedBy.push({
+    userId: adminId,
+    reason,
+    severity,
+    flaggedAt: new Date(),
+    status: 'pending'
+  });
+  
+  this.adminMetadata.lastModifiedBy = adminId;
+  this.adminMetadata.lastModifiedAt = new Date();
+  
+  return this.save();
+};
+
+userSchema.methods.updateRiskLevel = function(riskLevel, adminId) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  this.adminMetadata.riskLevel = riskLevel;
+  this.adminMetadata.lastModifiedBy = adminId;
+  this.adminMetadata.lastModifiedAt = new Date();
+  return this.save();
+};
+
+userSchema.methods.addAdminNote = function(note, adminId) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  this.adminMetadata.adminNotes = note;
+  this.adminMetadata.lastModifiedBy = adminId;
+  this.adminMetadata.lastModifiedAt = new Date();
+  return this.save();
+};
+
+userSchema.methods.suspendUser = function(reason, suspendedUntil, adminId) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  this.adminMetadata.accountStatus = 'suspended';
+  this.adminMetadata.suspensionReason = reason;
+  this.adminMetadata.suspendedUntil = suspendedUntil;
+  this.adminMetadata.lastModifiedBy = adminId;
+  this.adminMetadata.lastModifiedAt = new Date();
+  this.isActive = false;
+  return this.save();
+};
+
+userSchema.methods.updateKycStatus = function(status, adminId, documents = []) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  this.adminMetadata.kycStatus = status;
+  if (documents.length > 0) {
+    this.adminMetadata.kycDocuments = documents;
+  }
+  this.adminMetadata.lastModifiedBy = adminId;
+  this.adminMetadata.lastModifiedAt = new Date();
+  return this.save();
+};
+
+userSchema.methods.recordLogin = function(ipAddress, userAgent) {
+  if (!this.activityMetrics) this.activityMetrics = {};
+  this.activityMetrics.loginCount = (this.activityMetrics.loginCount || 0) + 1;
+  this.activityMetrics.lastLoginIP = ipAddress;
+  this.activityMetrics.lastUserAgent = userAgent;
+  this.lastLoginAt = new Date();
+  this.lastActivityAt = new Date();
+  return this.save();
+};
+
+userSchema.methods.updateActivityMetric = function(metric, value = 1) {
+  if (!this.activityMetrics) this.activityMetrics = {};
+  this.activityMetrics[metric] = (this.activityMetrics[metric] || 0) + value;
+  this.lastActivityAt = new Date();
+  return this.save();
+};
 
 // Post-save middleware to update badges
 userSchema.post('save', function(doc) {

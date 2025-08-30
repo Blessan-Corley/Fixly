@@ -2,11 +2,11 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../../lib/db';
-import Job from '../../../../../models/Job';
-import User from '../../../../../models/User';
-import { rateLimit } from '../../../../../utils/rateLimiting';
-import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
+import { rateLimit } from '@/utils/rateLimiting';
+import { moderateContent } from '@/utils/sensitiveContentFilter';
 import { analytics } from '@/lib/cache';
 import notificationService from '@/lib/realtime/NotificationService';
 import nodemailer from 'nodemailer';
@@ -118,7 +118,9 @@ export async function POST(request, { params }) {
       materialsIncluded,
       requirements,
       specialNotes,
-      negotiationNotes
+      negotiationNotes,
+      budgetBreakdown, // For detailed budget mode
+      quickApply // Flag for quick applications
     } = body;
 
     // Validation
@@ -155,7 +157,16 @@ export async function POST(request, { params }) {
       );
     }
 
-    if (!description || description.length < 20) {
+    // For quick applications, description is optional with a minimum of 10 characters if provided
+    if (description && description.length > 0 && description.length < 10) {
+      return NextResponse.json(
+        { message: 'Description must be at least 10 characters if provided' },
+        { status: 400 }
+      );
+    }
+    
+    // For detailed applications, require minimum 20 characters
+    if (!quickApply && (!description || description.length < 20)) {
       return NextResponse.json(
         { message: 'Please provide a description (at least 20 characters)' },
         { status: 400 }
@@ -199,17 +210,19 @@ export async function POST(request, { params }) {
       priceVariancePercentage = (priceVariance / job.budget.amount) * 100;
     }
 
-    // Create application
+    // Create application with enhanced data
     const application = {
       fixer: user._id,
       proposedAmount: Number(proposedAmount),
       priceVariance: Math.round(priceVariance),
       priceVariancePercentage: Math.round(priceVariancePercentage * 100) / 100, // Round to 2 decimal places
-      description: description || '',
+      description: description || (quickApply ? `Hi! I'm interested in your job "${job.title}". I can complete this work professionally and on time.` : ''),
       materialsIncluded: materialsIncluded || false,
       requirements: requirements || '',
       specialNotes: specialNotes || '',
       negotiationNotes: negotiationNotes || '',
+      budgetBreakdown: budgetBreakdown || null, // Include budget breakdown if provided
+      isQuickApply: quickApply || false,
       status: 'pending',
       appliedAt: new Date()
     };

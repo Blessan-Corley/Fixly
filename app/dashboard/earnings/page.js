@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
+import EarningsHeatmap from '../../../components/ui/EarningsHeatmap';
+import SilentLoader, { BackgroundActivity } from '../../../components/ui/SilentLoader';
 
 export default function EarningsPage() {
   return (
@@ -56,50 +58,157 @@ function EarningsContent() {
   const [loading, setLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState('this_month');
   const [showChart, setShowChart] = useState('earnings');
+  const [backgroundActivities, setBackgroundActivities] = useState([]);
+  const [completedJobs, setCompletedJobs] = useState([]);
+  const [realTimeEarnings, setRealTimeEarnings] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchEarningsData();
+    
+    // Set up real-time refresh every 2 minutes for earnings data
+    const interval = setInterval(() => {
+      if (!loading && !refreshing) {
+        refreshEarningsData();
+      }
+    }, 120000); // 2 minutes
+    
+    return () => clearInterval(interval);
   }, [timeFilter]);
+  
+  // Background activity helpers
+  const addBackgroundActivity = (id, text) => {
+    setBackgroundActivities(prev => {
+      const existing = prev.find(a => a.id === id);
+      if (existing) return prev;
+      return [...prev, { id, text, timestamp: Date.now() }];
+    });
+  };
 
-  const fetchEarningsData = async () => {
+  const removeBackgroundActivity = (id) => {
+    setBackgroundActivities(prev => prev.filter(a => a.id !== id));
+  };
+  
+  // Silent refresh for real-time updates
+  const refreshEarningsData = async () => {
+    const activityId = 'earnings-refresh';
+    addBackgroundActivity(activityId, 'Updating earnings data...');
+    
     try {
-      setLoading(true);
+      await fetchEarningsData(true); // Silent fetch
+    } catch (error) {
+      console.debug('Background earnings refresh failed:', error);
+    } finally {
+      removeBackgroundActivity(activityId);
+    }
+  };
+
+  const fetchEarningsData = async (silent = false) => {
+    const activityId = `fetch-earnings-${Date.now()}`;
+    
+    try {
+      if (!silent) {
+        setLoading(true);
+      } else {
+        addBackgroundActivity(activityId, 'Refreshing earnings...');
+      }
       
-      // Fetch earnings stats
-      const statsResponse = await fetch(`/api/dashboard/stats?role=fixer&period=${timeFilter}`);
-      if (statsResponse.ok) {
-        const statsData = await statsResponse.json();
-        setEarnings({
-          total: statsData.totalEarnings || 0,
-          thisMonth: statsData.monthlyEarnings || 0,
-          lastMonth: statsData.lastMonthEarnings || 0,
-          thisWeek: statsData.weeklyEarnings || 0,
-          pendingPayments: statsData.pendingPayments || 0,
-          completedJobs: statsData.jobsCompleted || 0,
-          averageJobValue: statsData.jobsCompleted > 0 ? Math.round(statsData.totalEarnings / statsData.jobsCompleted) : 0,
-          topJobCategory: statsData.topJobCategory || 'General',
-          growth: {
-            monthly: calculateGrowth(statsData.monthlyEarnings, statsData.lastMonthEarnings),
-            weekly: statsData.weeklyGrowth || 0
-          }
+      // Fetch real earnings data from user's completed jobs
+      const userJobsResponse = await fetch('/api/fixer/earnings', {
+        method: 'GET',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      
+      if (userJobsResponse.ok) {
+        const earningsData = await userJobsResponse.json();
+        
+        // Calculate real-time earnings from actual completed jobs
+        const now = new Date();
+        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const thisWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+        
+        const completedJobsList = earningsData.jobs.filter(job => 
+          job.status === 'completed' && job.progress?.completedAt
+        );
+        
+        setCompletedJobs(completedJobsList);
+        
+        const totalEarnings = completedJobsList.reduce((sum, job) => sum + (job.earnings || job.budget?.amount || 0), 0);
+        
+        const thisMonthEarnings = completedJobsList
+          .filter(job => new Date(job.progress.completedAt) >= thisMonth)
+          .reduce((sum, job) => sum + (job.earnings || job.budget?.amount || 0), 0);
+          
+        const lastMonthEarnings = completedJobsList
+          .filter(job => {
+            const completedDate = new Date(job.progress.completedAt);
+            return completedDate >= lastMonth && completedDate < thisMonth;
+          })
+          .reduce((sum, job) => sum + (job.earnings || job.budget?.amount || 0), 0);
+          
+        const thisWeekEarnings = completedJobsList
+          .filter(job => new Date(job.progress.completedAt) >= thisWeek)
+          .reduce((sum, job) => sum + (job.earnings || job.budget?.amount || 0), 0);
+        
+        const pendingJobs = earningsData.jobs.filter(job => 
+          ['accepted', 'in_progress'].includes(job.status)
+        );
+        const pendingEarnings = pendingJobs.reduce((sum, job) => sum + (job.budget?.amount || 0), 0);
+        
+        // Calculate job categories
+        const categoryCount = {};
+        completedJobsList.forEach(job => {
+          const category = job.skillsRequired?.[0] || 'General';
+          categoryCount[category] = (categoryCount[category] || 0) + 1;
         });
+        const topCategory = Object.entries(categoryCount)
+          .sort(([,a], [,b]) => b - a)[0]?.[0] || 'General';
+        
+        const realEarningsData = {
+          total: totalEarnings,
+          thisMonth: thisMonthEarnings,
+          lastMonth: lastMonthEarnings,
+          thisWeek: thisWeekEarnings,
+          pendingPayments: pendingEarnings,
+          completedJobs: completedJobsList.length,
+          averageJobValue: completedJobsList.length > 0 ? Math.round(totalEarnings / completedJobsList.length) : 0,
+          topJobCategory: topCategory,
+          growth: {
+            monthly: calculateGrowth(thisMonthEarnings, lastMonthEarnings),
+            weekly: earningsData.weeklyGrowth || 0
+          }
+        };
+        
+        setEarnings(realEarningsData);
+        setRealTimeEarnings(realEarningsData);
       }
 
-      // Fetch recent completed jobs
-      const jobsResponse = await fetch('/api/dashboard/recent-jobs?role=fixer&limit=10&status=completed');
-      if (jobsResponse.ok) {
-        const jobsData = await jobsResponse.json();
-        setRecentJobs(jobsData.jobs || []);
-      }
+      // Use completed jobs for recent jobs display
+      const recentCompleted = completedJobs
+        .sort((a, b) => new Date(b.progress?.completedAt) - new Date(a.progress?.completedAt))
+        .slice(0, 10);
+      setRecentJobs(recentCompleted);
 
-      // Mock earnings history for chart (replace with real API)
-      setEarningsHistory(generateMockEarningsHistory());
+      // Generate real earnings history from completed jobs
+      setEarningsHistory(generateRealEarningsHistory(completedJobs));
+      
+      if (silent) {
+        removeBackgroundActivity(activityId);
+        console.debug('Earnings data refreshed silently');
+      }
 
     } catch (error) {
       console.error('Error fetching earnings data:', error);
-      toast.error('Failed to fetch earnings data');
+      if (!silent) {
+        toast.error('Failed to fetch earnings data');
+      } else {
+        removeBackgroundActivity(activityId);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -108,13 +217,36 @@ function EarningsContent() {
     return Math.round(((current - previous) / previous) * 100);
   };
 
-  const generateMockEarningsHistory = () => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    return months.map((month, index) => ({
-      month,
-      earnings: Math.floor(Math.random() * 15000) + 5000,
-      jobs: Math.floor(Math.random() * 10) + 3
-    }));
+  const generateRealEarningsHistory = (jobsData) => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const monthsData = {};
+    
+    // Initialize last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`;
+      monthsData[monthKey] = {
+        month: monthNames[date.getMonth()],
+        earnings: 0,
+        jobs: 0
+      };
+    }
+    
+    // Aggregate earnings by month from real data
+    jobsData.forEach(job => {
+      if (!job.progress?.completedAt) return;
+      
+      const completedDate = new Date(job.progress.completedAt);
+      const monthKey = `${completedDate.getFullYear()}-${String(completedDate.getMonth()).padStart(2, '0')}`;
+      
+      if (monthsData[monthKey]) {
+        monthsData[monthKey].earnings += job.earnings || job.budget?.amount || 0;
+        monthsData[monthKey].jobs += 1;
+      }
+    });
+    
+    return Object.values(monthsData);
   };
 
   const formatCurrency = (amount) => {
@@ -206,6 +338,25 @@ function EarningsContent() {
         </div>
       </div>
 
+      {/* Real-time Status Indicator */}
+      {realTimeEarnings && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 mb-6"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse mr-3" />
+              <span className="text-green-800 font-medium">Live Earnings Data</span>
+            </div>
+            <span className="text-sm text-green-600">
+              Last updated: {new Date().toLocaleTimeString()}
+            </span>
+          </div>
+        </motion.div>
+      )}
+
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <motion.div
@@ -284,6 +435,11 @@ function EarningsContent() {
           </div>
           <div className="text-sm text-fixly-text-muted">Avg. Job Value</div>
         </motion.div>
+      </div>
+
+      {/* Job Completion Heatmap */}
+      <div className="mb-8">
+        <EarningsHeatmap jobsData={completedJobs} year={new Date().getFullYear()} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -517,6 +673,17 @@ function EarningsContent() {
           </div>
         )}
       </div>
+      
+      {/* Background Activity Indicators */}
+      <BackgroundActivity activities={backgroundActivities} maxVisible={1} />
+      
+      {/* Silent Loader for Refresh */}
+      <SilentLoader 
+        isLoading={refreshing} 
+        text="Refreshing earnings..." 
+        position="bottom-right" 
+        type="sync"
+      />
     </div>
   );
 }

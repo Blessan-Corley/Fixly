@@ -1,50 +1,93 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Cookie, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-export default function CookieConsent() {
+// Memoized animation variants for better performance
+const animationVariants = {
+  initial: { opacity: 0, y: 100, scale: 0.9 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: 100, scale: 0.9 }
+};
+
+const springTransition = {
+  type: "spring",
+  stiffness: 300,
+  damping: 30
+};
+
+// Custom hook for consent management with optimization
+const useConsentManagement = () => {
   const [showConsent, setShowConsent] = useState(false);
-  const router = useRouter();
+  const [isChecked, setIsChecked] = useState(false);
 
   useEffect(() => {
-    // Check if user has already given consent
-    const hasConsent = localStorage.getItem('fixly-cookie-consent');
-    if (!hasConsent) {
-      // Simple delay: Wait for page to load + 2 seconds for better UX
-      const timer = setTimeout(() => {
-        setShowConsent(true);
-      }, 2000); // Show popup 2 seconds after component mounts
+    // Early return if already checked to avoid duplicate localStorage access
+    if (isChecked) return;
 
-      return () => clearTimeout(timer);
+    // Use requestIdleCallback for non-critical consent checking
+    const checkConsent = () => {
+      const hasConsent = localStorage.getItem('fixly-cookie-consent');
+      setIsChecked(true);
+      
+      if (!hasConsent) {
+        // Use setTimeout for deferred execution to avoid blocking initial render
+        const timer = setTimeout(() => {
+          setShowConsent(true);
+        }, 2000);
+        
+        return () => clearTimeout(timer);
+      }
+    };
+
+    // Use requestIdleCallback if available, fallback to setTimeout
+    if ('requestIdleCallback' in window) {
+      const idleCallback = requestIdleCallback(checkConsent, { timeout: 3000 });
+      return () => cancelIdleCallback(idleCallback);
+    } else {
+      return checkConsent();
     }
-  }, []); // Remove dependencies to avoid re-running
+  }, [isChecked]);
 
-  const handleAccept = () => {
-    localStorage.setItem('fixly-cookie-consent', 'accepted');
-    setShowConsent(false);
-  };
+  return { showConsent, setShowConsent };
+};
 
-  const handleLearnMore = () => {
+export default function CookieConsent() {
+  const { showConsent, setShowConsent } = useConsentManagement();
+  const router = useRouter();
+
+  // Memoized event handlers for better performance
+  const handleAccept = useCallback(() => {
+    try {
+      localStorage.setItem('fixly-cookie-consent', 'accepted');
+      setShowConsent(false);
+    } catch (error) {
+      // Gracefully handle localStorage errors (e.g., in private browsing)
+      console.warn('Failed to save consent preference:', error);
+      setShowConsent(false);
+    }
+  }, [setShowConsent]);
+
+  const handleLearnMore = useCallback(() => {
     router.push('/cookies');
-  };
+  }, [router]);
 
+  // Early return to avoid unnecessary render work
   if (!showConsent) return null;
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       <motion.div
-        initial={{ opacity: 0, y: 100, scale: 0.9 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 100, scale: 0.9 }}
-        transition={{ 
-          type: "spring",
-          stiffness: 300,
-          damping: 30
-        }}
+        variants={animationVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={springTransition}
         className="fixed bottom-4 right-4 z-50 max-w-sm"
+        // Performance optimization: reduce layout thrashing
+        style={{ willChange: 'transform, opacity' }}
       >
         <div className="bg-fixly-card border border-fixly-border rounded-xl shadow-fixly-xl p-6 relative">
           <div className="flex items-start mb-4">
@@ -56,7 +99,7 @@ export default function CookieConsent() {
                 We use cookies
               </h3>
               <p className="text-sm text-fixly-text-light leading-relaxed">
-                Fixly uses cookies to enhance your experience, remember your preferences, and help us improve our service marketplace.
+                Fixly uses cookies and local storage to enhance your experience, remember your preferences, store your location settings, and help us improve our job marketplace.
               </p>
             </div>
           </div>

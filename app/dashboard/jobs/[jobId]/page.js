@@ -45,6 +45,7 @@ import {
 import { useApp } from '../../../providers';
 import { toast } from 'sonner';
 import InstagramCommentsRealtime from '../../../../components/InstagramCommentsRealtime';
+import { useRealtime } from '../../../../hooks/useRealtime';
 
 export default function JobDetailsPage({ params }) {
   const { jobId } = params;

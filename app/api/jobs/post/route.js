@@ -2,10 +2,10 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import connectDB from '../../../../lib/db';
-import Job from '../../../../models/Job';
-import User from '../../../../models/User';
-import { rateLimit } from '../../../../utils/rateLimiting';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
+import { rateLimit } from '@/utils/rateLimiting';
 // Removed complex validation and error handling imports for simplicity
 
 export const dynamic = 'force-dynamic';
@@ -116,7 +116,7 @@ export async function POST(request) {
       );
     }
 
-    // Create job data
+    // Create job data with proper GeoJSON location format
     const jobData = {
       title: title?.trim() || '',
       description: description?.trim() || '',
@@ -132,15 +132,37 @@ export async function POST(request) {
         city: location?.city?.trim() || '',
         state: location?.state?.trim() || '',
         pincode: location?.pincode || null,
-        lat: location?.lat || null,
-        lng: location?.lng || null
+        // Store coordinates in GeoJSON format for geospatial queries
+        ...(location?.lat && location?.lng && {
+          coordinates: {
+            type: 'Point',
+            coordinates: [parseFloat(location.lng), parseFloat(location.lat)] // [longitude, latitude]
+          },
+          // Also keep individual fields for compatibility
+          lat: parseFloat(location.lat),
+          lng: parseFloat(location.lng)
+        })
       },
       deadline: new Date(deadline),
       urgency: urgency || 'flexible',
       type: type || 'one-time',
       createdBy: user._id,
       status: 'open',
-      featured: featured && user.plan?.type === 'pro' ? true : false
+      featured: featured && user.plan?.type === 'pro' ? true : false,
+      // Add metadata for better searchability
+      searchKeywords: [
+        ...((title || '').toLowerCase().split(/\s+/).filter(word => word.length > 2)),
+        ...((description || '').toLowerCase().split(/\s+/).filter(word => word.length > 2)),
+        ...(skillsRequired || []).map(skill => skill.toLowerCase()),
+        (location?.city || '').toLowerCase(),
+        (location?.state || '').toLowerCase()
+      ].filter(Boolean).slice(0, 50), // Limit to 50 keywords
+      // Add geolocation metadata if coordinates are available
+      ...(location?.lat && location?.lng && {
+        hasGeoLocation: true,
+        locationPrecision: '1m', // Indicates 1-meter precision from our location manager
+        locationSource: 'gps_or_geocoding'
+      })
     };
 
     if (scheduledDate) {
@@ -171,6 +193,14 @@ export async function POST(request) {
     // Create and save job
     const job = new Job(jobData);
     await job.save();
+    
+    // Create geospatial index if it doesn't exist (for the nearby jobs API)
+    try {
+      const db = job.db.db;
+      await db.collection('jobs').createIndex({ "location.coordinates": "2dsphere" });
+    } catch (indexError) {
+      console.warn('Geospatial index creation failed (might already exist):', indexError.message);
+    }
 
     // Update user's job posting stats and add notification
     try {

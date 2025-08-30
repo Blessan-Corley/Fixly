@@ -22,11 +22,21 @@ import {
   isLocationRejected,
   LOCATION_STORAGE_KEYS 
 } from '../../utils/locationUtils';
+import { locationManager } from '../../utils/locationManager';
+import { 
+  locationConsentManager, 
+  ConsentTypes, 
+  hasLocationConsent, 
+  grantLocationConsent,
+  revokeLocationConsent 
+} from '../../utils/locationConsent';
 
 export default function LocationPermission({ 
   onLocationUpdate, 
   showBanner = true, 
-  className = '' 
+  className = '',
+  autoRefresh = true,
+  silent = false
 }) {
   const [internalShowBanner, setInternalShowBanner] = useState(showBanner);
   const [locationState, setLocationState] = useState('unknown'); // unknown, requesting, granted, denied, error
@@ -34,25 +44,146 @@ export default function LocationPermission({
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [backgroundUpdating, setBackgroundUpdating] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(null);
 
   useEffect(() => {
-    initializeLocation();
-  }, []);
+    initializeLocationWithManager();
+    
+    // Set up location manager with comprehensive handling
+    if (autoRefresh) {
+      locationManager.initialize({
+        autoStart: true,
+        backgroundUpdates: true,
+        watchLocation: false, // Don't watch continuously to save battery
+        onUpdate: (location) => {
+          setUserLocation(location);
+          setLastUpdate(new Date());
+          onLocationUpdate?.(location);
+          if (!silent) {
+            console.log('📍 Location updated in background:', location);
+          }
+        },
+        onError: (error) => {
+          console.debug('Background location error:', error);
+          setError(error.message);
+        }
+      }).catch(error => {
+        console.debug('Location manager initialization failed:', error);
+      });
+    }
 
-  const initializeLocation = async () => {
+    return () => {
+      // Cleanup on unmount
+      if (autoRefresh) {
+        locationManager.destroy();
+      }
+    };
+  }, [autoRefresh, silent]);
+
+  // Background location refresh - silent and non-intrusive
+  const backgroundLocationRefresh = async () => {
+    if (locationState !== 'granted' || !userLocation) return;
+    
+    try {
+      setBackgroundUpdating(true);
+      
+      // Check if location needs update via API
+      const response = await fetch('/api/location/manage?silent=true');
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.needsUpdate && data.hasLocation) {
+          // Get fresh location silently
+          const freshLocation = await getUserLocation();
+          
+          // Only update if location has changed significantly (>50 meters)
+          if (userLocation && 
+              Math.abs(freshLocation.lat - userLocation.lat) < 0.0005 && 
+              Math.abs(freshLocation.lng - userLocation.lng) < 0.0005) {
+            console.debug('Location unchanged, skipping update');
+            return;
+          }
+          
+          // Update in background without showing UI changes
+          await fetch('/api/location/manage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lat: freshLocation.lat,
+              lng: freshLocation.lng,
+              accuracy: freshLocation.accuracy,
+              source: 'background_gps',
+              silent: true,
+              backgroundUpdate: true
+            })
+          });
+          
+          // Update local state WITHOUT triggering onLocationUpdate to prevent page refreshes
+          setUserLocation(freshLocation);
+          setLastUpdate(new Date());
+          // DO NOT call onLocationUpdate for background updates
+          console.debug('Background location updated silently');
+        }
+      }
+    } catch (error) {
+      // Silent failure - don't show errors for background updates
+      console.debug('Background location update failed:', error);
+    } finally {
+      setBackgroundUpdating(false);
+    }
+  };
+
+  const initializeLocationWithManager = async () => {
     // Check for cached location first
     const cachedLocation = loadUserLocation();
     if (cachedLocation) {
       setUserLocation(cachedLocation);
       setLocationState('granted');
+      setLastUpdate(new Date(cachedLocation.timestamp || Date.now()));
       onLocationUpdate?.(cachedLocation);
+      
+      // Check if location is stale and needs refresh (only if very stale)
+      if (locationManager.isLocationStale(60)) { // 60 minutes - less frequent
+        setTimeout(backgroundLocationRefresh, 5000); // Delay by 5 seconds
+      }
       return;
     }
 
-    // Check permission status
-    const permission = await checkLocationPermission();
-    setLocationState(permission === 'granted' ? 'granted' : 
-                    permission === 'denied' ? 'denied' : 'unknown');
+    // Check permission status using location manager
+    const permission = await locationManager.getPermissionStatus();
+    
+    if (permission === 'granted') {
+      // If permission is already granted, auto-request location silently
+      try {
+        const location = await locationManager.getCurrentLocation({ 
+          silent: silent,
+          maximumAge: 300000 // 5 minutes
+        });
+        
+        setUserLocation(location);
+        setLocationState('granted');
+        setLastUpdate(new Date());
+        
+        // Save to local storage and server
+        saveUserLocation(location);
+        await locationManager.saveLocationToServer(location, {
+          source: 'auto_gps',
+          silent: silent
+        });
+        
+        onLocationUpdate?.(location);
+        
+        if (!silent) {
+          toast.success('Location automatically enabled for better job matching');
+        }
+      } catch (error) {
+        console.debug('Auto location failed:', error);
+        setLocationState('denied');
+      }
+    } else {
+      setLocationState(permission === 'denied' ? 'denied' : 'unknown');
+    }
   };
 
   const requestLocation = async () => {
@@ -61,39 +192,32 @@ export default function LocationPermission({
     setLocationState('requesting');
 
     try {
-      const location = await getUserLocation();
+      // Use location manager for comprehensive location handling
+      const location = await locationManager.getCurrentLocation({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000, // 1 minute
+        silent: false
+      });
       
       setUserLocation(location);
       setLocationState('granted');
+      setLastUpdate(new Date());
       
       // Save to localStorage
       saveUserLocation(location);
       
-      // Save to MongoDB via API
+      // Save to server using location manager
       try {
-        const response = await fetch('/api/location', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            lat: location.lat,
-            lng: location.lng,
-            accuracy: location.accuracy,
-            consent: true,
-            source: 'gps'
-          }),
+        await locationManager.saveLocationToServer(location, {
+          source: 'user_gps',
+          consent: true,
+          silent: false
         });
-        
-        if (!response.ok) {
-          console.warn('Failed to save location to database, but continuing with local storage');
-        } else {
-          const data = await response.json();
-          console.log('Location saved to MongoDB:', data.success);
-        }
       } catch (apiError) {
         console.warn('API error saving location:', apiError);
         // Continue with local functionality even if API fails
+        toast.warning('Location enabled locally. Server sync will retry automatically.');
       }
       
       // Notify parent component
@@ -102,19 +226,25 @@ export default function LocationPermission({
       toast.success('Location enabled! Showing jobs near you.');
       setShowPermissionModal(false);
       
+      // Start background updates if autoRefresh is enabled (less frequent)
+      if (autoRefresh) {
+        setTimeout(() => {
+          locationManager.startBackgroundUpdates(30); // 30 minutes instead of 10
+        }, 30000); // Wait 30 seconds before starting
+      }
+      
     } catch (error) {
       console.error('Location error:', error);
+      
+      // Use location manager's error handling
       setError(error.message);
       setLocationState('denied');
       
       // Save rejection state to localStorage
       saveLocationRejection();
       
-      if (error.message.includes('denied') || error.message.includes('blocked')) {
-        toast.error('Location access denied. You can enable it anytime from your browser settings or try again.');
-      } else {
-        toast.error('Unable to get location: ' + error.message);
-      }
+      // Location manager already shows appropriate toast messages
+      
     } finally {
       setLoading(false);
     }

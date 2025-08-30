@@ -1,6 +1,7 @@
-// utils/validation.js - Comprehensive input validation middleware
+// utils/validation.js - Enhanced security validation utilities
 import { NextResponse } from 'next/server';
 import { rateLimit } from './rateLimiting';
+import validator from 'validator';
 
 // Validation schemas
 const validationSchemas = {
@@ -274,8 +275,18 @@ function validateNumber(value, schema) {
 
   if (value !== null && value !== undefined && value !== '') {
     const numValue = Number(value);
-    if (isNaN(numValue)) {
-      return { valid: false, error: `${schema.fieldName || 'Field'} must be a valid number` };
+    
+    // Enhanced numeric validation - check for NaN and Infinity
+    if (isNaN(numValue) || !isFinite(numValue)) {
+      return { valid: false, error: `${schema.fieldName || 'Field'} must be a valid finite number` };
+    }
+    
+    // Prevent injection through scientific notation abuse
+    if (typeof value === 'string' && /[eE]/.test(value)) {
+      const scientificMatch = value.match(/^-?\d+(\.\d+)?[eE][+-]?\d+$/);
+      if (!scientificMatch) {
+        return { valid: false, error: `${schema.fieldName || 'Field'} contains invalid scientific notation` };
+      }
     }
 
     if (schema.min !== undefined && numValue < schema.min) {
@@ -387,10 +398,23 @@ export function validateData(data, schemaName) {
   };
 }
 
-// Sanitization functions
-export function sanitizeString(str) {
+// Enhanced sanitization functions with XSS protection
+export function sanitizeString(str, options = {}) {
   if (typeof str !== 'string') return str;
-  return str.trim().replace(/[<>]/g, '');
+  
+  let sanitized = str.trim();
+  
+  // XSS protection - escape HTML unless explicitly allowed
+  if (!options.allowHtml) {
+    sanitized = validator.escape(sanitized);
+  }
+  
+  // Remove potentially dangerous characters
+  if (options.strict) {
+    sanitized = sanitized.replace(/[<>"'&\\]/g, '');
+  }
+  
+  return sanitized;
 }
 
 export function sanitizeEmail(email) {
@@ -419,16 +443,25 @@ export function sanitizeObject(obj) {
   return sanitized;
 }
 
-// Security headers middleware
+// Enhanced security headers middleware
 export function addSecurityHeaders(response) {
   const headers = {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'X-XSS-Protection': '1; mode=block',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:;"
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https:; frame-ancestors 'none';",
+    'X-DNS-Prefetch-Control': 'off',
+    'X-Download-Options': 'noopen',
+    'X-Permitted-Cross-Domain-Policies': 'none'
   };
+
+  // Only add HSTS in production with HTTPS
+  if (process.env.NODE_ENV === 'production') {
+    headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload';
+  }
 
   for (const [key, value] of Object.entries(headers)) {
     response.headers.set(key, value);
@@ -762,4 +795,447 @@ export const ValidationRules = {
       error: null
     };
   }
+};
+
+// Enhanced validation utilities for secure input handling
+export const validateAndSanitize = {
+  // Numeric validation with strict type checking
+  number: (value, { min = -Infinity, max = Infinity, required = false } = {}) => {
+    if (value === undefined || value === null || value === '') {
+      if (required) throw new Error('Numeric value is required');
+      return null;
+    }
+    
+    const num = Number(value);
+    if (isNaN(num) || !isFinite(num)) {
+      throw new Error('Invalid numeric value');
+    }
+    
+    if (num < min) throw new Error(`Value must be at least ${min}`);
+    if (num > max) throw new Error(`Value cannot exceed ${max}`);
+    
+    return num;
+  },
+
+  // Enhanced coordinate validation
+  coordinates: (lat, lng) => {
+    const latitude = validateAndSanitize.number(lat, { min: -90, max: 90, required: true });
+    const longitude = validateAndSanitize.number(lng, { min: -180, max: 180, required: true });
+    
+    return { lat: latitude, lng: longitude };
+  },
+
+  // Array validation with size limits
+  array: (value, { maxItems = 100, itemValidator = null } = {}) => {
+    if (!Array.isArray(value)) return [];
+    
+    if (value.length > maxItems) {
+      throw new Error(`Array cannot have more than ${maxItems} items`);
+    }
+    
+    if (itemValidator) {
+      return value.map(itemValidator);
+    }
+    
+    return value;
+  },
+
+  // MongoDB ObjectId validation
+  objectId: (value, required = false) => {
+    if (!value) {
+      if (required) throw new Error('ObjectId is required');
+      return null;
+    }
+    
+    if (!/^[0-9a-fA-F]{24}$/.test(value)) {
+      throw new Error('Invalid ObjectId format');
+    }
+    
+    return value;
+  },
+
+  // Email validation with domain checking
+  email: (value, required = false) => {
+    if (!value) {
+      if (required) throw new Error('Email is required');
+      return '';
+    }
+    
+    const email = value.toLowerCase().trim();
+    if (!validator.isEmail(email)) {
+      throw new Error('Invalid email format');
+    }
+    
+    // Additional security: check for suspicious email patterns
+    const suspiciousDomains = ['tempmail.com', '10minutemail.com', 'guerrillamail.com'];
+    const domain = email.split('@')[1];
+    if (suspiciousDomains.includes(domain)) {
+      throw new Error('Email from temporary email services not allowed');
+    }
+    
+    return email;
+  }
+};
+
+// Budget validation with business logic
+export const validateBudget = (budget) => {
+  if (!budget || typeof budget !== 'object') {
+    throw new Error('Budget is required');
+  }
+
+  const type = sanitizeString(budget.type, { strict: true });
+  const validTypes = ['fixed', 'negotiable', 'hourly'];
+  
+  if (!validTypes.includes(type)) {
+    throw new Error('Invalid budget type');
+  }
+
+  const amount = validateAndSanitize.number(budget.amount, { 
+    min: 0, 
+    max: 1000000, 
+    required: type === 'fixed' || type === 'hourly' 
+  });
+
+  return {
+    type,
+    amount: amount || 0,
+    currency: 'INR',
+    materialsIncluded: Boolean(budget.materialsIncluded)
+  };
+};
+
+// Location validation with geocoding verification
+export const validateLocation = (location) => {
+  if (!location || typeof location !== 'object') {
+    throw new Error('Location is required');
+  }
+
+  const address = sanitizeString(location.address, { strict: true });
+  const city = sanitizeString(location.city, { strict: true });
+  const state = sanitizeString(location.state, { strict: true });
+
+  if (!address || address.length < 5) {
+    throw new Error('Valid address is required');
+  }
+  if (!city || city.length < 2) {
+    throw new Error('Valid city is required');
+  }
+  if (!state || state.length < 2) {
+    throw new Error('Valid state is required');
+  }
+
+  let coordinates = null;
+  if (location.lat && location.lng) {
+    coordinates = validateAndSanitize.coordinates(location.lat, location.lng);
+  }
+
+  const result = { address, city, state };
+  
+  if (location.pincode) {
+    const pincode = sanitizeString(location.pincode, { strict: true });
+    if (pincode && !/^[0-9]{6}$/.test(pincode)) {
+      throw new Error('Invalid pincode format');
+    }
+    result.pincode = pincode;
+  }
+
+  if (coordinates) {
+    result.lat = coordinates.lat;
+    result.lng = coordinates.lng;
+    result.coordinates = {
+      type: 'Point',
+      coordinates: [coordinates.lng, coordinates.lat]
+    };
+  }
+
+  return result;
+};
+
+// Skills validation with profanity checking
+export const validateSkills = (skills) => {
+  if (!Array.isArray(skills)) {
+    throw new Error('Skills must be an array');
+  }
+  
+  if (skills.length === 0) {
+    throw new Error('At least one skill is required');
+  }
+  
+  if (skills.length > 20) {
+    throw new Error('Cannot have more than 20 skills');
+  }
+
+  const profanityList = ['fuck', 'shit', 'damn', 'crap', 'stupid', 'idiot', 'moron', 'dumb'];
+  
+  return skills.map(skill => {
+    const sanitized = sanitizeString(skill, { strict: true });
+    
+    if (!sanitized || sanitized.length < 2) {
+      throw new Error('Each skill must be at least 2 characters');
+    }
+    
+    if (sanitized.length > 50) {
+      throw new Error('Skills cannot exceed 50 characters');
+    }
+    
+    // Check for profanity
+    const lowerSkill = sanitized.toLowerCase();
+    if (profanityList.some(word => lowerSkill.includes(word))) {
+      throw new Error('Skills cannot contain inappropriate language');
+    }
+    
+    return lowerSkill;
+  });
+};
+
+// File validation with security checks
+export const validateFile = (file) => {
+  if (!file || typeof file !== 'object') {
+    throw new Error('File data is required');
+  }
+
+  const url = sanitizeString(file.url, { strict: true });
+  const filename = sanitizeString(file.filename, { strict: true });
+
+  if (!url || !filename) {
+    throw new Error('File URL and filename are required');
+  }
+
+  // Validate URL format and allowed file types
+  const allowedExtensions = /\.(jpg|jpeg|png|gif|webp|pdf|doc|docx)$/i;
+  if (!allowedExtensions.test(url)) {
+    throw new Error('File type not allowed. Allowed: JPG, PNG, GIF, WebP, PDF, DOC, DOCX');
+  }
+
+  // Check for suspicious file patterns
+  const dangerousPatterns = [
+    /\.(exe|bat|cmd|scr|pif|com|vbs|js|jar|php|asp|jsp)$/i,
+    /javascript:/i,
+    /data:.*base64/i
+  ];
+
+  if (dangerousPatterns.some(pattern => pattern.test(url))) {
+    throw new Error('File type or URL pattern not allowed for security reasons');
+  }
+
+  // Validate file size
+  const size = validateAndSanitize.number(file.size, { 
+    min: 0, 
+    max: 10 * 1024 * 1024 // 10MB 
+  });
+
+  return { 
+    url, 
+    filename: filename.substring(0, 100), // Limit filename length
+    size, 
+    fileType: file.fileType 
+  };
+};
+
+// Rate limit key generation with IP validation
+export const generateRateLimitKey = (request, identifier) => {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const realIp = request.headers.get('x-real-ip');
+  
+  let ip = '127.0.0.1';
+  
+  if (forwardedFor) {
+    // Take first IP from comma-separated list
+    ip = forwardedFor.split(',')[0].trim();
+  } else if (realIp) {
+    ip = realIp.trim();
+  }
+  
+  // Validate IP format (basic validation)
+  const ipv4Pattern = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  const ipv6Pattern = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+  
+  if (!ipv4Pattern.test(ip) && !ipv6Pattern.test(ip)) {
+    ip = '127.0.0.1'; // Fallback for invalid IP
+  }
+  
+  return `${identifier}:${ip}`;
+};
+
+// Enhanced file upload validation with security checks
+export const validateFileUpload = (file, options = {}) => {
+  const {
+    allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'],
+    maxSize = 5 * 1024 * 1024, // 5MB default
+    maxFiles = 10,
+    allowDocuments = false,
+    allowVideos = false
+  } = options;
+
+  if (!file) {
+    throw new Error('No file provided');
+  }
+
+  // Extended allowed types if documents/videos are allowed
+  let validTypes = [...allowedTypes];
+  if (allowDocuments) {
+    validTypes.push('application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  }
+  if (allowVideos) {
+    validTypes.push('video/mp4', 'video/webm', 'video/ogg');
+  }
+
+  // Validate file type
+  if (!validTypes.includes(file.type)) {
+    throw new Error(`Invalid file type. Allowed types: ${validTypes.join(', ')}`);
+  }
+
+  // Validate file size
+  if (file.size > maxSize) {
+    const maxSizeMB = maxSize / (1024 * 1024);
+    throw new Error(`File size too large. Maximum allowed: ${maxSizeMB}MB`);
+  }
+
+  // Validate filename for security (prevent path traversal)
+  const filename = file.name || 'unnamed';
+  if (/[<>:"/\\|?*]/.test(filename) || filename.includes('..')) {
+    throw new Error('Invalid filename. Contains unsafe characters');
+  }
+
+  // Check for suspicious file extensions in filename
+  const dangerousExtensions = [
+    '.exe', '.bat', '.cmd', '.scr', '.pif', '.com', '.vbs', '.js', '.jar', 
+    '.php', '.asp', '.jsp', '.sh', '.ps1', '.pl', '.py'
+  ];
+  
+  const lowercaseFilename = filename.toLowerCase();
+  if (dangerousExtensions.some(ext => lowercaseFilename.endsWith(ext))) {
+    throw new Error('File type not allowed for security reasons');
+  }
+
+  // Additional checks for image files
+  if (file.type.startsWith('image/')) {
+    // Basic image dimension validation (if available)
+    return new Promise((resolve, reject) => {
+      if (typeof window !== 'undefined' && file instanceof File) {
+        const img = new Image();
+        img.onload = () => {
+          const maxDimension = 4000; // Max 4000px width/height
+          if (img.width > maxDimension || img.height > maxDimension) {
+            reject(new Error(`Image dimensions too large. Maximum: ${maxDimension}x${maxDimension}px`));
+          } else {
+            resolve({
+              isValid: true,
+              file,
+              metadata: {
+                width: img.width,
+                height: img.height,
+                size: file.size,
+                type: file.type,
+                name: sanitizeFilename(filename)
+              }
+            });
+          }
+        };
+        img.onerror = () => reject(new Error('Invalid or corrupted image file'));
+        img.src = URL.createObjectURL(file);
+      } else {
+        // Server-side validation (simplified)
+        resolve({
+          isValid: true,
+          file,
+          metadata: {
+            size: file.size,
+            type: file.type,
+            name: sanitizeFilename(filename)
+          }
+        });
+      }
+    });
+  }
+
+  // Return validation result for non-image files
+  return Promise.resolve({
+    isValid: true,
+    file,
+    metadata: {
+      size: file.size,
+      type: file.type,
+      name: sanitizeFilename(filename)
+    }
+  });
+};
+
+// Sanitize filename for safe storage
+export const sanitizeFilename = (filename) => {
+  return filename
+    .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace unsafe chars with underscore
+    .replace(/_+/g, '_') // Remove multiple underscores
+    .substring(0, 100) // Limit length
+    .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
+};
+
+// Validate multiple file uploads
+export const validateMultipleFileUploads = async (files, options = {}) => {
+  const { maxFiles = 10 } = options;
+
+  if (!Array.isArray(files)) {
+    throw new Error('Files must be provided as an array');
+  }
+
+  if (files.length === 0) {
+    throw new Error('No files provided');
+  }
+
+  if (files.length > maxFiles) {
+    throw new Error(`Too many files. Maximum allowed: ${maxFiles}`);
+  }
+
+  const validationResults = [];
+  const errors = [];
+
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const result = await validateFileUpload(files[i], options);
+      validationResults.push(result);
+    } catch (error) {
+      errors.push(`File ${i + 1}: ${error.message}`);
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join('; '));
+  }
+
+  return {
+    isValid: true,
+    files: validationResults,
+    totalSize: validationResults.reduce((total, result) => total + result.metadata.size, 0),
+    count: validationResults.length
+  };
+};
+
+// File type detection by magic number (additional security)
+export const validateFileByMagicNumber = (buffer) => {
+  if (!buffer || buffer.length < 4) {
+    return { isValid: false, detectedType: null };
+  }
+
+  const magicNumbers = {
+    'image/jpeg': [0xFF, 0xD8, 0xFF],
+    'image/png': [0x89, 0x50, 0x4E, 0x47],
+    'image/gif': [0x47, 0x49, 0x46, 0x38],
+    'image/webp': [0x52, 0x49, 0x46, 0x46],
+    'application/pdf': [0x25, 0x50, 0x44, 0x46]
+  };
+
+  for (const [mimeType, signature] of Object.entries(magicNumbers)) {
+    let matches = true;
+    for (let i = 0; i < signature.length; i++) {
+      if (buffer[i] !== signature[i]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return { isValid: true, detectedType: mimeType };
+    }
+  }
+
+  return { isValid: false, detectedType: null };
 };

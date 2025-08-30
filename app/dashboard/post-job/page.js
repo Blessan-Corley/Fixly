@@ -44,6 +44,7 @@ import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 import { searchCities, skillCategories, searchSkills } from '../../../data/cities';
 import LocationPermission from '../../../components/ui/LocationPermission';
+import LocationInput from '../../../components/ui/LocationInput';
 import { loadUserLocation, getUserLocation } from '../../../utils/locationUtils';
 
 export default function PostJobPage() {
@@ -144,16 +145,20 @@ function PostJobContent() {
     }
   };
 
-  // City search
+  // City search with debounce to prevent constant updates
   useEffect(() => {
-    if (citySearch.length > 0) {
-      const results = searchCities(citySearch);
-      setCityResults(results);
-      setShowCityDropdown(results.length > 0);
-    } else {
-      setCityResults([]);
-      setShowCityDropdown(false);
-    }
+    const timer = setTimeout(() => {
+      if (citySearch.length > 2) {
+        const results = searchCities(citySearch);
+        setCityResults(results);
+        setShowCityDropdown(results.length > 0);
+      } else {
+        setCityResults([]);
+        setShowCityDropdown(false);
+      }
+    }, 300); // 300ms debounce to prevent constant updates
+
+    return () => clearTimeout(timer);
   }, [citySearch]);
 
   // Skill search
@@ -640,114 +645,41 @@ function PostJobContent() {
         </label>
       </div>
 
-      {/* Location Helper */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <MapPin className="h-5 w-5 text-blue-600 mr-2" />
-            <div>
-              <p className="text-sm font-medium text-blue-900">Add precise location</p>
-              <p className="text-xs text-blue-700">
-                {formData.location.lat && formData.location.lng ? (
-                  `GPS coordinates added (${formData.location.lat.toFixed(4)}, ${formData.location.lng.toFixed(4)})`
-                ) : (
-                  'Add GPS coordinates to help fixers find the exact location'
-                )}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={useCurrentLocation}
-            className="btn-primary text-xs px-3 py-2 flex items-center"
-          >
-            <Navigation className="h-3 w-3 mr-1" />
-            Use Current Location
-          </button>
-        </div>
-        {!locationEnabled && (
-          <div className="mt-3 pt-3 border-t border-blue-200">
-            <LocationPermission 
-              onLocationUpdate={handleLocationUpdate}
-              showBanner={false}
-            />
-          </div>
-        )}
-      </div>
+      {/* Smart Location Input with Auto-fill */}
+      <LocationInput 
+        value={{
+          coordinates: formData.location.lat && formData.location.lng ? {
+            lat: formData.location.lat,
+            lng: formData.location.lng
+          } : null,
+          formatted: formData.location.address,
+          street: '',
+          area: '',
+          city: formData.location.city,
+          district: '',
+          state: formData.location.state,
+          pincode: formData.location.pincode,
+          country: 'India'
+        }}
+        onChange={(locationData) => {
+          handleInputChange('location', {
+            address: locationData.formatted,
+            city: locationData.city,
+            state: locationData.state,
+            pincode: locationData.pincode,
+            lat: locationData.coordinates?.lat || null,
+            lng: locationData.coordinates?.lng || null
+          });
+        }}
+        required={true}
+        placeholder="Enter job location or use GPS"
+        label="Job Location"
+        showFullForm={true}
+        compact={false}
+        className="mb-6"
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-fixly-text mb-2">
-          Complete Address *
-        </label>
-        <textarea
-          value={formData.location.address}
-          onChange={(e) => handleInputChange('location.address', e.target.value)}
-          placeholder="Enter the complete address where work needs to be done"
-          className="textarea-field h-20"
-        />
-        {errors['location.address'] && (
-          <p className="text-red-500 text-sm mt-1">{errors['location.address']}</p>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="relative">
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            City *
-          </label>
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-            <input
-              type="text"
-              value={formData.location.city || citySearch}
-              onChange={(e) => {
-                setCitySearch(e.target.value);
-                if (formData.location.city) {
-                  handleInputChange('location.city', '');
-                }
-              }}
-              placeholder="Search for your city"
-              className="input-field pl-10"
-            />
-          </div>
-          
-          {showCityDropdown && (
-            <div className="absolute z-10 mt-1 w-full bg-fixly-card border border-fixly-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-              {cityResults.map((city, index) => (
-                <button
-                  key={index}
-                  onClick={() => selectCity(city)}
-                  className="w-full px-4 py-2 text-left hover:bg-fixly-accent/10"
-                >
-                  <div className="font-medium text-fixly-text">{city.name}</div>
-                  <div className="text-sm text-fixly-text-light">{city.state}</div>
-                </button>
-              ))}
-            </div>
-          )}
-          
-          {errors['location.city'] && (
-            <p className="text-red-500 text-sm mt-1">{errors['location.city']}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Pincode
-          </label>
-          <input
-            type="text"
-            value={formData.location.pincode}
-            onChange={(e) => handleInputChange('location.pincode', e.target.value)}
-            placeholder="6-digit pincode"
-            className="input-field"
-            maxLength={6}
-          />
-          {errors['location.pincode'] && (
-            <p className="text-red-500 text-sm mt-1">{errors['location.pincode']}</p>
-          )}
-        </div>
-      </div>
+      {/* Note: The LocationInput component above handles all address fields automatically */}
     </motion.div>
   );
 

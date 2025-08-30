@@ -80,16 +80,20 @@ export default function ProfilePage() {
     }
   }, [user, editing]);
 
-  // City search
+  // City search with debounce to prevent constant updates
   useEffect(() => {
-    if (citySearch.length > 0) {
-      const results = searchCities(citySearch);
-      setCityResults(results);
-      setShowCityDropdown(results.length > 0);
-    } else {
-      setCityResults([]);
-      setShowCityDropdown(false);
-    }
+    const timer = setTimeout(() => {
+      if (citySearch.length > 2) {
+        const results = searchCities(citySearch);
+        setCityResults(results);
+        setShowCityDropdown(results.length > 0);
+      } else {
+        setCityResults([]);
+        setShowCityDropdown(false);
+      }
+    }, 300); // 300ms debounce to prevent constant updates
+
+    return () => clearTimeout(timer);
   }, [citySearch]);
 
   const handleInputChange = useCallback((field, value) => {
@@ -199,14 +203,14 @@ export default function ProfilePage() {
 
   const ProfileSection = memo(({ title, children, editable = false }) => (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-fixly-text">{title}</h3>
         {editable && !editing && (
           <button
             onClick={() => setEditing(true)}
-            className="btn-ghost text-sm"
+            className="btn-secondary text-sm px-4 py-2 flex items-center gap-2 hover:bg-fixly-accent hover:text-white transition-all duration-200"
           >
-            <Edit className="h-4 w-4 mr-1" />
+            <Edit className="h-4 w-4" />
             Edit
           </button>
         )}
@@ -241,22 +245,25 @@ export default function ProfilePage() {
         {/* Left Column - Profile Photo & Basic Info */}
         <div className="space-y-6">
           {/* Profile Photo */}
-          <ProfileSection title="Profile Photo">
+          <div className="card">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-fixly-text">Profile Photo</h3>
+            </div>
             <div className="text-center">
               <div className="relative inline-block">
                 <img
                   src={user.profilePhoto || '/default-avatar.png'}
                   alt={user.name}
-                  className="h-24 w-24 rounded-full object-cover mx-auto"
+                  className="h-32 w-32 rounded-full object-cover mx-auto border-4 border-fixly-border shadow-lg"
                 />
                 <label
                   htmlFor="photo-upload"
-                  className="absolute bottom-0 right-0 bg-fixly-accent rounded-full p-2 cursor-pointer hover:bg-fixly-accent-dark transition-colors"
+                  className="absolute bottom-2 right-2 bg-fixly-accent rounded-full p-3 cursor-pointer hover:bg-fixly-accent-dark transition-all duration-200 shadow-lg"
                 >
                   {uploading ? (
-                    <Loader className="animate-spin h-4 w-4 text-fixly-text" />
+                    <Loader className="animate-spin h-4 w-4 text-white" />
                   ) : (
-                    <Camera className="h-4 w-4 text-fixly-text" />
+                    <Camera className="h-4 w-4 text-white" />
                   )}
                 </label>
                 <input
@@ -267,78 +274,91 @@ export default function ProfilePage() {
                   className="hidden"
                 />
               </div>
-              <p className="text-sm text-fixly-text-muted mt-2">
+              <p className="text-sm text-fixly-text-muted mt-3">
                 Click camera to change photo
               </p>
             </div>
-          </ProfileSection>
+          </div>
 
           {/* Account Status */}
-          <ProfileSection title="Account Status">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-fixly-text-muted">Verification</span>
+          <div className="card">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-fixly-text">Account Status</h3>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between py-2 border-b border-fixly-border/50">
+                <span className="text-fixly-text-muted font-medium">Verification</span>
                 <div className="flex items-center">
                   {user.isVerified ? (
                     <>
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                      <span className="text-green-600 text-sm">Verified</span>
+                      <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                      <span className="text-green-600 text-sm font-medium">Verified</span>
                     </>
                   ) : (
                     <>
-                      <AlertCircle className="h-4 w-4 text-orange-500 mr-1" />
-                      <span className="text-orange-600 text-sm">Pending</span>
+                      <AlertCircle className="h-4 w-4 text-orange-500 mr-2" />
+                      <span className="text-orange-600 text-sm font-medium">Pending</span>
                     </>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-fixly-text-muted">Member Since</span>
-                <span className="text-sm text-fixly-text">
+              <div className="flex items-center justify-between py-2 border-b border-fixly-border/50">
+                <span className="text-fixly-text-muted font-medium">Member Since</span>
+                <span className="text-sm text-fixly-text font-medium">
                   {new Date(user.createdAt).toLocaleDateString()}
                 </span>
               </div>
 
               {user.role === 'fixer' && (
                 <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-fixly-text-muted">Rating</span>
+                  <div className="flex items-center justify-between py-2 border-b border-fixly-border/50">
+                    <span className="text-fixly-text-muted font-medium">Rating</span>
                     <div className="flex items-center">
-                      <Star className="h-4 w-4 text-yellow-500 mr-1" />
-                      <span className="text-sm text-fixly-text">
+                      <Star className="h-4 w-4 text-yellow-500 mr-2" />
+                      <span className="text-sm text-fixly-text font-medium">
                         {user.rating?.average?.toFixed(1) || '0.0'} ({user.rating?.count || 0})
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-fixly-text-muted">Jobs Completed</span>
-                    <span className="text-sm text-fixly-text">
+                  <div className="flex items-center justify-between py-2 border-b border-fixly-border/50">
+                    <span className="text-fixly-text-muted font-medium">Jobs Completed</span>
+                    <span className="text-sm text-fixly-text font-medium">
                       {user.jobsCompleted || 0}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <span className="text-fixly-text-muted">Plan</span>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-fixly-text-muted font-medium">Plan</span>
                     <div className="flex items-center">
                       {user.plan?.type === 'pro' ? (
                         <>
-                          <Award className="h-4 w-4 text-fixly-accent mr-1" />
+                          <Award className="h-4 w-4 text-fixly-accent mr-2" />
                           <span className="text-fixly-accent font-medium text-sm">Pro</span>
                         </>
                       ) : (
-                        <span className="text-sm text-fixly-text">Free</span>
+                        <span className="text-sm text-fixly-text font-medium">Free</span>
                       )}
                     </div>
                   </div>
                 </>
               )}
             </div>
-          </ProfileSection>
+          </div>
 
           {/* Account Verification */}
-          <ProfileVerificationStatus user={user} showActions={true} />
+          <div className="card">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-fixly-text">Verification Status</h3>
+              {!user.isVerified && (
+                <button className="btn-primary text-sm px-4 py-2">
+                  Verify Now
+                </button>
+              )}
+            </div>
+            <ProfileVerificationStatus user={user} showActions={true} />
+          </div>
         </div>
 
         {/* Right Column - Detailed Information */}
@@ -747,42 +767,50 @@ export default function ProfilePage() {
 
           {/* Action Buttons */}
           {editing && (
-            <div className="flex space-x-4">
-              <button
-                onClick={handleSave}
-                disabled={loading}
-                className="btn-primary flex items-center"
-              >
-                {loading ? (
-                  <Loader className="animate-spin h-4 w-4 mr-2" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
-                )}
-                Save Changes
-              </button>
-              <button
-                onClick={() => {
-                  setEditing(false);
-                  // Reset form data
-                  setFormData({
-                    name: user.name || '',
-                    bio: user.bio || '',
-                    location: user.location || null,
-                    skills: user.skills || [],
-                    availableNow: user.availableNow ?? true,
-                    serviceRadius: user.serviceRadius || 10,
-                    preferences: {
-                      emailNotifications: user.preferences?.emailNotifications ?? true,
-                      smsNotifications: user.preferences?.smsNotifications ?? true,
-                      jobAlerts: user.preferences?.jobAlerts ?? true,
-                      marketingEmails: user.preferences?.marketingEmails ?? false
-                    }
-                  });
-                }}
-                className="btn-ghost"
-              >
-                Cancel
-              </button>
+            <div className="card bg-fixly-accent/5 border-fixly-accent/20">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="btn-primary flex items-center justify-center px-6 py-3 text-base font-medium"
+                >
+                  {loading ? (
+                    <>
+                      <Loader className="animate-spin h-5 w-5 mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-5 w-5 mr-2" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setEditing(false);
+                    // Reset form data
+                    setFormData({
+                      name: user.name || '',
+                      bio: user.bio || '',
+                      location: user.location || null,
+                      skills: user.skills || [],
+                      availableNow: user.availableNow ?? true,
+                      serviceRadius: user.serviceRadius || 10,
+                      preferences: {
+                        emailNotifications: user.preferences?.emailNotifications ?? true,
+                        smsNotifications: user.preferences?.smsNotifications ?? true,
+                        jobAlerts: user.preferences?.jobAlerts ?? true,
+                        marketingEmails: user.preferences?.marketingEmails ?? false
+                      }
+                    });
+                  }}
+                  className="btn-ghost px-6 py-3 text-base font-medium"
+                >
+                  <X className="h-5 w-5 mr-2" />
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -8,6 +8,33 @@ const locationPreferenceSchema = new mongoose.Schema({
     unique: true
   },
   
+  // User identification fields for easy searching (denormalized for performance)
+  userIdentifier: {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100
+    },
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true
+    },
+    username: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true
+    },
+    role: {
+      type: String,
+      enum: ['hirer', 'fixer', 'admin'],
+      required: true
+    }
+  },
+  
   // Current location data
   currentLocation: {
     lat: {
@@ -149,8 +176,18 @@ const locationPreferenceSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes for performance  
+// Comprehensive indexes for performance and easy searching
 locationPreferenceSchema.index({ lastUpdated: -1 });
+locationPreferenceSchema.index({ 'userIdentifier.email': 1 }); // Fast search by email
+locationPreferenceSchema.index({ 'userIdentifier.username': 1 }); // Fast search by username
+locationPreferenceSchema.index({ 'userIdentifier.name': 'text' }); // Text search by name
+locationPreferenceSchema.index({ 'userIdentifier.role': 1 }); // Filter by user role
+locationPreferenceSchema.index({ 'currentLocation.city': 1 }); // Search by city
+locationPreferenceSchema.index({ 'currentLocation.state': 1 }); // Search by state
+locationPreferenceSchema.index({ 
+  'userIdentifier.email': 1, 
+  'currentLocation.city': 1 
+}); // Combined user and location search
 
 // Geospatial index for location-based queries
 locationPreferenceSchema.index({
@@ -158,6 +195,14 @@ locationPreferenceSchema.index({
   'currentLocation.lng': 1
 }, {
   name: 'location_2d'
+});
+
+// Compound index for nearby user searches
+locationPreferenceSchema.index({
+  'currentLocation.lat': 1,
+  'currentLocation.lng': 1,
+  'userIdentifier.role': 1,
+  'preferences.locationSharingConsent': 1
 });
 
 // Virtual for getting location age
@@ -267,20 +312,90 @@ locationPreferenceSchema.methods.updateLocation = function(locationData) {
   return this.save();
 };
 
-// Static method to find users near a location
-locationPreferenceSchema.statics.findNearbyUsers = function(lat, lng, radiusKm = 10) {
-  return this.find({
-    'currentLocation.lat': {
-      $exists: true,
-      $ne: null
-    },
-    'currentLocation.lng': {
-      $exists: true,
-      $ne: null
-    },
+// Enhanced static methods for user-friendly searching
+
+// Find users by email (exact or partial match)
+locationPreferenceSchema.statics.findByEmail = function(email, includeLocation = true) {
+  const query = this.find({ 'userIdentifier.email': new RegExp(email, 'i') });
+  return includeLocation ? query : query.select('-locationHistory -recentLocations');
+};
+
+// Find users by username (exact or partial match)
+locationPreferenceSchema.statics.findByUsername = function(username, includeLocation = true) {
+  const query = this.find({ 'userIdentifier.username': new RegExp(username, 'i') });
+  return includeLocation ? query : query.select('-locationHistory -recentLocations');
+};
+
+// Find users by name (text search)
+locationPreferenceSchema.statics.findByName = function(name, includeLocation = true) {
+  const query = this.find({ $text: { $search: name } });
+  return includeLocation ? query : query.select('-locationHistory -recentLocations');
+};
+
+// Find users by city
+locationPreferenceSchema.statics.findByCity = function(city) {
+  return this.find({ 'currentLocation.city': new RegExp(city, 'i') })
+    .select('user userIdentifier currentLocation lastLocationUpdate');
+};
+
+// Find users by state
+locationPreferenceSchema.statics.findByState = function(state) {
+  return this.find({ 'currentLocation.state': new RegExp(state, 'i') })
+    .select('user userIdentifier currentLocation lastLocationUpdate');
+};
+
+// Find users by role and location
+locationPreferenceSchema.statics.findByRoleAndLocation = function(role, city = null, state = null) {
+  const query = { 'userIdentifier.role': role };
+  if (city) query['currentLocation.city'] = new RegExp(city, 'i');
+  if (state) query['currentLocation.state'] = new RegExp(state, 'i');
+  return this.find(query).select('user userIdentifier currentLocation lastLocationUpdate');
+};
+
+// Advanced search with multiple criteria
+locationPreferenceSchema.statics.searchUsers = function(criteria = {}) {
+  const { email, username, name, city, state, role, hasRecentLocation } = criteria;
+  let query = {};
+  
+  if (email) query['userIdentifier.email'] = new RegExp(email, 'i');
+  if (username) query['userIdentifier.username'] = new RegExp(username, 'i');
+  if (city) query['currentLocation.city'] = new RegExp(city, 'i');
+  if (state) query['currentLocation.state'] = new RegExp(state, 'i');
+  if (role) query['userIdentifier.role'] = role;
+  
+  // Filter by recent location updates (within last 24 hours)
+  if (hasRecentLocation) {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    query.lastLocationUpdate = { $gte: yesterday };
+  }
+  
+  let mongoQuery = this.find(query);
+  
+  // Add text search for name if provided
+  if (name) {
+    mongoQuery = this.find({ 
+      ...query,
+      $text: { $search: name } 
+    }, { score: { $meta: 'textScore' } }).sort({ score: { $meta: 'textScore' } });
+  }
+  
+  return mongoQuery.select('user userIdentifier currentLocation lastLocationUpdate preferences.locationSharingConsent');
+};
+
+// Find users near a location with user identification
+locationPreferenceSchema.statics.findNearbyUsers = function(lat, lng, radiusKm = 10, role = null) {
+  const baseQuery = {
+    'currentLocation.lat': { $exists: true, $ne: null },
+    'currentLocation.lng': { $exists: true, $ne: null },
     'preferences.autoLocationEnabled': true,
     'preferences.locationSharingConsent': true
-  }).where({
+  };
+  
+  if (role) {
+    baseQuery['userIdentifier.role'] = role;
+  }
+  
+  return this.find(baseQuery).where({
     $expr: {
       $lte: [
         {
@@ -310,7 +425,33 @@ locationPreferenceSchema.statics.findNearbyUsers = function(lat, lng, radiusKm =
         radiusKm
       ]
     }
-  });
+  }).select('user userIdentifier currentLocation lastLocationUpdate');
+};
+
+// Get location statistics by role or city
+locationPreferenceSchema.statics.getLocationStats = function(groupBy = 'role') {
+  const groupField = groupBy === 'role' ? '$userIdentifier.role' : 
+                     groupBy === 'city' ? '$currentLocation.city' :
+                     groupBy === 'state' ? '$currentLocation.state' : '$userIdentifier.role';
+                     
+  return this.aggregate([
+    {
+      $group: {
+        _id: groupField,
+        count: { $sum: 1 },
+        recentUpdates: {
+          $sum: {
+            $cond: [
+              { $gte: ['$lastLocationUpdate', new Date(Date.now() - 24 * 60 * 60 * 1000)] },
+              1,
+              0
+            ]
+          }
+        }
+      }
+    },
+    { $sort: { count: -1 } }
+  ]);
 };
 
 // Pre-save middleware to clean old location history

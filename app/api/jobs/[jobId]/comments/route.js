@@ -1,13 +1,13 @@
 // app/api/jobs/[jobId]/comments/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../../lib/auth';
-import connectDB from '../../../../../lib/mongodb';
-import Job from '../../../../../models/Job';
-import User from '../../../../../models/User';
-import { rateLimit } from '../../../../../utils/rateLimiting';
-import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
-// import { emitToJob, emitToUser } from '../../../../lib/socket';
+import { authOptions } from '@/lib/auth';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
+import { rateLimit } from '@/utils/rateLimiting';
+import { moderateContent } from '@/utils/sensitiveContentFilter';
+import { emitToJob, emitToUser } from '@/lib/socket';
 
 export async function POST(request, { params }) {
   try {
@@ -163,19 +163,44 @@ export async function POST(request, { params }) {
     }
 
     // Emit real-time event to all users viewing this job
-    // TODO: Fix socket import and re-enable real-time events
-    // emitToJob(jobId, 'comment:new', {
-    //   comment: newComment,
-    //   jobId: jobId,
-    //   author: {
-    //     _id: user._id,
-    //     name: user.name,
-    //     username: user.username,
-    //     photoURL: user.photoURL,
-    //     role: user.role
-    //   },
-    //   timestamp: new Date()
-    // });
+    try {
+      emitToJob(jobId, 'comment:new', {
+        comment: newComment,
+        jobId: jobId,
+        author: {
+          _id: user._id,
+          name: user.name,
+          username: user.username,
+          profilePhoto: user.profilePhoto,
+          role: user.role
+        },
+        timestamp: new Date()
+      });
+      
+      // Also emit to job participants specifically
+      if (job.createdBy && job.createdBy.toString() !== user._id.toString()) {
+        emitToUser(job.createdBy.toString(), 'notification', {
+          type: 'new_comment',
+          title: 'New Comment',
+          message: `${user.name} commented on your job "${job.title}"`,
+          jobId: jobId,
+          commentId: newComment._id
+        });
+      }
+      
+      if (job.assignedTo && job.assignedTo.toString() !== user._id.toString()) {
+        emitToUser(job.assignedTo.toString(), 'notification', {
+          type: 'new_comment',
+          title: 'New Comment',
+          message: `${user.name} commented on the job "${job.title}"`,
+          jobId: jobId,
+          commentId: newComment._id
+        });
+      }
+    } catch (socketError) {
+      console.warn('Socket emission failed:', socketError);
+      // Continue execution - socket errors shouldn't fail the API
+    }
 
     return NextResponse.json({
       success: true,
@@ -426,20 +451,35 @@ export async function PUT(request, { params }) {
     }
 
     // Emit real-time event for new reply
-    // TODO: Fix socket import and re-enable real-time events
-    // emitToJob(jobId, 'comment:reply', {
-    //   commentId: commentId,
-    //   reply: updatedComment.replies[updatedComment.replies.length - 1],
-    //   jobId: jobId,
-    //   author: {
-    //     _id: user._id,
-    //     name: user.name,
-    //     username: user.username,
-    //     photoURL: user.photoURL,
-    //     role: user.role
-    //   },
-    //   timestamp: new Date()
-    // });
+    try {
+      emitToJob(jobId, 'comment:reply', {
+        commentId: commentId,
+        reply: updatedComment.replies[updatedComment.replies.length - 1],
+        jobId: jobId,
+        author: {
+          _id: user._id,
+          name: user.name,
+          username: user.username,
+          profilePhoto: user.profilePhoto,
+          role: user.role
+        },
+        timestamp: new Date()
+      });
+
+      // Notify the original commenter
+      if (comment.author.toString() !== user._id.toString()) {
+        emitToUser(comment.author.toString(), 'notification', {
+          type: 'comment_reply',
+          title: 'New Reply',
+          message: `${user.name} replied to your comment on "${job.title}"`,
+          jobId: jobId,
+          commentId: commentId
+        });
+      }
+    } catch (socketError) {
+      console.warn('Socket emission failed:', socketError);
+      // Continue execution - socket errors shouldn't fail the API
+    }
 
     return NextResponse.json({
       success: true,
@@ -545,15 +585,19 @@ export async function DELETE(request, { params }) {
     }
 
     // Emit real-time event for comment/reply deletion
-    // TODO: Fix socket import and re-enable real-time events
-    // emitToJob(jobId, 'comment:deleted', {
-    //   commentId: commentId,
-    //   replyId: replyId,
-    //   jobId: jobId,
-    //   deletedBy: user._id,
-    //   type: replyId ? 'reply' : 'comment',
-    //   timestamp: new Date()
-    // });
+    try {
+      emitToJob(jobId, 'comment:deleted', {
+        commentId: commentId,
+        replyId: replyId,
+        jobId: jobId,
+        deletedBy: user._id,
+        type: replyId ? 'reply' : 'comment',
+        timestamp: new Date()
+      });
+    } catch (socketError) {
+      console.warn('Socket emission failed:', socketError);
+      // Continue execution - socket errors shouldn't fail the API
+    }
 
     return NextResponse.json({
       success: true,

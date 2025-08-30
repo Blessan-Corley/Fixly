@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn, getSession, signOut } from 'next-auth/react';
+import { signIn, getSession, signOut, useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Phone, 
@@ -127,6 +127,7 @@ const validatePassword = (password) => {
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { update } = useSession();
   const [urlRole, setUrlRole] = useState('hirer');
   const method = searchParams.get('method');
   
@@ -157,6 +158,8 @@ export default function SignupPage() {
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [googleUser, setGoogleUser] = useState(null);
   const [showSkillModal, setShowSkillModal] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [locationPermissionAsked, setLocationPermissionAsked] = useState(false);
   
   // Search states
   const [citySearch, setCitySearch] = useState('');
@@ -289,17 +292,105 @@ export default function SignupPage() {
     return () => clearTimeout(timer);
   }, [formData.username]);
 
-  // City search
+  // City search with debounce to prevent page refreshes
   useEffect(() => {
-    if (citySearch.length > 0) {
-      const results = searchCities(citySearch);
-      setCityResults(results);
-      setShowCityDropdown(results.length > 0);
-    } else {
-      setCityResults([]);
-      setShowCityDropdown(false);
-    }
+    const timer = setTimeout(() => {
+      if (citySearch.length > 2) {
+        const results = searchCities(citySearch);
+        setCityResults(results);
+        setShowCityDropdown(results.length > 0);
+      } else {
+        setCityResults([]);
+        setShowCityDropdown(false);
+      }
+    }, 300); // 300ms debounce to prevent constant updates
+
+    return () => clearTimeout(timer);
   }, [citySearch]);
+
+  // Automatic location detection when reaching location step
+  useEffect(() => {
+    if (currentStep === 4 && !formData.location && !locationPermissionAsked) {
+      detectUserLocation();
+    }
+  }, [currentStep, formData.location, locationPermissionAsked]);
+
+  const detectUserLocation = async () => {
+    if (!navigator.geolocation) {
+      console.log('Geolocation not supported');
+      return;
+    }
+
+    setLocationPermissionAsked(true);
+    setDetectingLocation(true);
+
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          reject,
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 300000 // 5 minutes
+          }
+        );
+      });
+
+      const { latitude, longitude } = position.coords;
+      
+      // Reverse geocode to get city name
+      await reverseGeocode(latitude, longitude);
+      
+    } catch (error) {
+      console.log('Location detection failed:', error);
+      if (error.code === 1) {
+        toast.info('Location access denied. Please search for your city manually.');
+      } else if (error.code === 2) {
+        toast.warning('Unable to detect location. Please search for your city manually.');
+      }
+    } finally {
+      setDetectingLocation(false);
+    }
+  };
+
+  const reverseGeocode = async (lat, lng) => {
+    try {
+      // Use a simple approach - find closest city from our cities data
+      const allCities = searchCities(''); // Get all cities
+      let closestCity = null;
+      let minDistance = Infinity;
+
+      allCities.forEach(city => {
+        if (city.lat && city.lng) {
+          const distance = Math.sqrt(
+            Math.pow(city.lat - lat, 2) + Math.pow(city.lng - lng, 2)
+          );
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestCity = city;
+          }
+        }
+      });
+
+      if (closestCity && minDistance < 1) { // Within ~100km
+        const locationData = {
+          name: closestCity.name,
+          state: closestCity.state,
+          lat: lat,
+          lng: lng
+        };
+        
+        handleInputChange('location', locationData);
+        toast.success(`Location detected: ${closestCity.name}, ${closestCity.state}`);
+      } else {
+        toast.info('Could not find a nearby city. Please search manually.');
+      }
+    } catch (error) {
+      console.error('Reverse geocoding failed:', error);
+      toast.info('Please search for your city manually.');
+    }
+  };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -354,6 +445,8 @@ export default function SignupPage() {
             newErrors.username = validation.error;
           } else if (usernameAvailable === false) {
             newErrors.username = 'Username is already taken';
+          } else if (usernameAvailable === null && formData.username.length >= 3) {
+            newErrors.username = 'Please wait for username availability check';
           }
         }
         
@@ -432,9 +525,24 @@ export default function SignupPage() {
       // Show validation errors
       const errorMessages = Object.values(errors).filter(msg => msg);
       if (errorMessages.length > 0) {
-        toast.error(`Please fill in all required fields: ${errorMessages.length} error(s) found`);
+        toast.error(`Please fix the following: ${errorMessages[0]}`);
       }
       return;
+    }
+
+    // Additional username validation for Google users
+    if (authMethod === 'google' && googleUser) {
+      if (!formData.username || formData.username.length < 3) {
+        toast.error('Username must be at least 3 characters');
+        setErrors(prev => ({ ...prev, username: 'Username must be at least 3 characters' }));
+        return;
+      }
+      
+      if (usernameAvailable !== true) {
+        toast.error('Please choose an available username');
+        setErrors(prev => ({ ...prev, username: 'Username not available' }));
+        return;
+      }
     }
 
     setLoading(true);
@@ -450,6 +558,7 @@ export default function SignupPage() {
         
         const googleCompletionData = {
           role: formData.role,
+          username: formData.username.trim().toLowerCase(),
           phone: formattedPhone,
           location: formData.location ? {
             city: formData.location.name,
@@ -474,13 +583,34 @@ export default function SignupPage() {
         if (response.ok && data.success) {
           toast.success('Profile completed successfully! 🎉');
           
-          // Wait for session to update
-          setTimeout(() => {
-            router.replace('/dashboard');
-          }, 1000);
+          // Update session with new user data
+          try {
+            console.log('🔄 Updating session after signup completion...');
+            
+            // Use NextAuth's update function to refresh the JWT token
+            await update({
+              isRegistered: true,
+              role: formData.role,
+              username: formData.username.trim().toLowerCase()
+            });
+            
+            // Give session a moment to update, then redirect
+            setTimeout(() => {
+              console.log('✅ Signup completed, redirecting to dashboard');
+              window.location.href = '/dashboard';
+            }, 1000);
+            
+          } catch (sessionError) {
+            console.error('Session update failed:', sessionError);
+            // Force page reload as fallback
+            setTimeout(() => {
+              window.location.href = '/dashboard';
+            }, 1000);
+          }
         } else {
           console.error('❌ Google completion failed:', data);
-          toast.error(data.message || 'Failed to complete profile. Please try again.');
+          const errorMessage = data.error || data.message || 'Failed to complete profile. Please try again.';
+          toast.error(errorMessage);
         }
         
       } else {
@@ -541,14 +671,18 @@ export default function SignupPage() {
               toast.error('Account created but login failed. Please try signing in manually.');
               router.push('/auth/signin?message=signup_complete');
             } else {
-              router.push('/dashboard');
+              // Wait for session to be established, then redirect
+              setTimeout(() => {
+                router.replace('/dashboard');
+              }, 500);
             }
           } else {
-            router.push('/dashboard');
+            router.replace('/dashboard');
           }
         } else {
           console.error('❌ Signup failed:', data);
-          toast.error(data.message || 'Registration failed. Please try again.');
+          const errorMessage = data.error || data.message || 'Registration failed. Please try again.';
+          toast.error(errorMessage);
         }
       }
     } catch (error) {
@@ -954,30 +1088,55 @@ export default function SignupPage() {
                 <label className="block text-sm font-medium text-fixly-text mb-2">
                   City
                 </label>
+                
+                {/* Auto-detect location button */}
+                {!formData.location && !detectingLocation && (
+                  <div className="mb-3">
+                    <button
+                      type="button"
+                      onClick={detectUserLocation}
+                      className="flex items-center space-x-2 text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
+                      disabled={locationPermissionAsked}
+                    >
+                      <MapPin className="h-4 w-4" />
+                      <span>Use my current location</span>
+                    </button>
+                  </div>
+                )}
+
+                {detectingLocation && (
+                  <div className="mb-3 flex items-center space-x-2 text-sm text-fixly-text-light">
+                    <Loader className="h-4 w-4 animate-spin" />
+                    <span>Detecting your location...</span>
+                  </div>
+                )}
+                
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
                   <input
                     type="text"
-                    value={formData.location ? formData.location.name : citySearch}
+                    value={formData.location ? `${formData.location.name}, ${formData.location.state}` : citySearch}
                     onChange={(e) => {
                       setCitySearch(e.target.value);
                       if (formData.location) {
                         handleInputChange('location', null);
                       }
                     }}
-                    placeholder="Search for your city"
+                    placeholder={detectingLocation ? "Detecting location..." : "Search for your city"}
                     className={`input-field pl-10 ${errors.location ? 'border-red-500 focus:border-red-500' : ''}`}
-                    disabled={!!formData.location}
+                    disabled={!!formData.location || detectingLocation}
                   />
                   {formData.location && (
                     <button
+                      type="button"
                       onClick={() => {
                         handleInputChange('location', null);
                         setCitySearch('');
+                        setLocationPermissionAsked(false);
                       }}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted hover:text-fixly-text"
                     >
-                      <X className="h-4 w-4 text-fixly-text-muted" />
+                      <X className="h-4 w-4" />
                     </button>
                   )}
                 </div>

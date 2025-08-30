@@ -21,6 +21,9 @@ import { toast } from 'sonner';
 import { searchCities, getAllSkills } from '../../../data/cities';
 import JobCardRectangular from '../../../components/JobCardRectangular';
 import LocationPermission from '../../../components/ui/LocationPermission';
+import SilentLoader, { BackgroundActivity } from '../../../components/ui/SilentLoader';
+import QuickApplyModal from '../../../components/ui/QuickApplyModal';
+import FindJobsNearMe from '../../../components/ui/FindJobsNearMe';
 import { 
   sortJobsByDistance, 
   filterJobsByRadius, 
@@ -55,7 +58,7 @@ function BrowseJobsContent() {
   const [userLocation, setUserLocation] = useState(null);
   const [locationEnabled, setLocationEnabled] = useState(false);
 
-  // Filters
+  // Enhanced filters with advanced options
   const [filters, setFilters] = useState({
     search: '',
     skills: [],
@@ -65,14 +68,44 @@ function BrowseJobsContent() {
     urgency: '',
     deadline: '',
     sortBy: 'newest',
-    maxDistance: null // null means no distance filter
+    maxDistance: null,
+    // Advanced filters
+    category: '',
+    jobType: 'all',
+    experience: '',
+    verified: false,
+    featured: false,
+    remote: false,
+    postedWithin: '',
+    budgetType: 'all'
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [activeFilterCount, setActiveFilterCount] = useState(0);
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  
+  // Count active filters
+  useEffect(() => {
+    const count = Object.entries(filters).reduce((acc, [key, value]) => {
+      if (key === 'search' && value) acc++;
+      if (key === 'skills' && Array.isArray(value) && value.length > 0) acc++;
+      if (key === 'location' && value) acc++;
+      if (key === 'budgetMin' && value) acc++;
+      if (key === 'budgetMax' && value) acc++;
+      if (key === 'maxDistance' && value) acc++;
+      if (['category', 'urgency', 'experience', 'postedWithin'].includes(key) && value) acc++;
+      if (['verified', 'featured', 'remote'].includes(key) && value) acc++;
+      if (['jobType', 'budgetType'].includes(key) && value !== 'all') acc++;
+      return acc;
+    }, 0);
+    setActiveFilterCount(count);
+  }, [filters]);
 
   // Application state
   const [applyingJobs, setApplyingJobs] = useState(new Set());
   const [searchLoading, setSearchLoading] = useState(false);
   const [showRefreshMessage, setShowRefreshMessage] = useState(false);
+  const [backgroundActivities, setBackgroundActivities] = useState([]);
+  const [quickApplyModal, setQuickApplyModal] = useState({ isOpen: false, job: null });
 
   // Initialize location on component mount
   useEffect(() => {
@@ -113,11 +146,11 @@ function BrowseJobsContent() {
     // Show loading state when user is typing
     setSearchLoading(true);
     
-    // Debounce the search to avoid excessive API calls
+    // Debounce the search to avoid excessive API calls - optimal 800ms for good UX
     const debounceTimer = setTimeout(() => {
       fetchJobs(true);
       setSearchLoading(false);
-    }, 500); // Wait 500ms after user stops typing
+    }, 800); // Wait 800ms after user stops typing - perfect balance for UX
 
     return () => {
       clearTimeout(debounceTimer);
@@ -143,11 +176,21 @@ function BrowseJobsContent() {
       const params = new URLSearchParams({
         page: reset ? '1' : pagination.page.toString(),
         limit: '12',
-        ...Object.fromEntries(
-          Object.entries(filters).filter(([_, value]) => 
-            value !== '' && (Array.isArray(value) ? value.length > 0 : true)
-          )
-        )
+        // Enhanced parameter building
+        ...(filters.search && { search: filters.search }),
+        ...(filters.location && { location: filters.location }),
+        ...(filters.budgetMin && { budgetMin: filters.budgetMin }),
+        ...(filters.budgetMax && { budgetMax: filters.budgetMax }),
+        ...(filters.category && { category: filters.category }),
+        ...(filters.urgency && { urgency: filters.urgency }),
+        ...(filters.jobType !== 'all' && { jobType: filters.jobType }),
+        ...(filters.experience && { experience: filters.experience }),
+        ...(filters.verified && { verified: 'true' }),
+        ...(filters.featured && { featured: 'true' }),
+        ...(filters.remote && { remote: 'true' }),
+        ...(filters.postedWithin && { postedWithin: filters.postedWithin }),
+        ...(filters.budgetType !== 'all' && { budgetType: filters.budgetType }),
+        sortBy: filters.sortBy
       });
 
       if (filters.skills.length > 0) {
@@ -202,9 +245,13 @@ function BrowseJobsContent() {
       }
     } catch (error) {
       console.error('Error fetching jobs:', error);
-      toast.error('Failed to fetch jobs');
+      if (!silent) {
+        toast.error('Failed to fetch jobs');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
       setRefreshing(false);
       setShowRefreshMessage(false);
       if (timeoutId) {
@@ -219,6 +266,45 @@ function BrowseJobsContent() {
       [field]: value
     }));
   };
+  
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      skills: [],
+      location: '',
+      budgetMin: '',
+      budgetMax: '',
+      urgency: '',
+      deadline: '',
+      sortBy: userLocation ? 'distance' : 'newest',
+      maxDistance: null,
+      category: '',
+      jobType: 'all',
+      experience: '',
+      verified: false,
+      featured: false,
+      remote: false,
+      postedWithin: '',
+      budgetType: 'all'
+    });
+  };
+  
+  const applyFilterPreset = (preset) => {
+    setFilters(prev => ({
+      ...prev,
+      ...preset.filters
+    }));
+  };
+  
+  const getSortOptions = () => [
+    { value: 'newest', label: 'Newest First', icon: Clock },
+    { value: 'oldest', label: 'Oldest First', icon: Calendar },
+    { value: 'budget_high', label: 'Highest Budget', icon: TrendingUp },
+    { value: 'budget_low', label: 'Lowest Budget', icon: DollarSign },
+    ...(userLocation ? [{ value: 'distance', label: 'Nearest First', icon: Navigation }] : []),
+    { value: 'relevance', label: 'Most Relevant', icon: Target },
+    { value: 'deadline', label: 'Urgent First', icon: AlertCircle }
+  ];
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -242,7 +328,7 @@ function BrowseJobsContent() {
     return applicationsUsed < 3; // Free users get 3 applications
   };
 
-  const handleQuickApply = async (jobId) => {
+  const handleQuickApply = (jobId) => {
     // Validate jobId
     if (!jobId) {
       toast.error('Invalid job ID. Please try again.');
@@ -250,62 +336,31 @@ function BrowseJobsContent() {
     }
     
     if (!canUserApplyToJob(user)) {
-      toast.error('You have used all free applications. Upgrade to Pro for unlimited access.');
-      router.push('/dashboard/subscription');
+      toast.error('You have used all free applications. Upgrade to Pro for unlimited access.', {
+        action: {
+          label: 'Upgrade Now',
+          onClick: () => router.push('/dashboard/subscription')
+        }
+      });
       return;
     }
 
-    // Set loading state for this specific job
-    setApplyingJobs(prev => new Set([...prev, jobId]));
-
-    try {
-      const targetUrl = `/dashboard/jobs/${jobId}/apply`;
-      
-      // First check if the job exists by making a quick API call
-      const checkResponse = await fetch(`/api/jobs/${jobId}?forApplication=true`);
-      if (!checkResponse.ok) {
-        throw new Error(`Job not found or not accessible: ${checkResponse.status}`);
-      }
-      
-      // Navigate to the application page
-      router.push(targetUrl);
-      toast.success('Opening application form...');
-      
-    } catch (error) {
-      toast.error(`Failed to open application form: ${error.message}`);
-      
-      // Remove loading state on error
-      setApplyingJobs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
+    // Find the job and open quick apply modal
+    const job = jobs.find(j => j._id === jobId);
+    if (job) {
+      setQuickApplyModal({ isOpen: true, job });
+    } else {
+      toast.error('Job not found');
     }
-    
-    // Remove loading state after navigation completes
-    setTimeout(() => {
-      setApplyingJobs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
-    }, 3000);
+  };
+  
+  const handleQuickApplySuccess = () => {
+    // Refresh jobs to show updated application status
+    fetchJobs(true, true); // Silent refresh
   };
 
 
-  const clearFilters = () => {
-    setFilters({
-      search: '',
-      skills: [],
-      location: '',
-      budgetMin: '',
-      budgetMax: '',
-      urgency: '',
-      deadline: '',
-      sortBy: locationEnabled ? 'distance' : 'newest',
-      maxDistance: null
-    });
-  };
+  // Removed duplicate clearFilters function - using the one defined earlier
 
 
   if (loading && jobs.length === 0) {
@@ -379,9 +434,26 @@ function BrowseJobsContent() {
       {/* Location Permission Banner */}
       <LocationPermission 
         onLocationUpdate={handleLocationUpdate}
-        showBanner={!locationEnabled}
+        showBanner={false}
         className="mb-6"
       />
+
+      {/* Find Jobs Near Me Component */}
+      {!locationEnabled && (
+        <FindJobsNearMe 
+          onLocationEnabled={(location) => {
+            setUserLocation(location);
+            setLocationEnabled(true);
+            setFilters(prev => ({
+              ...prev,
+              sortBy: 'distance'
+            }));
+            // Refresh jobs with new location data
+            fetchJobs(true);
+          }}
+          className="mb-6"
+        />
+      )}
 
       {/* Location Sorting Indicator */}
       {locationEnabled && filters.sortBy === 'distance' && (
@@ -463,7 +535,7 @@ function BrowseJobsContent() {
                     type="text"
                     value={filters.location}
                     onChange={(e) => handleFilterChange('location', e.target.value)}
-                    placeholder="City or state"
+                    placeholder="City or state (type to filter)"
                     className="input-field"
                   />
                 </div>
@@ -648,6 +720,26 @@ function BrowseJobsContent() {
           </div>
         </div>
       )}
+      
+      {/* Background Activity Indicator */}
+      <BackgroundActivity activities={backgroundActivities} maxVisible={1} />
+      
+      {/* Silent Loader for Search */}
+      <SilentLoader 
+        isLoading={searchLoading} 
+        text="Filtering jobs..." 
+        position="top-right" 
+        type="sync"
+      />
+      
+      {/* Quick Apply Modal */}
+      <QuickApplyModal
+        isOpen={quickApplyModal.isOpen}
+        job={quickApplyModal.job}
+        user={user}
+        onClose={() => setQuickApplyModal({ isOpen: false, job: null })}
+        onSuccess={handleQuickApplySuccess}
+      />
     </div>
   );
 }

@@ -102,16 +102,20 @@ function EditJobContent({ params }) {
     }
   };
 
-  // City search
+  // City search with debounce to prevent constant updates
   useEffect(() => {
-    if (citySearch.length > 0) {
-      const results = searchCities(citySearch);
-      setCityResults(results);
-      setShowCityDropdown(results.length > 0);
-    } else {
-      setCityResults([]);
-      setShowCityDropdown(false);
-    }
+    const timer = setTimeout(() => {
+      if (citySearch.length > 2) {
+        const results = searchCities(citySearch);
+        setCityResults(results);
+        setShowCityDropdown(results.length > 0);
+      } else {
+        setCityResults([]);
+        setShowCityDropdown(false);
+      }
+    }, 300); // 300ms debounce to prevent constant updates
+
+    return () => clearTimeout(timer);
   }, [citySearch]);
 
   // Skill search

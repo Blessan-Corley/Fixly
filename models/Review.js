@@ -223,7 +223,7 @@ ReviewSchema.statics.getAverageRating = async function(userId) {
   const result = await this.aggregate([
     {
       $match: {
-        reviewee: mongoose.Types.ObjectId(userId),
+        reviewee: new mongoose.Types.ObjectId(userId),
         status: 'published',
         isPublic: true
       }

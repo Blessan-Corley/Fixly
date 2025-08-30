@@ -136,7 +136,7 @@ const jobSchema = new mongoose.Schema({
     }
   },
   
-  // Location
+  // Location with GeoJSON support for geospatial queries
   location: {
     address: {
       type: String,
@@ -169,6 +169,25 @@ const jobSchema = new mongoose.Schema({
       type: Number,
       min: [-180, 'Invalid longitude'],
       max: [180, 'Invalid longitude']
+    },
+    // GeoJSON Point for geospatial queries (required for $geoNear)
+    coordinates: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        validate: {
+          validator: function(coords) {
+            return coords.length === 2 && 
+                   coords[0] >= -180 && coords[0] <= 180 && // longitude
+                   coords[1] >= -90 && coords[1] <= 90;    // latitude
+          },
+          message: 'Invalid coordinates format [longitude, latitude]'
+        }
+      }
     }
   },
   
@@ -209,7 +228,7 @@ const jobSchema = new mongoose.Schema({
     default: 'open'
   },
 
-  // Analytics & Engagement
+  // Analytics & Engagement with admin insights
   views: {
     count: {
       type: Number,
@@ -238,6 +257,70 @@ const jobSchema = new mongoose.Schema({
       }
     }]
   },
+  
+  // Admin metadata for comprehensive management
+  adminMetadata: {
+    flaggedBy: [{
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      reason: String,
+      flaggedAt: { type: Date, default: Date.now },
+      status: { type: String, enum: ['pending', 'reviewed', 'resolved'], default: 'pending' }
+    }],
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reviewedAt: Date,
+    adminNotes: String,
+    priority: {
+      type: String,
+      enum: ['low', 'normal', 'high', 'urgent'],
+      default: 'normal'
+    },
+    tags: [String],
+    isPromoted: { type: Boolean, default: false },
+    promotedUntil: Date,
+    qualityScore: { type: Number, min: 0, max: 100, default: 50 },
+    riskLevel: { type: String, enum: ['low', 'medium', 'high'], default: 'low' },
+    lastModifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  },
+  
+  // Enhanced geolocation with precision tracking
+  geoData: {
+    preciseCoordinates: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: [Number] // [longitude, latitude] with high precision
+    },
+    accuracy: Number, // GPS accuracy in meters
+    source: {
+      type: String,
+      enum: ['gps', 'geocoding', 'manual', 'ip_geolocation'],
+      default: 'manual'
+    },
+    boundingBox: {
+      northeast: { lat: Number, lng: Number },
+      southwest: { lat: Number, lng: Number }
+    },
+    timezone: String,
+    placeId: String, // Google Places API ID
+    addressComponents: {
+      streetNumber: String,
+      route: String,
+      locality: String,
+      sublocality: String,
+      administrativeAreaLevel1: String,
+      administrativeAreaLevel2: String,
+      country: String,
+      postalCode: String
+    }
+  },
 
   likes: [{
     user: {
@@ -251,16 +334,36 @@ const jobSchema = new mongoose.Schema({
     }
   }],
   
-  // Relationships
+  // Relationships with cached user info for admin searches
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: [true, 'Job creator is required']
   },
+  createdByInfo: {
+    username: String,
+    name: String,
+    email: String,
+    role: String,
+    isVerified: { type: Boolean, default: false },
+    rating: { type: Number, default: 0 },
+    completedJobs: { type: Number, default: 0 },
+    lastActiveAt: Date
+  },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null
+  },
+  assignedToInfo: {
+    username: String,
+    name: String,
+    email: String,
+    role: String,
+    isVerified: { type: Boolean, default: false },
+    rating: { type: Number, default: 0 },
+    completedJobs: { type: Number, default: 0 },
+    lastActiveAt: Date
   },
   
   // Applications
@@ -760,19 +863,6 @@ const jobSchema = new mongoose.Schema({
     }
   },
   
-  // Likes
-  likes: [{
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: [true, 'Like user is required']
-    },
-    likedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }],
-  
   // Cancellation
   cancellation: {
     cancelled: {
@@ -792,12 +882,33 @@ const jobSchema = new mongoose.Schema({
       type: Number,
       min: [0, 'Refund amount cannot be negative']
     }
+  },
+  
+  // Search and geolocation metadata (for comprehensive location system)
+  searchKeywords: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
+  hasGeoLocation: {
+    type: Boolean,
+    default: false
+  },
+  locationPrecision: {
+    type: String,
+    enum: ['1m', '10m', '100m', '1km', 'city', 'approximate'],
+    default: 'approximate'
+  },
+  locationSource: {
+    type: String,
+    enum: ['gps_or_geocoding', 'user_input', 'city_search'],
+    default: 'user_input'
   }
 }, {
   timestamps: true
 });
 
-// Enhanced indexes for better query performance
+// Enhanced indexes for better query performance including geospatial and admin searches
 jobSchema.index({ createdBy: 1, status: 1 });
 jobSchema.index({ assignedTo: 1, status: 1 });
 jobSchema.index({ 'location.city': 1, status: 1 });
@@ -808,24 +919,66 @@ jobSchema.index({ urgency: 1, status: 1 });
 jobSchema.index({ featured: 1, featuredUntil: 1 });
 jobSchema.index({ 'budget.amount': 1, status: 1 });
 jobSchema.index({ 'applications.fixer': 1 });
-jobSchema.index({ 'applications.status': 1 }); // NEW: For application status queries
-jobSchema.index({ 'location.state': 1, status: 1 }); // NEW: For state-based queries
-jobSchema.index({ experienceLevel: 1, status: 1 }); // NEW: For experience-based queries
-jobSchema.index({ type: 1, status: 1 }); // NEW: For job type queries
-jobSchema.index({ 'budget.type': 1, status: 1 }); // NEW: For budget type queries
-jobSchema.index({ 'dispute.raised': 1, status: 1 }); // NEW: For dispute queries
-jobSchema.index({ 'completion.rating': -1 }); // NEW: For rating-based sorting
-jobSchema.index({ views: -1, status: 1 }); // NEW: For popularity-based queries
-jobSchema.index({ 'progress.startedAt': 1, status: 1 }); // NEW: For progress tracking
-jobSchema.index({ 'cancellation.cancelled': 1 }); // NEW: For cancellation queries
-jobSchema.index({ 'likes.user': 1 }); // NEW: For likes queries
+jobSchema.index({ 'applications.status': 1 });
+jobSchema.index({ 'location.state': 1, status: 1 });
+jobSchema.index({ experienceLevel: 1, status: 1 });
+jobSchema.index({ type: 1, status: 1 });
+jobSchema.index({ 'budget.type': 1, status: 1 });
+jobSchema.index({ 'dispute.raised': 1, status: 1 });
+jobSchema.index({ 'completion.rating': -1 });
+jobSchema.index({ 'views.count': -1, status: 1 });
+jobSchema.index({ 'progress.startedAt': 1, status: 1 });
+jobSchema.index({ 'cancellation.cancelled': 1 });
+jobSchema.index({ 'likes.user': 1 });
+// Geospatial indexes for location-based queries
+jobSchema.index({ 'location.coordinates': '2dsphere' });
+jobSchema.index({ 'geoData.preciseCoordinates': '2dsphere' });
+jobSchema.index({ hasGeoLocation: 1, status: 1 });
+jobSchema.index({ searchKeywords: 1, status: 1 });
+
+// Admin-specific indexes for comprehensive management
+jobSchema.index({ 'createdByInfo.username': 1 });
+jobSchema.index({ 'createdByInfo.email': 1 });
+jobSchema.index({ 'createdByInfo.role': 1, status: 1 });
+jobSchema.index({ 'assignedToInfo.username': 1 });
+jobSchema.index({ 'assignedToInfo.email': 1 });
+jobSchema.index({ 'adminMetadata.priority': 1, createdAt: -1 });
+jobSchema.index({ 'adminMetadata.qualityScore': -1 });
+jobSchema.index({ 'adminMetadata.riskLevel': 1, status: 1 });
+jobSchema.index({ 'adminMetadata.tags': 1 });
+jobSchema.index({ 'adminMetadata.flaggedBy.status': 1, 'adminMetadata.flaggedBy.flaggedAt': -1 });
+jobSchema.index({ 'adminMetadata.isPromoted': 1, 'adminMetadata.promotedUntil': 1 });
+jobSchema.index({ 'adminMetadata.reviewedBy': 1, 'adminMetadata.reviewedAt': -1 });
+jobSchema.index({ 'geoData.source': 1, 'geoData.accuracy': 1 });
+jobSchema.index({ 'geoData.addressComponents.locality': 1, status: 1 });
+jobSchema.index({ 'geoData.addressComponents.administrativeAreaLevel1': 1, status: 1 });
+jobSchema.index({ 'geoData.addressComponents.country': 1, status: 1 });
+
+// Text search indexes
+jobSchema.index({ 
+  title: 'text', 
+  description: 'text', 
+  'location.address': 'text',
+  skillsRequired: 'text',
+  'createdByInfo.username': 'text',
+  'createdByInfo.name': 'text'
+}, {
+  name: 'JobTextSearchIndex',
+  weights: {
+    title: 10,
+    skillsRequired: 8,
+    description: 5,
+    'createdByInfo.username': 3,
+    'location.address': 2
+  }
+});
 
 // Compound indexes for complex queries
-jobSchema.index({ 'location.city': 1, skillsRequired: 1, status: 1 }); // For location + skills
-jobSchema.index({ 'budget.amount': 1, 'budget.type': 1, status: 1 }); // For budget filtering
-jobSchema.index({ createdBy: 1, createdAt: -1 }); // For user's job history
-jobSchema.index({ assignedTo: 1, createdAt: -1 }); // For fixer's assigned jobs
-jobSchema.index({ status: 1, featured: 1, createdAt: -1 }); // For featured jobs listing
+jobSchema.index({ 'location.city': 1, skillsRequired: 1, status: 1 });
+jobSchema.index({ 'budget.amount': 1, 'budget.type': 1, status: 1 });
+jobSchema.index({ createdBy: 1, createdAt: -1 });
+jobSchema.index({ assignedTo: 1, createdAt: -1 });
+jobSchema.index({ status: 1, featured: 1, createdAt: -1 });
 
 // Virtual for application count
 jobSchema.virtual('applicationCount').get(function() {
@@ -852,7 +1005,7 @@ jobSchema.virtual('isUrgent').get(function() {
   const now = new Date();
   const deadline = new Date(this.deadline);
   const diff = deadline - now;
-  return diff <= 24 * 60 * 60 * 1000; // Less than 24 hours
+  return diff <= 24 * 60 * 60 * 1000;
 });
 
 // Method to check if user can apply
@@ -1033,7 +1186,7 @@ jobSchema.methods.raiseDispute = function(userId, reason, description, evidence 
   return this.save();
 };
 
-// NEW: Method to cancel job
+// Method to cancel job
 jobSchema.methods.cancelJob = function(userId, reason) {
   if (this.createdBy.toString() !== userId.toString()) return false;
   if (this.status !== 'open' && this.status !== 'in_progress') return false;
@@ -1047,7 +1200,7 @@ jobSchema.methods.cancelJob = function(userId, reason) {
   return this.save();
 };
 
-// NEW: Method to add milestone
+// Method to add milestone
 jobSchema.methods.addMilestone = function(title, description) {
   this.progress.milestones.push({
     title,
@@ -1058,7 +1211,7 @@ jobSchema.methods.addMilestone = function(title, description) {
   return this.save();
 };
 
-// NEW: Method to complete milestone
+// Method to complete milestone
 jobSchema.methods.completeMilestone = function(milestoneId) {
   const milestone = this.progress.milestones.id(milestoneId);
   if (!milestone) return false;
@@ -1069,7 +1222,7 @@ jobSchema.methods.completeMilestone = function(milestoneId) {
   return this.save();
 };
 
-// NEW: Method to toggle like on job
+// Method to toggle like on job
 jobSchema.methods.toggleLike = function(userId) {
   const existingLikeIndex = this.likes.findIndex(
     like => like.user.toString() === userId.toString()
@@ -1086,7 +1239,7 @@ jobSchema.methods.toggleLike = function(userId) {
   }
 };
 
-// NEW: Method to check if user liked the job
+// Method to check if user liked the job
 jobSchema.methods.isLikedBy = function(userId) {
   if (!userId) return false;
   return this.likes.some(like => like.user.toString() === userId.toString());
@@ -1097,7 +1250,7 @@ jobSchema.virtual('likeCount').get(function() {
   return this.likes.length;
 });
 
-// NEW: Method to toggle like on comment
+// Method to toggle like on comment
 jobSchema.methods.toggleCommentLike = function(commentId, userId) {
   const comment = this.comments.id(commentId);
   if (!comment) return null;
@@ -1117,7 +1270,7 @@ jobSchema.methods.toggleCommentLike = function(commentId, userId) {
   }
 };
 
-// NEW: Method to toggle like on reply
+// Method to toggle like on reply
 jobSchema.methods.toggleReplyLike = function(commentId, replyId, userId) {
   const comment = this.comments.id(commentId);
   if (!comment) return null;
@@ -1140,7 +1293,7 @@ jobSchema.methods.toggleReplyLike = function(commentId, replyId, userId) {
   }
 };
 
-// NEW: Method to delete comment (only by author or job creator)
+// Method to delete comment (only by author or job creator)
 jobSchema.methods.deleteComment = function(commentId, userId) {
   const comment = this.comments.id(commentId);
   if (!comment) return { success: false, message: 'Comment not found' };
@@ -1156,7 +1309,7 @@ jobSchema.methods.deleteComment = function(commentId, userId) {
   return { success: true, message: 'Comment deleted successfully' };
 };
 
-// NEW: Method to delete reply (only by author or job creator)
+// Method to delete reply (only by author or job creator)
 jobSchema.methods.deleteReply = function(commentId, replyId, userId) {
   const comment = this.comments.id(commentId);
   if (!comment) return { success: false, message: 'Comment not found' };
@@ -1301,22 +1454,43 @@ jobSchema.methods.editReply = function(commentId, replyId, userId, newMessage, m
   return { success: true, message: 'Reply updated successfully', reply };
 };
 
-// Static method to find jobs by filters
-jobSchema.statics.findWithFilters = function(filters = {}) {
-  const query = { status: 'open' };
+// Enhanced static method to find jobs by filters with admin capabilities
+jobSchema.statics.findWithFilters = function(filters = {}, isAdmin = false) {
+  const query = {};
   
+  // Base status filter (admins can see all statuses)
+  if (!isAdmin) {
+    query.status = filters.status || 'open';
+  } else if (filters.status) {
+    query.status = filters.status;
+  }
+  
+  // Location filters
   if (filters.city) {
-    query['location.city'] = new RegExp(filters.city, 'i');
+    query.$or = [
+      { 'location.city': new RegExp(filters.city, 'i') },
+      { 'geoData.addressComponents.locality': new RegExp(filters.city, 'i') }
+    ];
   }
   
   if (filters.state) {
-    query['location.state'] = new RegExp(filters.state, 'i');
+    query.$or = [
+      ...(query.$or || []),
+      { 'location.state': new RegExp(filters.state, 'i') },
+      { 'geoData.addressComponents.administrativeAreaLevel1': new RegExp(filters.state, 'i') }
+    ];
   }
   
+  if (filters.country) {
+    query['geoData.addressComponents.country'] = new RegExp(filters.country, 'i');
+  }
+  
+  // Skills filter
   if (filters.skills && filters.skills.length > 0) {
     query.skillsRequired = { $in: filters.skills.map(skill => skill.toLowerCase()) };
   }
   
+  // Budget filters
   if (filters.budget) {
     if (filters.budget.min) query['budget.amount'] = { $gte: filters.budget.min };
     if (filters.budget.max) {
@@ -1327,27 +1501,114 @@ jobSchema.statics.findWithFilters = function(filters = {}) {
     }
   }
   
-  if (filters.urgency) {
-    query.urgency = filters.urgency;
+  // Basic filters
+  if (filters.urgency) query.urgency = filters.urgency;
+  if (filters.type) query.type = filters.type;
+  if (filters.experienceLevel) query.experienceLevel = filters.experienceLevel;
+  if (filters.budgetType) query['budget.type'] = filters.budgetType;
+  
+  // Date range filters
+  if (filters.dateFrom || filters.dateTo) {
+    query.createdAt = {};
+    if (filters.dateFrom) query.createdAt.$gte = new Date(filters.dateFrom);
+    if (filters.dateTo) query.createdAt.$lte = new Date(filters.dateTo);
   }
   
-  if (filters.type) {
-    query.type = filters.type;
+  // Admin-specific filters
+  if (isAdmin) {
+    if (filters.creatorUsername) {
+      query['createdByInfo.username'] = new RegExp(filters.creatorUsername, 'i');
+    }
+    if (filters.creatorEmail) {
+      query['createdByInfo.email'] = new RegExp(filters.creatorEmail, 'i');
+    }
+    if (filters.assignedToUsername) {
+      query['assignedToInfo.username'] = new RegExp(filters.assignedToUsername, 'i');
+    }
+    if (filters.priority) {
+      query['adminMetadata.priority'] = filters.priority;
+    }
+    if (filters.riskLevel) {
+      query['adminMetadata.riskLevel'] = filters.riskLevel;
+    }
+    if (filters.qualityScoreMin) {
+      query['adminMetadata.qualityScore'] = { $gte: filters.qualityScoreMin };
+    }
+    if (filters.qualityScoreMax) {
+      query['adminMetadata.qualityScore'] = { 
+        ...query['adminMetadata.qualityScore'],
+        $lte: filters.qualityScoreMax 
+      };
+    }
+    if (filters.flagged === true) {
+      query['adminMetadata.flaggedBy.0'] = { $exists: true };
+    }
+    if (filters.promoted === true) {
+      query['adminMetadata.isPromoted'] = true;
+    }
+    if (filters.tags && filters.tags.length > 0) {
+      query['adminMetadata.tags'] = { $in: filters.tags };
+    }
+    if (filters.disputed === true) {
+      query['dispute.raised'] = true;
+    }
+    if (filters.cancelled === true) {
+      query['cancellation.cancelled'] = true;
+    }
+    if (filters.rating) {
+      query['completion.rating'] = { $gte: filters.rating };
+    }
+    if (filters.viewsMin) {
+      query['views.count'] = { $gte: filters.viewsMin };
+    }
+    if (filters.applicationsMin) {
+      query.$expr = { $gte: [{ $size: '$applications' }, filters.applicationsMin] };
+    }
   }
   
-  if (filters.experienceLevel) {
-    query.experienceLevel = filters.experienceLevel;
+  // Text search
+  if (filters.search) {
+    query.$text = { $search: filters.search };
   }
   
-  if (filters.budgetType) {
-    query['budget.type'] = filters.budgetType;
+  // Geospatial queries
+  if (filters.near && filters.near.lat && filters.near.lng) {
+    const maxDistance = filters.near.radius ? filters.near.radius * 1000 : 10000; // Default 10km
+    query.$or = [
+      {
+        'location.coordinates': {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: [filters.near.lng, filters.near.lat]
+            },
+            $maxDistance: maxDistance
+          }
+        }
+      },
+      {
+        'geoData.preciseCoordinates': {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: [filters.near.lng, filters.near.lat]
+            },
+            $maxDistance: maxDistance
+          }
+        }
+      }
+    ];
   }
   
+  // Sorting
   const sort = {};
   if (filters.sortBy) {
     switch (filters.sortBy) {
       case 'newest':
         sort.createdAt = -1;
+        break;
+      case 'oldest':
+        sort.createdAt = 1;
         break;
       case 'deadline':
         sort.deadline = 1;
@@ -1359,22 +1620,138 @@ jobSchema.statics.findWithFilters = function(filters = {}) {
         sort['budget.amount'] = 1;
         break;
       case 'popular':
-        sort.views = -1;
+        sort['views.count'] = -1;
+        break;
+      case 'rating':
+        sort['completion.rating'] = -1;
+        break;
+      case 'applications':
+        sort.applicationCount = -1;
+        break;
+      case 'priority':
+        if (isAdmin) {
+          const priorityOrder = { 'urgent': 4, 'high': 3, 'normal': 2, 'low': 1 };
+          sort['adminMetadata.priority'] = -1;
+        }
+        break;
+      case 'quality':
+        if (isAdmin) {
+          sort['adminMetadata.qualityScore'] = -1;
+        }
+        break;
+      case 'relevance':
+        if (filters.search) {
+          sort.score = { $meta: 'textScore' };
+        }
         break;
       default:
         sort.createdAt = -1;
     }
   } else {
-    sort.featured = -1; // Featured jobs first
+    if (!isAdmin) {
+      sort.featured = -1; // Featured jobs first for public
+    } else {
+      sort['adminMetadata.priority'] = -1; // Priority first for admin
+    }
     sort.createdAt = -1;
   }
   
-  return this.find(query)
-    .populate('createdBy', 'name username photoURL rating location')
-    .sort(sort);
+  // Build query
+  let queryBuilder = this.find(query);
+  
+  // Populate based on admin access
+  if (isAdmin) {
+    queryBuilder = queryBuilder
+      .populate('createdBy', 'name username email photoURL rating location isVerified lastLogin')
+      .populate('assignedTo', 'name username email photoURL rating location isVerified lastLogin')
+      .populate('adminMetadata.reviewedBy', 'name username')
+      .populate('adminMetadata.lastModifiedBy', 'name username');
+  } else {
+    queryBuilder = queryBuilder
+      .populate('createdBy', 'name username photoURL rating location');
+  }
+  
+  return queryBuilder.sort(sort);
 };
 
-// NEW: Static method to find urgent jobs
+// Admin-specific static methods
+jobSchema.statics.findByAdminCriteria = function(criteria = {}) {
+  const query = {};
+  
+  if (criteria.flagged) {
+    query['adminMetadata.flaggedBy.0'] = { $exists: true };
+    query['adminMetadata.flaggedBy.status'] = 'pending';
+  }
+  
+  if (criteria.disputed) {
+    query['dispute.raised'] = true;
+    query['dispute.status'] = { $in: ['pending', 'investigating'] };
+  }
+  
+  if (criteria.highRisk) {
+    query['adminMetadata.riskLevel'] = 'high';
+  }
+  
+  if (criteria.lowQuality) {
+    query['adminMetadata.qualityScore'] = { $lt: 30 };
+  }
+  
+  if (criteria.needsReview) {
+    query.$or = [
+      { 'adminMetadata.reviewedBy': { $exists: false } },
+      { 'adminMetadata.flaggedBy.0': { $exists: true } },
+      { 'dispute.raised': true },
+      { 'adminMetadata.qualityScore': { $lt: 40 } }
+    ];
+  }
+  
+  return this.find(query)
+    .populate('createdBy', 'name username email photoURL rating')
+    .populate('assignedTo', 'name username email photoURL rating')
+    .populate('adminMetadata.reviewedBy', 'name username')
+    .sort({ 
+      'adminMetadata.priority': -1,
+      'adminMetadata.flaggedBy.flaggedAt': -1,
+      createdAt: -1 
+    });
+};
+
+jobSchema.statics.getJobStats = function() {
+  return this.aggregate([
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        open: { $sum: { $cond: [{ $eq: ['$status', 'open'] }, 1, 0] } },
+        inProgress: { $sum: { $cond: [{ $eq: ['$status', 'in_progress'] }, 1, 0] } },
+        completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+        cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+        disputed: { $sum: { $cond: ['$dispute.raised', 1, 0] } },
+        flagged: { $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ['$adminMetadata.flaggedBy', []] } }, 0] }, 1, 0] } },
+        avgBudget: { $avg: '$budget.amount' },
+        avgViews: { $avg: '$views.count' },
+        avgRating: { $avg: '$completion.rating' }
+      }
+    }
+  ]);
+};
+
+jobSchema.statics.getLocationStats = function() {
+  return this.aggregate([
+    {
+      $group: {
+        _id: '$location.city',
+        count: { $sum: 1 },
+        avgBudget: { $avg: '$budget.amount' },
+        state: { $first: '$location.state' }
+      }
+    },
+    { $sort: { count: -1 } },
+    { $limit: 50 }
+  ]);
+};
+
+// Static method to find urgent jobs
 jobSchema.statics.findUrgentJobs = function() {
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -1385,7 +1762,7 @@ jobSchema.statics.findUrgentJobs = function() {
   }).populate('createdBy', 'name username photoURL rating location');
 };
 
-// NEW: Static method to find jobs by user
+// Static method to find jobs by user
 jobSchema.statics.findByUser = function(userId, role = 'created') {
   const query = role === 'created' ? { createdBy: userId } : { assignedTo: userId };
   
@@ -1395,30 +1772,179 @@ jobSchema.statics.findByUser = function(userId, role = 'created') {
     .sort({ createdAt: -1 });
 };
 
-// Pre-save middleware
+// Enhanced pre-save middleware with admin features
 jobSchema.pre('save', function(next) {
   try {
-  // Convert skills to lowercase
-  if (this.skillsRequired) {
-    this.skillsRequired = this.skillsRequired.map(skill => skill.toLowerCase().trim());
-  }
-  
-  // Update featured status
-  if (this.featuredUntil && this.featuredUntil < new Date()) {
-    this.featured = false;
-  }
+    // Convert skills to lowercase
+    if (this.skillsRequired) {
+      this.skillsRequired = this.skillsRequired.map(skill => skill.toLowerCase().trim());
+    }
+    
+    // Update featured status
+    if (this.featuredUntil && this.featuredUntil < new Date()) {
+      this.featured = false;
+    }
+    
+    // Update promoted status
+    if (this.adminMetadata?.promotedUntil && this.adminMetadata.promotedUntil < new Date()) {
+      this.adminMetadata.isPromoted = false;
+    }
     
     // Validate budget amount for fixed/hourly jobs
     if ((this.budget.type === 'fixed' || this.budget.type === 'hourly') && 
         (!this.budget.amount || this.budget.amount <= 0)) {
       throw new Error('Budget amount is required for fixed and hourly pricing');
     }
-  
-  next();
+    
+    // Generate search keywords
+    if (this.isModified('title') || this.isModified('description') || this.isModified('skillsRequired')) {
+      const keywords = new Set();
+      
+      // Add title words
+      if (this.title) {
+        this.title.toLowerCase().split(/\s+/).forEach(word => {
+          if (word.length > 2) keywords.add(word);
+        });
+      }
+      
+      // Add skills
+      if (this.skillsRequired) {
+        this.skillsRequired.forEach(skill => keywords.add(skill));
+      }
+      
+      // Add description words (limit to important words)
+      if (this.description) {
+        const descWords = this.description.toLowerCase().split(/\s+/);
+        const importantWords = descWords.filter(word => 
+          word.length > 4 && !['with', 'this', 'that', 'will', 'need', 'want'].includes(word)
+        ).slice(0, 20); // Limit to 20 important words
+        importantWords.forEach(word => keywords.add(word));
+      }
+      
+      this.searchKeywords = Array.from(keywords);
+    }
+    
+    // Set GeoJSON coordinates if lat/lng provided
+    if (this.isModified('location.lat') || this.isModified('location.lng')) {
+      if (this.location.lat && this.location.lng) {
+        this.location.coordinates = {
+          type: 'Point',
+          coordinates: [this.location.lng, this.location.lat]
+        };
+        this.hasGeoLocation = true;
+        
+        // Also set precise coordinates if not already set
+        if (!this.geoData?.preciseCoordinates?.coordinates) {
+          if (!this.geoData) this.geoData = {};
+          this.geoData.preciseCoordinates = {
+            type: 'Point',
+            coordinates: [this.location.lng, this.location.lat]
+          };
+        }
+      }
+    }
+    
+    // Calculate quality score based on completeness
+    if (this.isNew || this.isModified()) {
+      let score = 0;
+      
+      // Basic info completeness (40 points)
+      if (this.title && this.title.length >= 10) score += 10;
+      if (this.description && this.description.length >= 50) score += 15;
+      if (this.skillsRequired && this.skillsRequired.length > 0) score += 10;
+      if (this.budget.amount > 0) score += 5;
+      
+      // Location completeness (20 points)
+      if (this.location.address) score += 5;
+      if (this.location.city) score += 5;
+      if (this.location.lat && this.location.lng) score += 10;
+      
+      // Additional details (25 points)
+      if (this.deadline) score += 5;
+      if (this.estimatedDuration?.value) score += 5;
+      if (this.attachments && this.attachments.length > 0) score += 10;
+      if (this.experienceLevel) score += 5;
+      
+      // Engagement factors (15 points)
+      if (this.views?.count > 10) score += 5;
+      if (this.applications && this.applications.length > 0) score += 5;
+      if (this.likes && this.likes.length > 0) score += 5;
+      
+      if (!this.adminMetadata) this.adminMetadata = {};
+      this.adminMetadata.qualityScore = Math.min(score, 100);
+    }
+    
+    next();
   } catch (error) {
     next(error);
   }
 });
+
+// Method to update cached user info
+jobSchema.methods.updateCreatedByInfo = function(userInfo) {
+  this.createdByInfo = {
+    username: userInfo.username,
+    name: userInfo.name,
+    email: userInfo.email,
+    role: userInfo.role || 'user',
+    isVerified: userInfo.isVerified || false,
+    rating: userInfo.rating || 0,
+    completedJobs: userInfo.completedJobs || 0,
+    lastActiveAt: userInfo.lastActiveAt || new Date()
+  };
+  return this.save();
+};
+
+jobSchema.methods.updateAssignedToInfo = function(userInfo) {
+  this.assignedToInfo = {
+    username: userInfo.username,
+    name: userInfo.name,
+    email: userInfo.email,
+    role: userInfo.role || 'user',
+    isVerified: userInfo.isVerified || false,
+    rating: userInfo.rating || 0,
+    completedJobs: userInfo.completedJobs || 0,
+    lastActiveAt: userInfo.lastActiveAt || new Date()
+  };
+  return this.save();
+};
+
+// Admin methods
+jobSchema.methods.flagJob = function(userId, reason) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  if (!this.adminMetadata.flaggedBy) this.adminMetadata.flaggedBy = [];
+  
+  this.adminMetadata.flaggedBy.push({
+    userId,
+    reason,
+    flaggedAt: new Date(),
+    status: 'pending'
+  });
+  
+  return this.save();
+};
+
+jobSchema.methods.updatePriority = function(priority, userId) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  this.adminMetadata.priority = priority;
+  this.adminMetadata.lastModifiedBy = userId;
+  return this.save();
+};
+
+jobSchema.methods.addAdminNote = function(note, userId) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  this.adminMetadata.adminNotes = note;
+  this.adminMetadata.lastModifiedBy = userId;
+  return this.save();
+};
+
+jobSchema.methods.promoteJob = function(userId, promotedUntil) {
+  if (!this.adminMetadata) this.adminMetadata = {};
+  this.adminMetadata.isPromoted = true;
+  this.adminMetadata.promotedUntil = promotedUntil;
+  this.adminMetadata.lastModifiedBy = userId;
+  return this.save();
+};
 
 // Post-save middleware for notifications
 jobSchema.post('save', function(doc) {

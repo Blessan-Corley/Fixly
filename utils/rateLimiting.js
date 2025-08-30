@@ -48,6 +48,11 @@ const rateLimitConfig = {
 
 // Get client IP address
 function getClientIP(request) {
+  // Guard against undefined request or headers during build
+  if (!request || !request.headers || typeof request.headers.get !== 'function') {
+    return '127.0.0.1';
+  }
+  
   const forwarded = request.headers.get('x-forwarded-for');
   const realIP = request.headers.get('x-real-ip');
   const cfConnectingIP = request.headers.get('cf-connecting-ip');

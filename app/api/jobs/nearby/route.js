@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 import { MongoClient } from 'mongodb';
+import { validateAndSanitize, addSecurityHeaders } from '../../../../utils/validation';
+import { NearbyJobsQueryBuilder, FallbackQueryBuilder, QueryResultProcessor } from '../../../../utils/queryOptimization';
 
 const uri = process.env.MONGODB_URI;
 let client;
@@ -16,290 +18,227 @@ async function connectToDatabase() {
 
 export async function POST(request) {
   try {
-    const { 
-      latitude, 
-      longitude, 
-      radius = 10, 
-      limit = 20, // Reduced default for better performance
-      offset = 0, // For pagination
-      filters = {},
-      sortBy = 'distance', // distance, date, salary, rating
-      sortOrder = 1 // 1 for asc, -1 for desc
-    } = await request.json();
+    const body = await request.json();
+    
+    // Enhanced input validation with proper error handling
+    const latitude = validateAndSanitize.number(body.latitude, { 
+      min: -90, 
+      max: 90, 
+      required: true 
+    });
+    
+    const longitude = validateAndSanitize.number(body.longitude, { 
+      min: -180, 
+      max: 180, 
+      required: true 
+    });
+    
+    const radius = validateAndSanitize.number(body.radius, { 
+      min: 1, 
+      max: 100 // Max 100km for security
+    }) || 10;
+    
+    const limit = validateAndSanitize.number(body.limit, { 
+      min: 1, 
+      max: 50 // Max 50 per request for performance
+    }) || 20;
+    
+    const offset = validateAndSanitize.number(body.offset, { 
+      min: 0, 
+      max: 10000 // Prevent excessive pagination
+    }) || 0;
 
-    if (!latitude || !longitude) {
-      return NextResponse.json(
-        { error: 'Latitude and longitude are required' },
-        { status: 400 }
-      );
+    // Validate and sanitize filters
+    const filters = body.filters || {};
+    const sanitizedFilters = {};
+    
+    if (filters.minBudget) {
+      sanitizedFilters.minBudget = validateAndSanitize.number(filters.minBudget, { min: 0, max: 1000000 });
+    }
+    if (filters.maxBudget) {
+      sanitizedFilters.maxBudget = validateAndSanitize.number(filters.maxBudget, { min: 0, max: 1000000 });
+    }
+    if (filters.category && typeof filters.category === 'string') {
+      sanitizedFilters.category = filters.category.trim().toLowerCase();
+    }
+    if (filters.urgency && typeof filters.urgency === 'string') {
+      const validUrgency = ['asap', 'flexible', 'scheduled'];
+      if (validUrgency.includes(filters.urgency)) {
+        sanitizedFilters.urgency = filters.urgency;
+      }
+    }
+    if (filters.skills && Array.isArray(filters.skills)) {
+      sanitizedFilters.skills = filters.skills.slice(0, 20).map(skill => 
+        typeof skill === 'string' ? skill.trim().toLowerCase() : ''
+      ).filter(Boolean);
     }
 
-    // Validate pagination parameters
-    const validatedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 50); // Max 50 per request
-    const validatedOffset = Math.max(parseInt(offset) || 0, 0);
-    const validatedRadius = Math.min(Math.max(parseFloat(radius) || 10, 1), 100); // Max 100km
+    // Validate sort parameters
+    const validSortBy = ['distance', 'date', 'salary', 'rating'];
+    const sortBy = validSortBy.includes(body.sortBy) ? body.sortBy : 'distance';
+    const sortOrder = [1, -1].includes(body.sortOrder) ? body.sortOrder : 1;
 
     const db = await connectToDatabase();
     const jobs = db.collection('jobs');
 
-    // Try geospatial query first, fallback to regular query if no index
-    let nearbyJobs;
+    // Initialize optimized query builder and result processor
+    const queryBuilder = new NearbyJobsQueryBuilder();
+    const resultProcessor = new QueryResultProcessor({ lat: latitude, lng: longitude });
+    
+    let queryResult;
     
     try {
-      // Build aggregation pipeline for nearby jobs with geospatial query
-      const pipeline = [
-        {
-          $geoNear: {
-            near: {
-              type: 'Point',
-              coordinates: [parseFloat(longitude), parseFloat(latitude)]
-            },
-            distanceField: 'distance',
-            maxDistance: validatedRadius * 1000, // Convert km to meters
-            spherical: true,
-            key: 'location', // Specify which field to use for geospatial search
-            query: {
-              isActive: true,
-              isDeleted: { $ne: true },
-              // Add additional filters
-              ...(filters.minBudget && { 'budget.min': { $gte: filters.minBudget } }),
-              ...(filters.maxBudget && { 'budget.max': { $lte: filters.maxBudget } }),
-              ...(filters.category && { category: filters.category }),
-              ...(filters.urgency && { urgency: filters.urgency }),
-              ...(filters.skills && filters.skills.length > 0 && { 
-                skills: { $in: filters.skills } 
-              })
-            }
-          }
-        },
-      {
-        $addFields: {
-          distanceKm: { $round: [{ $divide: ['$distance', 1000] }, 2] }
-        }
-      },
-      {
-        $lookup: {
-          from: 'users',
-          localField: 'userId',
-          foreignField: '_id',
-          as: 'client',
-          pipeline: [
-            {
-              $project: {
-                fullName: 1,
-                profilePicture: 1,
-                rating: 1,
-                totalJobs: 1,
-                verificationStatus: 1
-              }
-            }
-          ]
-        }
-      },
-      {
-        $unwind: {
-          path: '$client',
-          preserveNullAndEmptyArrays: true
-        }
-      },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          category: 1,
-          subcategory: 1,
-          budget: 1,
-          urgency: 1,
-          skills: 1,
-          location: 1,
-          distance: '$distance',
-          distanceKm: 1,
-          createdAt: 1,
-          deadline: 1,
-          applicationsCount: { $size: { $ifNull: ['$applications', []] } },
-          client: 1,
-          images: 1,
-          requirements: 1,
-          preferredTime: 1,
-          estimatedDuration: 1
-        }
-      },
-      {
-        $sort: getSortCriteria(sortBy, sortOrder)
-      },
-      {
-        $skip: validatedOffset
-      },
-      {
-        $limit: validatedLimit + 1 // Get one extra to check if there are more
-      }
-    ];
+      // Build optimized geospatial aggregation pipeline
+      const { pipeline, options } = queryBuilder
+        .addGeoNearStage(latitude, longitude, radius * 1000, sanitizedFilters)
+        .addProjection(false) // List view - minimal details
+        .addCreatorLookup(true) // Minimal creator info for performance
+        .addSort(sortBy, sortOrder)
+        .addFacetedPagination(offset, limit, offset === 0 && limit <= 20)
+        .buildWithHints();
 
-      nearbyJobs = await jobs.aggregate(pipeline).toArray();
+      // Execute optimized query with performance hints
+      const results = await jobs.aggregate(pipeline, options).toArray();
+      
+      // Process results efficiently
+      queryResult = resultProcessor.processFacetedResults(results, limit);
       
     } catch (geoError) {
-      // Fallback to regular query if geospatial index is missing
-      console.warn('Geospatial query failed, using fallback:', geoError.message);
+      // Secure error logging - don't expose internal details
+      console.error('Geospatial query failed, using fallback. Error type:', geoError.name);
       
-      const fallbackQuery = {
-        isActive: true,
-        isDeleted: { $ne: true },
-        ...(filters.minBudget && { 'budget.min': { $gte: filters.minBudget } }),
-        ...(filters.maxBudget && { 'budget.max': { $lte: filters.maxBudget } }),
-        ...(filters.category && { category: filters.category }),
-        ...(filters.urgency && { urgency: filters.urgency }),
-        ...(filters.skills && filters.skills.length > 0 && { 
-          skills: { $in: filters.skills } 
-        })
-      };
+      // Log detailed error server-side only (not exposed to client)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Geospatial error details:', geoError.message);
+      }
+      
+      // Use optimized fallback query builder
+      const fallbackBuilder = new FallbackQueryBuilder(sanitizedFilters);
+      const { query: fallbackQuery, options: fallbackOptions } = fallbackBuilder
+        .addFilters()
+        .addLocationFilter(latitude, longitude, radius)
+        .build();
 
-      nearbyJobs = await jobs.find(fallbackQuery)
-        .skip(validatedOffset)
-        .limit(validatedLimit)
+      // Execute optimized fallback query
+      const fallbackResults = await jobs
+        .find(fallbackQuery, fallbackOptions)
+        .skip(offset)
+        .limit(limit + 1) // Get one extra for hasMore detection
         .sort(getSortCriteria(sortBy, sortOrder, false))
         .toArray();
 
-      // Calculate distance manually for fallback results
-      nearbyJobs = nearbyJobs.map(job => {
-        if (job.location && job.location.coordinates) {
-          const [jobLng, jobLat] = job.location.coordinates;
-          const distance = calculateDistance(latitude, longitude, jobLat, jobLng) * 1000; // Convert to meters
-          return {
-            ...job,
-            distance,
-            distanceKm: Math.round(distance / 1000 * 100) / 100
-          };
-        }
-        return {
-          ...job,
-          distance: null,
-          distanceKm: null
-        };
-      }).filter(job => {
-        // Filter by radius if distance could be calculated
-        if (job.distance !== null) {
-          return job.distance <= validatedRadius * 1000;
-        }
-        return true; // Include jobs without location data
-      }).sort((a, b) => {
-        if (a.distance === null && b.distance === null) return 0;
-        if (a.distance === null) return 1;
-        if (b.distance === null) return -1;
-        return a.distance - b.distance;
+      // Process fallback results with distance calculation
+      const processedFallback = fallbackResults.map(job => 
+        resultProcessor.processJobItem(job)
+      ).filter(job => {
+        // Filter by radius if distance was calculated
+        return !job.distance || job.distance <= radius * 1000;
       });
+
+      queryResult = {
+        jobs: processedFallback.slice(0, limit), // Remove extra item
+        hasMore: processedFallback.length > limit,
+        total: null // Don't calculate total for fallback queries
+      };
     }
 
-    // Get user session to check for personalized recommendations
+    // Optional: Add user personalization (if performance allows)
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
 
-    // Add personalization if user is logged in
-    if (userId) {
-      // Get user profile for better matching
-      const userProfile = await db.collection('users').findOne(
-        { _id: userId },
-        { projection: { skills: 1, preferences: 1, completedJobs: 1 } }
-      );
-
-      // Add relevance score based on user skills and preferences
-      nearbyJobs.forEach(job => {
-        job.relevanceScore = calculateRelevanceScore(job, userProfile);
-      });
-
-      // Sort by combination of distance and relevance for logged-in users
-      nearbyJobs.sort((a, b) => {
-        const aScore = (a.relevanceScore * 0.4) + ((10 - a.distanceKm) * 0.6);
-        const bScore = (b.relevanceScore * 0.4) + ((10 - b.distanceKm) * 0.6);
-        return bScore - aScore;
-      });
-    }
-
-    // Track nearby job searches for analytics
-    if (userId) {
-      await db.collection('analytics').insertOne({
-        userId,
-        action: 'nearby_jobs_search',
-        location: { latitude, longitude },
-        radius,
-        resultsCount: nearbyJobs.length,
-        filters,
-        timestamp: new Date()
-      });
-    }
-
-    // Efficient pagination check - get one extra item to check if there are more
-    const hasMore = nearbyJobs.length > validatedLimit;
-    if (hasMore) {
-      nearbyJobs.pop(); // Remove the extra item
-    }
-    
-    // Only count total for first page and only if specifically requested
-    let totalCount = null;
-    if (validatedOffset === 0 && validatedLimit <= 20) {
+    // Apply personalization if user is logged in (lightweight version)
+    if (userId && queryResult.jobs.length > 0) {
       try {
-        // Fast count estimation - only for small result sets
-        const estimatedCount = await jobs.estimatedDocumentCount();
-        if (estimatedCount < 1000) {
-          const countResult = await jobs.aggregate([
-            {
-              $geoNear: {
-                near: {
-                  type: 'Point',
-                  coordinates: [parseFloat(longitude), parseFloat(latitude)]
-                },
-                distanceField: 'distance',
-                maxDistance: validatedRadius * 1000,
-                spherical: true,
-                key: 'location',
-                query: {
-                  isActive: true,
-                  isDeleted: { $ne: true },
-                  ...(filters.minBudget && { 'salary.min': { $gte: filters.minBudget } }),
-                  ...(filters.maxBudget && { 'salary.max': { $lte: filters.maxBudget } }),
-                  ...(filters.category && { category: filters.category }),
-                  ...(filters.urgency && { urgency: filters.urgency }),
-                  ...(filters.skills && filters.skills.length > 0 && { 
-                    skills: { $in: filters.skills } 
-                  })
-                }
-              }
-            },
-            { $count: "total" }
-          ]).toArray();
-          totalCount = countResult[0]?.total || 0;
+        // Lightweight personalization - just add user preference indicators
+        const userPrefs = await db.collection('users').findOne(
+          { _id: userId },
+          { projection: { skills: 1, 'preferences.preferredCategories': 1 } }
+        );
+
+        if (userPrefs) {
+          queryResult.jobs = queryResult.jobs.map(job => ({
+            ...job,
+            matchesUserSkills: userPrefs.skills?.some(skill => 
+              job.skillsRequired?.includes(skill.name?.toLowerCase())
+            ) || false,
+            matchesPreferences: userPrefs.preferences?.preferredCategories?.includes(job.category) || false
+          }));
         }
-      } catch (error) {
-        console.warn('Count estimation failed, skipping total count');
+      } catch (perfError) {
+        // Don't fail the request if personalization fails
+        console.warn('Personalization failed:', perfError.name);
       }
     }
 
-    return NextResponse.json({
+    // Lightweight analytics tracking (async to not block response)
+    if (userId) {
+      // Fire and forget analytics
+      setImmediate(() => {
+        db.collection('analytics').insertOne({
+          userId,
+          action: 'nearby_jobs_search',
+          location: { latitude, longitude },
+          radius,
+          resultsCount: queryResult.jobs.length,
+          timestamp: new Date()
+        }).catch(err => console.warn('Analytics tracking failed:', err.name));
+      });
+    }
+
+    // Create response with security headers using optimized results
+    const response = NextResponse.json({
       success: true,
-      jobs: nearbyJobs,
+      jobs: queryResult.jobs,
       pagination: {
-        offset: validatedOffset,
-        limit: validatedLimit,
-        returned: nearbyJobs.length,
-        hasMore,
-        ...(totalCount !== null && { total: totalCount }),
-        nextOffset: hasMore ? validatedOffset + validatedLimit : null
+        offset: offset,
+        limit: limit,
+        returned: queryResult.jobs.length,
+        hasMore: queryResult.hasMore,
+        ...(queryResult.total !== null && { total: queryResult.total }),
+        nextOffset: queryResult.hasMore ? offset + limit : null
       },
       location: { latitude, longitude },
-      radius: validatedRadius,
+      radius: radius,
       filters: {
         sortBy,
         sortOrder,
-        ...filters
+        ...sanitizedFilters
       },
-      timestamp: new Date().toISOString()
+      performance: {
+        queryType: queryResult.total !== null ? 'geospatial_with_count' : 'optimized',
+        timestamp: new Date().toISOString()
+      }
     });
 
+    // Add security headers
+    return addSecurityHeaders(response);
+
   } catch (error) {
-    console.error('Nearby jobs search error:', error);
-    return NextResponse.json(
-      { error: 'Failed to search nearby jobs' },
-      { status: 500 }
+    // Secure error logging - don't expose internal details
+    console.error('Nearby jobs search error:', error.name, error.message);
+    
+    // Determine appropriate error response based on error type
+    let statusCode = 500;
+    let message = 'An error occurred while searching for nearby jobs';
+    
+    if (error.message.includes('required') || error.message.includes('Invalid')) {
+      statusCode = 400;
+      message = error.message;
+    } else if (error.name === 'ValidationError') {
+      statusCode = 400;
+      message = 'Invalid input parameters';
+    }
+    
+    const errorResponse = NextResponse.json(
+      { 
+        success: false,
+        error: message,
+        code: 'NEARBY_JOBS_ERROR'
+      },
+      { status: statusCode }
     );
+    
+    return addSecurityHeaders(errorResponse);
   }
 }
 
