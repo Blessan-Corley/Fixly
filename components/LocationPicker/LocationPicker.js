@@ -36,9 +36,11 @@ import {
   announceToScreenReader
 } from './locationUtils';
 
-// Google Maps API loader
+// Enhanced Google Maps API loader with rate limiting
 let isGoogleMapsLoaded = false;
 let googleMapsPromise = null;
+let loadAttempts = 0;
+const MAX_LOAD_ATTEMPTS = 3;
 
 const loadGoogleMaps = () => {
   if (isGoogleMapsLoaded && window.google?.maps) {
@@ -56,12 +58,24 @@ const loadGoogleMaps = () => {
       return;
     }
 
+    if (loadAttempts >= MAX_LOAD_ATTEMPTS) {
+      reject(new Error('Maximum Google Maps load attempts exceeded'));
+      return;
+    }
+
+    loadAttempts++;
+
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places,geometry&region=IN&language=en`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places,geometry,marker&region=IN&language=en&loading=async`;
     script.async = true;
     script.defer = true;
 
+    const timeout = setTimeout(() => {
+      reject(new Error('Google Maps load timeout'));
+    }, 15000); // 15 second timeout
+
     script.onload = () => {
+      clearTimeout(timeout);
       if (window.google?.maps) {
         isGoogleMapsLoaded = true;
         resolve(window.google.maps);
@@ -71,7 +85,8 @@ const loadGoogleMaps = () => {
     };
 
     script.onerror = () => {
-      reject(new Error('Failed to load Google Maps script'));
+      clearTimeout(timeout);
+      reject(new Error(`Failed to load Google Maps script (attempt ${loadAttempts})`));
     };
 
     document.head.appendChild(script);
@@ -89,7 +104,7 @@ const INDIA_CENTER = {
 const LocationPicker = ({
   onLocationSelect,
   initialLocation = null,
-  placeholder = "Search for a location...",
+  placeholder = "Search for a location in India...",
   className = "",
   height = "400px",
   showQuickCities = true,
@@ -102,7 +117,10 @@ const LocationPicker = ({
   enableFullscreen = true,
   showMapTypeControl = true,
   showZoomControl = true,
-  theme = 'default' // default, dark
+  theme = 'default', // default, dark
+  showRecentLocations = true,
+  maxRecentLocations = 5,
+  enableVoiceSearch = false // Future feature
 }) => {
   // Core state
   const [map, setMap] = useState(null);
@@ -135,8 +153,55 @@ const LocationPicker = ({
   const debounceRef = useRef(null);
   const mapInstanceRef = useRef(null);
 
-  // Cache for search results
+  // Enhanced caching system
   const searchCache = useRef(new Map());
+  const recentLocations = useRef([]);
+  const [showRecentDropdown, setShowRecentDropdown] = useState(false);
+
+  // Rate limiting for API calls
+  const lastSearchTime = useRef(0);
+  const SEARCH_RATE_LIMIT = 300; // 300ms between searches
+
+  // Enhanced user interaction tracking
+  const [dragStartPosition, setDragStartPosition] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Toast management to prevent spam
+  const lastToastTime = useRef(0);
+  const TOAST_COOLDOWN = 2000; // 2 seconds between toasts
+
+  // Helper function to show toasts with cooldown
+  const showToast = useCallback((type, message) => {
+    const now = Date.now();
+    if (now - lastToastTime.current >= TOAST_COOLDOWN) {
+      lastToastTime.current = now;
+      if (type === 'success') {
+        toast.success(message);
+      } else if (type === 'error') {
+        toast.error(message);
+      }
+    }
+  }, []);
+
+  // Load recent locations from localStorage
+  useEffect(() => {
+    if (showRecentLocations) {
+      try {
+        const saved = localStorage.getItem('fixly_recent_locations');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Filter out old locations (older than 30 days)
+          const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+          recentLocations.current = parsed.filter(loc =>
+            loc.timestamp && loc.timestamp > thirtyDaysAgo
+          ).slice(0, maxRecentLocations);
+        }
+      } catch (error) {
+        console.warn('Failed to load recent locations:', error);
+        recentLocations.current = [];
+      }
+    }
+  }, [showRecentLocations, maxRecentLocations]);
 
   // Initialize Google Maps
   useEffect(() => {
@@ -180,20 +245,49 @@ const LocationPicker = ({
         mapInstanceRef.current = mapInstance;
         setMap(mapInstance);
 
-        // Create marker
-        const markerInstance = new googleMaps.Marker({
-          map: mapInstance,
-          draggable: !disabled,
-          animation: googleMaps.Animation.DROP,
-          icon: {
-            path: googleMaps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: '#3B82F6',
-            fillOpacity: 1,
-            strokeWeight: 2,
-            strokeColor: '#FFFFFF'
+        // Create enhanced marker with new AdvancedMarkerElement (with fallback)
+        let markerInstance;
+        try {
+          // Try to use new AdvancedMarkerElement
+          if (googleMaps.marker && googleMaps.marker.AdvancedMarkerElement) {
+            // Create custom pin element
+            const pinElement = new googleMaps.marker.PinElement({
+              background: '#8B5CF6',
+              borderColor: '#FFFFFF',
+              glyphColor: '#FFFFFF',
+              scale: 1.2
+            });
+
+            markerInstance = new googleMaps.marker.AdvancedMarkerElement({
+              map: mapInstance,
+              position: null,
+              content: pinElement.element,
+              title: 'Drag to adjust location',
+              gmpDraggable: !disabled
+            });
+          } else {
+            throw new Error('AdvancedMarkerElement not available');
           }
-        });
+        } catch (error) {
+          // Fallback to legacy Marker
+          console.warn('Using legacy Marker:', error.message);
+          markerInstance = new googleMaps.Marker({
+            map: mapInstance,
+            draggable: !disabled,
+            animation: googleMaps.Animation.DROP,
+            icon: {
+              path: googleMaps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: '#8B5CF6',
+              fillOpacity: 1,
+              strokeWeight: 3,
+              strokeColor: '#FFFFFF',
+              strokeOpacity: 1
+            },
+            title: 'Drag to adjust location',
+            optimized: false
+          });
+        }
 
         setMarker(markerInstance);
 
@@ -240,16 +334,84 @@ const LocationPicker = ({
           }
         });
 
-        // Marker drag listener
-        markerInstance.addListener('dragend', () => {
-          const position = markerInstance.getPosition();
-          handleMapClick(position);
+        // Enhanced marker drag listeners with visual feedback (supports both marker types)
+        const isAdvancedMarker = markerInstance instanceof googleMaps.marker?.AdvancedMarkerElement;
+
+        markerInstance.addListener('dragstart', (event) => {
+          setIsDragging(true);
+          const latLng = isAdvancedMarker ? event.latLng : event.latLng;
+          setDragStartPosition({
+            lat: latLng.lat(),
+            lng: latLng.lng()
+          });
+
+          // Visual feedback during drag (only for legacy markers)
+          if (!isAdvancedMarker) {
+            markerInstance.setIcon({
+              path: googleMaps.SymbolPath.CIRCLE,
+              scale: 12,
+              fillColor: '#10B981', // Green while dragging
+              fillOpacity: 0.8,
+              strokeWeight: 3,
+              strokeColor: '#FFFFFF',
+              strokeOpacity: 1
+            });
+          }
+
+          announceToScreenReader('Marker being moved');
         });
 
-        // Set initial location
+        markerInstance.addListener('drag', () => {
+          // Optional: Real-time updates during drag (can be performance intensive)
+          // const position = isAdvancedMarker ? markerInstance.position : markerInstance.getPosition();
+          // handleMapClick(position, false); // false = don't announce
+        });
+
+        markerInstance.addListener('dragend', (event) => {
+          setIsDragging(false);
+
+          // Reset marker icon (only for legacy markers)
+          if (!isAdvancedMarker) {
+            markerInstance.setIcon({
+              path: googleMaps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: '#8B5CF6',
+              fillOpacity: 1,
+              strokeWeight: 3,
+              strokeColor: '#FFFFFF',
+              strokeOpacity: 1
+            });
+          }
+
+          const position = isAdvancedMarker ? markerInstance.position : markerInstance.getPosition();
+          handleMapClick(position);
+
+          announceToScreenReader('Location updated by dragging');
+          // Only show toast if user dragged significantly
+          if (dragStartPosition) {
+            const lat = isAdvancedMarker ? position.lat : position.lat();
+            const lng = isAdvancedMarker ? position.lng : position.lng();
+            const distance = calculateDistance(
+              dragStartPosition.lat,
+              dragStartPosition.lng,
+              lat,
+              lng
+            );
+            // Only show toast if moved more than 50 meters
+            if (distance > 0.05) {
+              showToast('success', '📍 Location updated!');
+            }
+          }
+        });
+
+        // Set initial location (supports both marker types)
         if (selectedLocation) {
           const position = new googleMaps.LatLng(selectedLocation.lat, selectedLocation.lng);
-          markerInstance.setPosition(position);
+          if (isAdvancedMarker) {
+            markerInstance.position = position;
+          } else {
+            markerInstance.setPosition(position);
+          }
           mapInstance.setCenter(position);
         } else if (allowCurrentLocation) {
           detectCurrentLocation();
@@ -258,7 +420,7 @@ const LocationPicker = ({
       } catch (err) {
         console.error('Failed to initialize map:', err);
         setError(err.message);
-        toast.error('Failed to load map. Please refresh the page.');
+        showToast('error', 'Failed to load map. Please refresh the page.');
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -298,7 +460,7 @@ const LocationPicker = ({
       }
 
       announceToScreenReader('Current location detected successfully');
-      toast.success('Current location detected!');
+      showToast('success', '📍 Current location detected!');
 
     } catch (err) {
       console.error('Location detection error:', err);
@@ -370,34 +532,79 @@ const LocationPicker = ({
     }
   }, []);
 
-  // Handle location selection
+  // Enhanced location selection with recent locations tracking
   const handleLocationSelect = useCallback((location) => {
     setSelectedLocation(location);
     setSearchValue(location.address || location.name || '');
     setShowSuggestions(false);
+    setShowRecentDropdown(false);
+
+    // Add to recent locations (avoid duplicates)
+    if (showRecentLocations && location.lat && location.lng) {
+      const locationKey = `${location.lat.toFixed(6)},${location.lng.toFixed(6)}`;
+      const existingIndex = recentLocations.current.findIndex(recent =>
+        `${recent.lat.toFixed(6)},${recent.lng.toFixed(6)}` === locationKey
+      );
+
+      if (existingIndex === -1) {
+        // Add new location to the beginning
+        recentLocations.current.unshift({
+          ...location,
+          timestamp: Date.now()
+        });
+
+        // Keep only max recent locations
+        if (recentLocations.current.length > maxRecentLocations) {
+          recentLocations.current = recentLocations.current.slice(0, maxRecentLocations);
+        }
+
+        // Cache recent locations in localStorage
+        try {
+          localStorage.setItem('fixly_recent_locations', JSON.stringify(recentLocations.current));
+        } catch (error) {
+          console.warn('Failed to save recent locations:', error);
+        }
+      } else {
+        // Move existing location to front
+        const existing = recentLocations.current.splice(existingIndex, 1)[0];
+        recentLocations.current.unshift({ ...existing, timestamp: Date.now() });
+      }
+    }
 
     if (onLocationSelect) {
       onLocationSelect(location);
     }
-  }, [onLocationSelect]);
+  }, [onLocationSelect, showRecentLocations, maxRecentLocations]);
 
-  // Search places with Redis caching
+  // Enhanced search with rate limiting and better caching
   const searchPlaces = useCallback(async (query) => {
     if (!query.trim() || !placesService) return;
+
+    // Rate limiting
+    const now = Date.now();
+    if (now - lastSearchTime.current < SEARCH_RATE_LIMIT) {
+      return; // Skip if too soon after last search
+    }
+    lastSearchTime.current = now;
 
     // Check local cache first
     const cacheKey = `search:${query.toLowerCase()}`;
     if (searchCache.current.has(cacheKey)) {
-      setSuggestions(searchCache.current.get(cacheKey));
+      const cached = searchCache.current.get(cacheKey);
+      setSuggestions(cached);
       return;
     }
 
     // Check Redis cache
-    const cachedResults = await locationCache.getCachedSearchResults(query);
-    if (cachedResults) {
-      setSuggestions(cachedResults);
-      searchCache.current.set(cacheKey, cachedResults);
-      return;
+    try {
+      const cachedResults = await locationCache.getCachedSearchResults(query);
+      if (cachedResults && cachedResults.length > 0) {
+        setSuggestions(cachedResults);
+        searchCache.current.set(cacheKey, cachedResults);
+        return;
+      }
+    } catch (error) {
+      console.warn('Cache lookup failed:', error);
     }
 
     setIsSearching(true);
@@ -430,26 +637,34 @@ const LocationPicker = ({
         lat: place.geometry.location.lat(),
         lng: place.geometry.location.lng(),
         rating: place.rating,
-        types: place.types
+        types: place.types,
+        isRecent: false // Mark as search result
       }));
 
       setSuggestions(suggestions);
       searchCache.current.set(cacheKey, suggestions);
 
-      // Cache in Redis for future use
-      await locationCache.cacheSearchResults(query, suggestions);
+      // Cache in Redis for future use (with error handling)
+      try {
+        await locationCache.cacheSearchResults(query, suggestions);
+      } catch (cacheError) {
+        console.warn('Failed to cache search results:', cacheError);
+      }
 
     } catch (err) {
       console.error('Places search failed:', err);
       setSuggestions([]);
       handleLocationError(err, 'place search');
+
+      // Show user-friendly error message (but allow this for search errors)
+      toast.error('Search failed. Please try again.');
     } finally {
       setIsSearching(false);
     }
   }, [placesService]);
 
 
-  // Handle search input change with debouncing
+  // Enhanced search input handling
   const debouncedSearch = useMemo(
     () => debounce((query) => searchPlaces(query), 300),
     [searchPlaces]
@@ -459,13 +674,23 @@ const LocationPicker = ({
     const value = e.target.value;
     setSearchValue(value);
     setShowSuggestions(!!value.trim());
+    setShowRecentDropdown(false); // Hide recent when typing
 
     if (value.trim()) {
-      debouncedSearch(value.trim());
+      if (value.trim().length >= 2) { // Only search after 2 characters
+        debouncedSearch(value.trim());
+      }
     } else {
       setSuggestions([]);
     }
   }, [debouncedSearch]);
+
+  // Handle input focus to show recent locations
+  const handleSearchFocus = useCallback(() => {
+    if (!searchValue.trim() && showRecentLocations && recentLocations.current.length > 0) {
+      setShowRecentDropdown(true);
+    }
+  }, [searchValue, showRecentLocations]);
 
   // Handle quick city selection
   const handleQuickCitySelect = useCallback((city) => {
@@ -551,19 +776,28 @@ const LocationPicker = ({
             type="text"
             value={searchValue}
             onChange={handleSearchChange}
+            onFocus={handleSearchFocus}
+            onBlur={() => {
+              // Delay hiding to allow clicks on suggestions
+              setTimeout(() => {
+                setShowRecentDropdown(false);
+              }, 200);
+            }}
             placeholder={placeholder}
             disabled={disabled || isLoading}
             className={`input-field pl-10 pr-20 ${disabled ? 'cursor-not-allowed' : ''}`}
             aria-label="Search location"
             role="combobox"
-            aria-expanded={showSuggestions}
+            aria-expanded={showSuggestions || showRecentDropdown}
             aria-autocomplete="list"
           />
 
           {/* Action buttons */}
           <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
             {allowCurrentLocation && (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={detectCurrentLocation}
                 disabled={disabled || isLoadingLocation}
                 className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
@@ -575,11 +809,29 @@ const LocationPicker = ({
                 ) : (
                   <Crosshair className="h-4 w-4 text-gray-500 hover:text-blue-500" />
                 )}
-              </button>
+              </motion.button>
+            )}
+
+            {showRecentLocations && recentLocations.current.length > 0 && (
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowRecentDropdown(!showRecentDropdown)}
+                disabled={disabled}
+                className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                title="Recent locations"
+                aria-label="Recent locations"
+              >
+                <ChevronDown className={`h-4 w-4 text-gray-500 hover:text-blue-500 transition-transform ${
+                  showRecentDropdown ? 'rotate-180' : ''
+                }`} />
+              </motion.button>
             )}
 
             {showQuickCities && (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setShowQuickCitiesPanel(!showQuickCitiesPanel)}
                 disabled={disabled}
                 className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
@@ -587,10 +839,48 @@ const LocationPicker = ({
                 aria-label="Quick city selection"
               >
                 <Navigation className="h-4 w-4 text-gray-500 hover:text-blue-500" />
-              </button>
+              </motion.button>
             )}
           </div>
         </div>
+
+        {/* Recent Locations Dropdown */}
+        <AnimatePresence>
+          {showRecentDropdown && recentLocations.current.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto"
+            >
+              <div className="p-3 border-b border-gray-100">
+                <h3 className="font-medium text-gray-900 text-sm">Recent Locations</h3>
+              </div>
+              {recentLocations.current.map((location, index) => (
+                <button
+                  key={`${location.lat}-${location.lng}-${index}`}
+                  onClick={() => handleLocationSelect({ ...location, isRecent: true })}
+                  className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                >
+                  <div className="flex items-start space-x-3">
+                    <MapPin className="h-4 w-4 text-purple-500 mt-1 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 truncate text-sm">
+                        {location.name || 'Selected Location'}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {location.address}
+                      </div>
+                      <div className="text-xs text-purple-600 mt-1">
+                        Recent
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Search Suggestions */}
         <AnimatePresence>

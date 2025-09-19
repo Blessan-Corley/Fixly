@@ -161,23 +161,22 @@ export const VirtualJobList = dynamic(
   }
 );
 
-// Skill Selection Modal - Load when needed
-export const SkillSelectionModal = dynamic(
-  () => import('../SkillSelectionModal'),
+// Unified Skill Selector - Load when needed (works as modal or inline)
+export const SkillSelector = dynamic(
+  () => import('../SkillSelector/SkillSelector'),
   {
     loading: () => (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-fixly-card dark:bg-gray-800 rounded-xl p-6 m-4 max-w-2xl w-full border border-fixly-border dark:border-gray-700">
-          <LoadingSkeleton className="h-6 w-40 mb-6" />
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <LoadingSkeleton key={i} className="h-10 w-full rounded-lg" />
-            ))}
-          </div>
-          <div className="flex justify-end gap-3 mt-6">
-            <LoadingSkeleton className="h-10 w-20" />
-            <LoadingSkeleton className="h-10 w-24" />
-          </div>
+      <div className="bg-white rounded-xl p-6 border border-gray-200">
+        <LoadingSkeleton className="h-6 w-40 mb-6" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <LoadingSkeleton key={i} className="h-10 w-full rounded-lg" />
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <LoadingSkeleton key={i} className="h-8 w-20 rounded-full" />
+          ))}
         </div>
       </div>
     ),
@@ -380,7 +379,7 @@ export {
   PieChart,
   InstagramCommentsRealtime,
   VirtualJobList,
-  SkillSelectionModal,
+  SkillSelector,
   FileUploadZone,
   RichTextEditor,
   DatePicker,
