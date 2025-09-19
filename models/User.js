@@ -208,17 +208,99 @@ const userSchema = new mongoose.Schema({
     ref: 'User'
   },
   
-  // Location
+  // Enhanced Location Storage
   location: {
+    // Home/Primary Address
+    homeAddress: {
+      doorNo: {
+        type: String,
+        trim: true,
+        maxlength: [20, 'Door number cannot exceed 20 characters']
+      },
+      street: {
+        type: String,
+        trim: true,
+        maxlength: [100, 'Street name cannot exceed 100 characters']
+      },
+      district: {
+        type: String,
+        trim: true,
+        maxlength: [50, 'District name cannot exceed 50 characters']
+      },
+      state: {
+        type: String,
+        trim: true,
+        maxlength: [50, 'State name cannot exceed 50 characters']
+      },
+      postalCode: {
+        type: String,
+        trim: true,
+        validate: {
+          validator: function(code) {
+            if (!code) return true; // Allow empty for optional
+            return /^[1-9][0-9]{5}$/.test(code); // Indian postal code format
+          },
+          message: 'Please provide a valid Indian postal code'
+        }
+      },
+      formattedAddress: {
+        type: String,
+        trim: true,
+        maxlength: [300, 'Formatted address cannot exceed 300 characters']
+      },
+      coordinates: {
+        lat: {
+          type: Number,
+          min: [6.4, 'Latitude must be within India bounds'],
+          max: [37.6, 'Latitude must be within India bounds']
+        },
+        lng: {
+          type: Number,
+          min: [68.7, 'Longitude must be within India bounds'],
+          max: [97.25, 'Longitude must be within India bounds']
+        },
+        accuracy: Number // GPS accuracy in meters
+      },
+      setAt: {
+        type: Date,
+        default: Date.now
+      }
+    },
+
+    // Current/Last Known Location
+    currentLocation: {
+      lat: {
+        type: Number,
+        min: [6.4, 'Latitude must be within India bounds'],
+        max: [37.6, 'Latitude must be within India bounds']
+      },
+      lng: {
+        type: Number,
+        min: [68.7, 'Longitude must be within India bounds'],
+        max: [97.25, 'Longitude must be within India bounds']
+      },
+      accuracy: Number,
+      lastUpdated: {
+        type: Date,
+        default: Date.now
+      },
+      source: {
+        type: String,
+        enum: ['gps', 'manual', 'home'],
+        default: 'gps'
+      }
+    },
+
+    // Backwards compatibility
     city: {
       type: String,
-      required: false, // Make optional for all users initially
+      required: false,
       trim: true,
       maxlength: [50, 'City name cannot exceed 50 characters']
     },
     state: {
       type: String,
-      required: false, // Make optional for all users initially
+      required: false,
       trim: true,
       maxlength: [50, 'State name cannot exceed 50 characters']
     },

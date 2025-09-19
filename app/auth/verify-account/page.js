@@ -28,7 +28,7 @@ export default function VerifyAccountPage() {
   const [emailOTP, setEmailOTP] = useState('');
   const [phoneOTP, setPhoneOTP] = useState('');
   const [resendCooldown, setResendCooldown] = useState({ email: 0, phone: 0 });
-  const [verificationMethod, setVerificationMethod] = useState('link'); // 'link' or 'otp'
+  // Removed verification method selection - now using OTP only
   const [showPhoneEdit, setShowPhoneEdit] = useState(false);
   const [newPhoneNumber, setNewPhoneNumber] = useState('');
 
@@ -69,21 +69,20 @@ export default function VerifyAccountPage() {
   const sendEmailVerification = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/auth/send-email-verification', {
+      const response = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: verificationMethod })
+        body: JSON.stringify({
+          email: session?.user?.email,
+          type: 'email_verification'
+        })
       });
 
       const data = await response.json();
 
       if (data.success) {
         toast.success(data.message);
-        if (verificationMethod === 'otp') {
-          setEmailStep('verify');
-        } else {
-          toast.info('Check your email for the verification link');
-        }
+        setEmailStep('verify');
         setResendCooldown(prev => ({ ...prev, email: 60 }));
       } else {
         // Handle Google authentication case
@@ -118,10 +117,14 @@ export default function VerifyAccountPage() {
 
     setLoading(true);
     try {
-      const response = await fetch('/api/auth/verify-email', {
+      const response = await fetch('/api/auth/verify-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: emailOTP, method: 'otp' })
+        body: JSON.stringify({
+          email: session?.user?.email,
+          otp: emailOTP,
+          type: 'email_verification'
+        })
       });
 
       const data = await response.json();
@@ -156,80 +159,7 @@ export default function VerifyAccountPage() {
     }
   };
 
-  const sendPhoneOTP = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/auth/send-phone-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success(data.message);
-        setPhoneStep('verify');
-        setResendCooldown(prev => ({ ...prev, phone: 60 }));
-        
-        // Show mock OTP in development
-        if (data.mock) {
-          toast.info('Development: Check console for OTP', { duration: 5000 });
-        }
-      } else {
-        toast.error(data.message);
-      }
-    } catch (error) {
-      toast.error('Failed to send OTP');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const verifyPhoneOTP = async () => {
-    if (!phoneOTP || phoneOTP.length !== 6) {
-      toast.error('Please enter a valid 6-digit OTP');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch('/api/auth/verify-phone-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp: phoneOTP })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success('✅ Phone verified successfully!');
-        setPhoneStep('verified');
-        setPhoneOTP('');
-        
-        // Update session
-        await update({
-          ...session,
-          user: {
-            ...session.user,
-            phoneVerified: true,
-            isVerified: data.user.isVerified
-          }
-        });
-
-        // Check if fully verified
-        if (data.user.isVerified) {
-          toast.success('🎉 Account fully verified!');
-          setTimeout(() => router.push('/dashboard'), 2000);
-        }
-      } else {
-        toast.error(data.message);
-      }
-    } catch (error) {
-      toast.error('Failed to verify phone');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Phone verification is now handled by FirebasePhoneAuth component
 
   const updatePhoneNumber = async () => {
     if (!newPhoneNumber || newPhoneNumber.length < 10) {
@@ -343,52 +273,28 @@ export default function VerifyAccountPage() {
             </div>
 
             {emailStep === 'send' && (
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setVerificationMethod('link')}
-                    className={`px-3 py-1 text-sm rounded-lg border ${
-                      verificationMethod === 'link'
-                        ? 'bg-fixly-accent text-white border-fixly-accent'
-                        : 'bg-white text-fixly-text border-fixly-border'
-                    }`}
-                  >
-                    Email Link
-                  </button>
-                  <button
-                    onClick={() => setVerificationMethod('otp')}
-                    className={`px-3 py-1 text-sm rounded-lg border ${
-                      verificationMethod === 'otp'
-                        ? 'bg-fixly-accent text-white border-fixly-accent'
-                        : 'bg-white text-fixly-text border-fixly-border'
-                    }`}
-                  >
-                    Email OTP
-                  </button>
-                </div>
-                <button
-                  onClick={sendEmailVerification}
-                  disabled={loading || resendCooldown.email > 0}
-                  className="w-full btn-primary flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <Loader className="h-4 w-4 animate-spin" />
-                  ) : resendCooldown.email > 0 ? (
-                    <>
-                      <Clock className="h-4 w-4" />
-                      Wait {resendCooldown.email}s
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4" />
-                      Send Verification
-                    </>
-                  )}
-                </button>
-              </div>
+              <button
+                onClick={sendEmailVerification}
+                disabled={loading || resendCooldown.email > 0}
+                className="w-full btn-primary flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <Loader className="h-4 w-4 animate-spin" />
+                ) : resendCooldown.email > 0 ? (
+                  <>
+                    <Clock className="h-4 w-4" />
+                    Wait {resendCooldown.email}s
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Send Email OTP
+                  </>
+                )}
+              </button>
             )}
 
-            {emailStep === 'verify' && verificationMethod === 'otp' && (
+            {emailStep === 'verify' && (
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-fixly-text mb-2">

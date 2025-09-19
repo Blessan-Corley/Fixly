@@ -19,6 +19,21 @@ export default function AuthErrorPage() {
 
   const getErrorDetails = (errorType) => {
     switch (errorType) {
+      case 'AccountNotFound':
+        const email = searchParams.get('email');
+        const name = searchParams.get('name');
+        return {
+          title: 'Google Login Successful! 🎉',
+          description: `We successfully authenticated your Google account${email ? ` (${email})` : ''}, but couldn't find a Fixly account associated with this Google account.`,
+          solutions: [
+            'Create a Fixly account first using this Google account',
+            'Then you can login with Google in the future',
+            'All your Google account details will be automatically filled'
+          ],
+          action: 'Create Account with Google',
+          actionPath: `/auth/signup?method=google${email ? `&email=${encodeURIComponent(email)}` : ''}${name ? `&name=${encodeURIComponent(name)}` : ''}`,
+          isSuccess: true
+        };
       case 'AccessDenied':
         return {
           title: 'Access Denied',
@@ -80,7 +95,11 @@ export default function AuthErrorPage() {
           animate={{ opacity: 1, y: 0 }}
           className="card text-center"
         >
-          <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-6" />
+          {errorDetails.isSuccess ? (
+            <Shield className="h-16 w-16 text-green-500 mx-auto mb-6" />
+          ) : (
+            <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-6" />
+          )}
           
           <h1 className="text-2xl font-bold text-fixly-text mb-4">
             {errorDetails.title}

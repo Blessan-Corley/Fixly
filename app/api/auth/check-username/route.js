@@ -1,28 +1,36 @@
-// app/api/auth/check-username/route.js - ENHANCED VERSION
+// app/api/auth/check-username/route.js - ENHANCED WITH REDIS CACHING
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import User from '@/models/User';
-import { rateLimit } from '@/utils/rateLimiting';
+import { redisRateLimit, redisUtils } from '@/lib/redis';
 import { ValidationRules } from '@/utils/validation';
 
 export async function POST(request) {
   try {
-    // Apply rate limiting - 30 checks per minute
-    const rateLimitResult = await rateLimit(request, 'username_check', 30, 60 * 1000);
+    // Get client IP for rate limiting
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
+
+    // Redis-based rate limiting - 30 checks per minute per IP
+    const rateLimitResult = await redisRateLimit(`username_check:${ip}`, 30, 60);
     if (!rateLimitResult.success) {
       return NextResponse.json(
-        { 
-          available: false, 
-          message: 'Too many username checks. Please slow down.' 
+        {
+          available: false,
+          message: 'Too many username checks. Please try again later.',
+          resetTime: new Date(rateLimitResult.resetTime).toISOString()
         },
         { status: 429 }
       );
     }
 
+    console.log('🔍 Username check started');
+
     let body;
     try {
       body = await request.json();
     } catch (jsonError) {
+      console.log('❌ JSON parse error:', jsonError);
       return NextResponse.json({
         available: false,
         message: 'Invalid request body'
@@ -49,6 +57,15 @@ export async function POST(request) {
     }
 
     const validatedUsername = validation.value;
+
+    // Check Redis cache first for faster response
+    const cacheKey = `username_available:${validatedUsername}`;
+    const cachedResult = await redisUtils.get(cacheKey);
+
+    if (cachedResult !== null) {
+      console.log('🚀 Username check from cache');
+      return NextResponse.json(cachedResult);
+    }
 
     await connectDB();
 
@@ -108,11 +125,17 @@ export async function POST(request) {
     }
 
     // ✅ SUCCESS: Username is available and valid
-    return NextResponse.json({
+    const result = {
       available: true,
       message: 'Username is available!',
       suggestion: null
-    });
+    };
+
+    // Cache the result for 10 minutes to improve performance
+    await redisUtils.set(cacheKey, result, 600);
+    console.log('💾 Username check result cached');
+
+    return NextResponse.json(result);
 
   } catch (error) {
     console.error('Username check error:', error);
