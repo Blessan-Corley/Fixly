@@ -1,9 +1,10 @@
-// utils/emailService.js
+// utils/emailService.js - Enhanced with Redis caching and rate limiting
 import nodemailer from 'nodemailer';
+import { redisRateLimit, redisUtils } from '../lib/redis';
 
 // Create transporter using Gmail SMTP
 const createTransporter = () => {
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT),
     secure: false, // true for 465, false for other ports
@@ -189,13 +190,43 @@ const emailTemplates = {
   })
 };
 
-// Send email function
-export const sendEmail = async (to, template, templateData = {}) => {
+// Enhanced send email function with Redis caching and rate limiting
+export const sendEmail = async (to, template, templateData = {}, options = {}) => {
   try {
+    // Enhanced rate limiting per email address
+    const rateLimitResult = await redisRateLimit(`email_send:${to}`, 10, 3600); // 10 emails per hour per address
+    if (!rateLimitResult.success && !options.bypassRateLimit) {
+      console.log(`🚫 Email rate limit exceeded for ${to}`);
+      return {
+        success: false,
+        error: 'Email rate limit exceeded. Please try again later.',
+        resetTime: new Date(rateLimitResult.resetTime).toISOString()
+      };
+    }
+
+    // Check if we recently sent the same email to prevent spam
+    const dedupeKey = `email_sent:${to}:${template}:${JSON.stringify(templateData)}`;
+    const recentlySent = await redisUtils.get(dedupeKey);
+    if (recentlySent && !options.forceSend) {
+      console.log(`⚠️  Duplicate email prevented for ${to} (${template})`);
+      return {
+        success: false,
+        error: 'Email was recently sent. Please wait before requesting again.',
+        duplicate: true
+      };
+    }
+
+    // Cache transporter verification to avoid repeated checks
+    const transporterCacheKey = 'email_transporter_verified';
+    let transporterVerified = await redisUtils.get(transporterCacheKey);
+
     const transporter = createTransporter();
-    
-    // Verify transporter configuration
-    await transporter.verify();
+
+    if (!transporterVerified) {
+      await transporter.verify();
+      await redisUtils.set(transporterCacheKey, true, 300); // Cache for 5 minutes
+      console.log('📧 Email transporter verified and cached');
+    }
     
     let emailContent;
     switch (template) {
@@ -223,12 +254,23 @@ export const sendEmail = async (to, template, templateData = {}) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    
+
+    // Cache successful send to prevent duplicates (15 minutes for most templates)
+    const cacheTime = template === 'emailVerification' ? 300 : 900; // 5 min for OTP, 15 min for others
+    await redisUtils.set(dedupeKey, true, cacheTime);
+
+    // Log email metrics for analytics
+    const metricsKey = `email_metrics:${template}:${new Date().toISOString().split('T')[0]}`;
+    await redisUtils.incr(metricsKey, 86400); // Daily metrics
+
+    console.log(`✅ Email sent successfully: ${template} to ${to}`);
+
     return {
       success: true,
       messageId: result.messageId,
       accepted: result.accepted,
-      rejected: result.rejected
+      rejected: result.rejected,
+      cached: true
     };
 
   } catch (error) {

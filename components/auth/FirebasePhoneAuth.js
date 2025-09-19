@@ -88,29 +88,8 @@ export default function FirebasePhoneAuth({ phoneNumber, onVerificationComplete,
       }
       
       if (shouldFallback) {
-        // Fallback to regular phone OTP API
-        try {
-          toast.info('Using alternative phone verification method...');
-          const response = await fetch('/api/auth/send-phone-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-            setStep('verify');
-            setResendCooldown(60);
-            toast.success('📱 OTP sent to your phone number (alternative method)');
-            // Set a flag to use regular verification instead of Firebase
-            setVerificationId('fallback');
-          } else {
-            toast.error(data.message || 'Failed to send OTP');
-          }
-        } catch (fallbackError) {
-          console.error('Fallback SMS error:', fallbackError);
-          toast.error('Phone verification is temporarily unavailable');
-        }
+        // Note: Phone verification fallback temporarily disabled
+        toast.error('Phone verification is temporarily unavailable. Please try again later or skip phone verification.');
       } else {
         toast.error(errorMessage);
       }
@@ -130,25 +109,8 @@ export default function FirebasePhoneAuth({ phoneNumber, onVerificationComplete,
     setLoading(true);
     
     try {
-      // Check if we're using fallback method
-      if (verificationId === 'fallback') {
-        // Use regular OTP verification
-        const response = await fetch('/api/auth/verify-phone-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ otp })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          setStep('completed');
-          toast.success('✅ Phone number verified successfully!');
-          onVerificationComplete?.(data);
-        } else {
-          toast.error(data.message || 'Verification failed');
-        }
-      } else {
+      // Use Firebase verification only (fallback removed)
+      if (verificationId !== 'fallback') {
         // Use Firebase verification
         const { PhoneAuthProvider } = await import('firebase/auth');
         const credential = PhoneAuthProvider.credential(verificationId, otp);
@@ -177,6 +139,8 @@ export default function FirebasePhoneAuth({ phoneNumber, onVerificationComplete,
         } else {
           toast.error(data.message || 'Verification failed');
         }
+      } else {
+        toast.error('Phone verification method not available. Please try sending OTP again.');
       }
       
     } catch (error) {

@@ -1,12 +1,12 @@
 // app/api/jobs/[jobId]/comments/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../lib/auth';
-import connectDB from '../../../../lib/mongodb';
-import Job from '../../../../models/Job';
-import User from '../../../../models/User';
-import { rateLimit } from '../../../../utils/rateLimiting';
-import { moderateContent } from '../../../../utils/sensitiveContentFilter';
+import { authOptions } from '../../../../../lib/auth';
+import connectDB from '../../../../../lib/mongodb';
+import Job from '../../../../../models/Job';
+import User from '../../../../../models/User';
+import { rateLimit } from '../../../../../utils/rateLimiting';
+import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
 // import { emitToJob, emitToUser } from '../../../../lib/socket';
 
 export async function POST(request, { params }) {

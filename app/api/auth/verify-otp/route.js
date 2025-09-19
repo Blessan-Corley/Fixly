@@ -1,201 +1,84 @@
-// app/api/auth/verify-otp/route.js
+// app/api/auth/verify-otp/route.js - Verify email OTP
 import { NextResponse } from 'next/server';
-import { adminAuth } from '@/lib/firebase-admin';
-import { rateLimit } from '@/utils/rateLimiting';
-import connectDB from '@/lib/db';
-import User from '@/models/User';
+import { verifyOTP } from '../../../../lib/otpService';
+import { redisRateLimit } from '../../../../lib/redis';
 
 export async function POST(request) {
   try {
-    // Apply rate limiting for OTP verification
-    const rateLimitResult = await rateLimit(request, 'otp_verify', 10, 60 * 1000); // 10 attempts per minute
+    // Get client IP for rate limiting
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
+
+    // Apply enhanced Redis-based rate limiting - max 10 verification attempts per hour per IP
+    const rateLimitResult = await redisRateLimit(`verify_otp:${ip}`, 10, 3600); // 10 attempts per hour
     if (!rateLimitResult.success) {
+      const resetTime = new Date(rateLimitResult.resetTime || Date.now() + 3600000);
       return NextResponse.json(
-        { message: 'Too many verification attempts. Please try again later.' },
+        {
+          message: 'Too many verification attempts. Please try again later.',
+          resetTime: resetTime.toISOString(),
+          remaining: rateLimitResult.remaining
+        },
         { status: 429 }
       );
     }
 
-    const body = await request.json();
-    const { phoneNumber, firebaseUid, action = 'signup' } = body;
+    const { email, otp, purpose } = await request.json();
 
-    console.log('📱 OTP verification request:', { phoneNumber, firebaseUid, action });
-
-    // Validate required fields
-    if (!phoneNumber || !firebaseUid) {
+    // Validate input
+    if (!email || !otp || !purpose) {
       return NextResponse.json(
-        { message: 'Phone number and Firebase UID are required' },
+        { message: 'Email, OTP, and purpose are required' },
         { status: 400 }
       );
     }
 
-    // Validate phone number format
-    const phoneRegex = /^(\+91)?[6-9]\d{9}$/;
-    const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
-    if (!phoneRegex.test(cleanPhone)) {
+    // Validate OTP format (6 digits)
+    if (!/^\d{6}$/.test(otp)) {
       return NextResponse.json(
-        { message: 'Invalid phone number format' },
+        { message: 'OTP must be 6 digits' },
         { status: 400 }
       );
     }
 
-    const formattedPhone = `+91${cleanPhone}`;
+    // Validate purpose
+    if (!['signup', 'password_reset'].includes(purpose)) {
+      return NextResponse.json(
+        { message: 'Invalid purpose specified' },
+        { status: 400 }
+      );
+    }
 
-    try {
-      // Verify the Firebase UID and get user record
-      const firebaseUser = await adminAuth.getUser(firebaseUid);
-      
-      // Verify that the phone number matches
-      if (firebaseUser.phoneNumber !== formattedPhone) {
-        return NextResponse.json(
-          { message: 'Phone number mismatch' },
-          { status: 400 }
-        );
-      }
+    console.log(`🔍 OTP verification - Email: ${email}, Purpose: ${purpose}`);
 
-      // Connect to database
-      await connectDB();
+    // Verify OTP using Redis
+    const result = await verifyOTP(email, otp, purpose);
 
-      if (action === 'signup') {
-        // For signup: Check if phone number is already registered
-        const existingUser = await User.findOne({ phone: formattedPhone });
-        if (existingUser) {
-          return NextResponse.json(
-            { message: 'Phone number is already registered' },
-            { status: 409 }
-          );
-        }
+    if (result.success) {
+      console.log(`✅ OTP verified successfully for ${email} (${purpose})`);
 
-        // Phone verification successful for signup
-        return NextResponse.json({
-          success: true,
-          message: 'Phone number verified successfully',
-          phoneNumber: formattedPhone,
-          firebaseUid: firebaseUid,
-          verified: true
-        });
-
-      } else if (action === 'signin') {
-        // For signin: Find user with this phone number
-        const user = await User.findOne({ 
-          phone: formattedPhone,
-          authMethod: 'phone'
-        });
-
-        if (!user) {
-          return NextResponse.json(
-            { message: 'No account found with this phone number' },
-            { status: 404 }
-          );
-        }
-
-        if (user.banned) {
-          return NextResponse.json(
-            { message: 'Account has been suspended' },
-            { status: 403 }
-          );
-        }
-
-        // Update user's last login and phone verification status
-        user.phoneVerified = true;
-        user.lastActive = new Date();
-        await user.save();
-
-        return NextResponse.json({
-          success: true,
-          message: 'Phone number verified successfully',
-          user: {
-            id: user._id.toString(),
-            name: user.name,
-            username: user.username,
-            email: user.email,
-            role: user.role,
-            isVerified: user.isVerified,
-            authMethod: user.authMethod
-          },
-          verified: true
-        });
-
-      } else {
-        return NextResponse.json(
-          { message: 'Invalid action' },
-          { status: 400 }
-        );
-      }
-
-    } catch (firebaseError) {
-      console.error('🔥 Firebase verification error:', firebaseError);
-      
-      // Handle specific Firebase errors
-      if (firebaseError.code === 'auth/user-not-found') {
-        return NextResponse.json(
-          { message: 'Invalid verification session' },
-          { status: 400 }
-        );
-      }
-      
-      if (firebaseError.code === 'auth/invalid-uid') {
-        return NextResponse.json(
-          { message: 'Invalid verification data' },
-          { status: 400 }
-        );
-      }
+      return NextResponse.json({
+        success: true,
+        message: result.message,
+        verified: true
+      });
+    } else {
+      console.log(`❌ OTP verification failed for ${email}: ${result.message}`);
 
       return NextResponse.json(
-        { message: 'Phone verification failed. Please try again.' },
-        { status: 500 }
+        {
+          success: false,
+          message: result.message,
+          verified: false
+        },
+        { status: 400 }
       );
     }
 
   } catch (error) {
-    console.error('💥 OTP verification error:', error);
+    console.error('💥 Verify OTP error:', error);
     return NextResponse.json(
-      { message: 'Verification failed. Please try again.' },
-      { status: 500 }
-    );
-  }
-}
-
-// GET endpoint to check phone number availability
-export async function GET(request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const phoneNumber = searchParams.get('phone');
-
-    if (!phoneNumber) {
-      return NextResponse.json(
-        { message: 'Phone number is required' },
-        { status: 400 }
-      );
-    }
-
-    // Validate phone number format
-    const phoneRegex = /^(\+91)?[6-9]\d{9}$/;
-    const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
-    if (!phoneRegex.test(cleanPhone)) {
-      return NextResponse.json(
-        { message: 'Invalid phone number format' },
-        { status: 400 }
-      );
-    }
-
-    const formattedPhone = `+91${cleanPhone}`;
-
-    await connectDB();
-
-    // Check if phone number exists
-    const existingUser = await User.findOne({ phone: formattedPhone });
-
-    return NextResponse.json({
-      available: !existingUser,
-      exists: !!existingUser,
-      phone: formattedPhone
-    });
-
-  } catch (error) {
-    console.error('📱 Phone check error:', error);
-    return NextResponse.json(
-      { message: 'Failed to check phone number' },
+      { message: 'Failed to verify OTP. Please try again.' },
       { status: 500 }
     );
   }

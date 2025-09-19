@@ -22,38 +22,55 @@ import {
 import { toast } from 'sonner';
 import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
 import SkillSelectionModal from '../../../components/SkillSelectionModal';
+import AddressForm from '../../../components/AddressForm/AddressForm';
+import SkillsSelection from '../../../components/SkillsSelection/SkillsSelection';
+import { validateContent } from '../../../lib/validations/content-validator';
 
-// Username validation
-const validateUsername = (username) => {
+// Username validation with content validation
+const validateUsername = async (username) => {
   if (!username || username.length < 3) {
     return { valid: false, error: 'Username must be at least 3 characters' };
   }
-  
+
   if (username.length > 20) {
     return { valid: false, error: 'Username cannot exceed 20 characters' };
   }
-  
+
   if (!/^[a-z0-9_]+$/.test(username)) {
     return { valid: false, error: 'Username can only contain lowercase letters, numbers, and underscores' };
   }
-  
+
   if (/^\d+$/.test(username)) {
     return { valid: false, error: 'Username cannot be only numbers' };
   }
-  
+
   if (username.startsWith('_') || username.endsWith('_')) {
     return { valid: false, error: 'Username cannot start or end with underscore' };
   }
-  
+
   if (username.includes('__')) {
     return { valid: false, error: 'Username cannot contain consecutive underscores' };
   }
-  
+
   const reserved = ['admin', 'root', 'fixly', 'api', 'dashboard'];
   if (reserved.includes(username)) {
     return { valid: false, error: 'This username is reserved' };
   }
-  
+
+  // Content validation for abuse/profanity
+  try {
+    const contentValidation = await validateContent(username, 'profile');
+    if (!contentValidation.isValid) {
+      const mainError = contentValidation.violations.length > 0
+        ? contentValidation.violations[0].message
+        : 'Username contains inappropriate content';
+      return { valid: false, error: mainError };
+    }
+  } catch (error) {
+    console.warn('Content validation failed:', error);
+    // Continue with other validations if content validation fails
+  }
+
   return { valid: true };
 };
 
@@ -133,7 +150,15 @@ export default function SignupPage() {
   // Form steps
   const [currentStep, setCurrentStep] = useState(1);
   const [authMethod, setAuthMethod] = useState(method || '');
-  
+
+  // OTP states
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+
   // Form data
   const [formData, setFormData] = useState({
     role: urlRole,
@@ -143,7 +168,8 @@ export default function SignupPage() {
     phone: '',
     password: '',
     confirmPassword: '',
-    location: null,
+    location: null, // Legacy city-based location
+    address: null, // Enhanced address with GPS coordinates
     skills: [],
     termsAccepted: false
   });
@@ -243,7 +269,7 @@ export default function SignupPage() {
     checkExistingUser();
   }, [router, urlRole]);
 
-  // Username availability check
+  // Username availability check with content validation
   useEffect(() => {
     const checkUsername = async () => {
       if (formData.username.length < 3) {
@@ -252,7 +278,7 @@ export default function SignupPage() {
         return;
       }
 
-      const validation = validateUsername(formData.username);
+      const validation = await validateUsername(formData.username);
       if (!validation.valid) {
         setUsernameAvailable(false);
         setCheckingUsername(false);
@@ -267,10 +293,10 @@ export default function SignupPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username: formData.username })
         });
-        
+
         const data = await response.json();
         setUsernameAvailable(data.available);
-        
+
         if (!data.available) {
           setErrors(prev => ({ ...prev, username: data.message || 'Username is taken' }));
         } else {
@@ -308,7 +334,7 @@ export default function SignupPage() {
     }
   };
 
-  const validateStep = (step) => {
+  const validateStep = async (step) => {
     const newErrors = {};
 
     switch (step) {
@@ -317,7 +343,7 @@ export default function SignupPage() {
           newErrors.authMethod = 'Please select an authentication method';
         }
         break;
-        
+
       case 2:
         if (authMethod === 'email') {
           if (!formData.email) {
@@ -325,56 +351,100 @@ export default function SignupPage() {
           } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = 'Please enter a valid email address';
           }
-          
-          if (!formData.password) {
-            newErrors.password = 'Password is required';
-          } else {
-            const passwordValidation = validatePassword(formData.password);
-            if (!passwordValidation.valid) {
-              newErrors.password = passwordValidation.error;
+
+          // Only validate password if email is not yet verified (OTP not sent)
+          if (!otpSent) {
+            if (!formData.password) {
+              newErrors.password = 'Password is required';
+            } else {
+              const passwordValidation = validatePassword(formData.password);
+              if (!passwordValidation.valid) {
+                newErrors.password = passwordValidation.error;
+              }
+            }
+
+            if (formData.password !== formData.confirmPassword) {
+              newErrors.confirmPassword = 'Passwords do not match';
             }
           }
-          
-          if (formData.password !== formData.confirmPassword) {
-            newErrors.confirmPassword = 'Passwords do not match';
+
+          // If OTP is sent but not verified, require OTP verification
+          if (otpSent && !otpVerified) {
+            if (!otp || otp.length !== 6) {
+              newErrors.otp = 'Please enter the 6-digit verification code';
+            }
           }
         }
         break;
-        
+
       case 3:
+        // Name validation with content check
         if (!formData.name.trim()) {
           newErrors.name = 'Full name is required';
-        }
-        
-        if (!formData.username.trim()) {
-          newErrors.username = 'Username is required';
         } else {
-          const validation = validateUsername(formData.username);
-          if (!validation.valid) {
-            newErrors.username = validation.error;
-          } else if (usernameAvailable === false) {
-            newErrors.username = 'Username is already taken';
+          try {
+            const nameValidation = await validateContent(formData.name, 'profile');
+            if (!nameValidation.isValid) {
+              newErrors.name = 'Name contains inappropriate content';
+            }
+          } catch (error) {
+            console.warn('Name content validation failed:', error);
           }
         }
-        
+
+        // Username validation (already includes content validation)
+        if (!formData.username.trim()) {
+          newErrors.username = 'Username is required';
+        } else if (usernameAvailable === false) {
+          newErrors.username = 'Username is already taken';
+        }
+
         if (!formData.email) {
           newErrors.email = 'Email is required';
         }
-        
-        if (authMethod === 'email' && !formData.phone) {
+
+        // Phone required for both Google and Email users
+        if (!formData.phone) {
           newErrors.phone = 'Phone number is required';
+        } else if (formData.phone.length !== 10) {
+          newErrors.phone = 'Please enter a valid 10-digit phone number';
         }
         break;
-        
+
       case 4:
-        if (!formData.location) {
-          newErrors.location = 'Please select your city';
+        // Enhanced address validation
+        if (!formData.address || !formData.address.formatted) {
+          newErrors.address = 'Please provide your complete address';
+        } else {
+          // Check if coordinates are available (GPS location or geocoded)
+          if (!formData.address.coordinates ||
+              !formData.address.coordinates.lat ||
+              !formData.address.coordinates.lng) {
+            newErrors.address = 'Please ensure your address has valid location coordinates';
+          }
         }
-        
-        if (formData.role === 'fixer' && formData.skills.length === 0) {
-          newErrors.skills = 'Please select at least one skill';
+
+        // Skills validation for fixers with content validation
+        if (formData.role === 'fixer') {
+          if (formData.skills.length < 3) {
+            newErrors.skills = 'Please select at least 3 skills to showcase your expertise';
+          } else {
+            // Validate each skill for content
+            try {
+              for (const skill of formData.skills) {
+                const skillName = typeof skill === 'string' ? skill : skill.name;
+                const skillValidation = await validateContent(skillName, 'profile');
+                if (!skillValidation.isValid) {
+                  newErrors.skills = 'One or more skills contain inappropriate content';
+                  break;
+                }
+              }
+            } catch (error) {
+              console.warn('Skills content validation failed:', error);
+            }
+          }
         }
-        
+
         if (!formData.termsAccepted) {
           newErrors.terms = 'Please accept the terms and conditions';
         }
@@ -385,9 +455,24 @@ export default function SignupPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNextStep = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(prev => prev + 1);
+  const handleNextStep = async () => {
+    const isValid = await validateStep(currentStep);
+    if (isValid) {
+      // Special handling for email auth step 2
+      if (currentStep === 2 && authMethod === 'email') {
+        // If email/password validated but OTP not sent yet, send OTP
+        if (!otpSent && formData.email && formData.password && formData.confirmPassword) {
+          sendOTP();
+          return;
+        }
+        // If OTP sent and verified, proceed to next step
+        if (otpSent && otpVerified) {
+          setCurrentStep(prev => prev + 1);
+          return;
+        }
+      } else {
+        setCurrentStep(prev => prev + 1);
+      }
     } else {
       // Show validation errors with helpful message
       const errorMessages = Object.values(errors).filter(msg => msg);
@@ -428,7 +513,8 @@ export default function SignupPage() {
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(4)) {
+    const isValid = await validateStep(4);
+    if (!isValid) {
       // Show validation errors
       const errorMessages = Object.values(errors).filter(msg => msg);
       if (errorMessages.length > 0) {
@@ -438,32 +524,58 @@ export default function SignupPage() {
     }
 
     setLoading(true);
-    
+
     try {
       console.log('📝 Submitting signup data - Method:', authMethod);
-      
+
       const formattedPhone = formData.phone ? `+91${formData.phone.replace(/[^\d]/g, '')}` : '';
-      
+
+      // Enhanced location data structure for MongoDB
+      const locationData = formData.address ? {
+        homeAddress: {
+          doorNo: formData.address.doorNo || '',
+          street: formData.address.street || '',
+          district: formData.address.district || '',
+          state: formData.address.state || '',
+          postalCode: formData.address.postalCode || '',
+          formattedAddress: formData.address.formatted || '',
+          coordinates: {
+            lat: formData.address.coordinates?.lat || 0,
+            lng: formData.address.coordinates?.lng || 0,
+            accuracy: formData.address.coordinates?.accuracy || null
+          },
+          setAt: new Date()
+        },
+        currentLocation: {
+          lat: formData.address.coordinates?.lat || 0,
+          lng: formData.address.coordinates?.lng || 0,
+          accuracy: formData.address.coordinates?.accuracy || null,
+          lastUpdated: new Date(),
+          source: formData.address.source || 'manual'
+        }
+      } : null;
+
       if (authMethod === 'google' && googleUser) {
         // Google completion API
         console.log('🔄 Using Google completion API');
-        
+
         const googleCompletionData = {
           role: formData.role,
           phone: formattedPhone,
-          location: formData.location ? {
-            city: formData.location.name,
-            state: formData.location.state,
-            lat: formData.location.lat || 0,
-            lng: formData.location.lng || 0
-          } : null
+          location: locationData,
+          username: formData.username.trim().toLowerCase() // Add username for Google users
         };
-        
+
         if (formData.role === 'fixer') {
-          googleCompletionData.skills = formData.skills;
+          googleCompletionData.skills = formData.skills.map(skill =>
+            typeof skill === 'string' ? skill : skill.name
+          );
         }
-        
-        const response = await fetch('/api/auth/complete-google-signup', {
+
+        // Add flag to indicate this is Google completion
+        googleCompletionData.isGoogleCompletion = true;
+
+        const response = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(googleCompletionData)
@@ -473,7 +585,7 @@ export default function SignupPage() {
 
         if (response.ok && data.success) {
           toast.success('Profile completed successfully! 🎉');
-          
+
           // Wait for session to update
           setTimeout(() => {
             router.replace('/dashboard');
@@ -482,31 +594,28 @@ export default function SignupPage() {
           console.error('❌ Google completion failed:', data);
           toast.error(data.message || 'Failed to complete profile. Please try again.');
         }
-        
+
       } else {
         // Regular signup flow
         console.log('🔄 Using regular signup API');
-        
+
         const submitData = {
           name: formData.name.trim(),
           username: formData.username.trim().toLowerCase(),
           email: formData.email.trim().toLowerCase(),
           phone: formattedPhone,
           role: formData.role,
-          location: formData.location ? {
-            city: formData.location.name,
-            state: formData.location.state,
-            lat: formData.location.lat || 0,
-            lng: formData.location.lng || 0
-          } : null,
+          location: locationData, // Enhanced location structure
           termsAccepted: formData.termsAccepted,
           authMethod: authMethod
         };
-        
+
         if (formData.role === 'fixer') {
-          submitData.skills = formData.skills;
+          submitData.skills = formData.skills.map(skill =>
+            typeof skill === 'string' ? skill : skill.name
+          );
         }
-        
+
         if (authMethod === 'email') {
           submitData.password = formData.password;
           submitData.confirmPassword = formData.confirmPassword;
@@ -527,7 +636,7 @@ export default function SignupPage() {
 
         if (response.ok && data.success) {
           toast.success('Account created successfully! 🎉');
-          
+
           if (authMethod === 'email') {
             // Sign in the user
             const result = await signIn('credentials', {
@@ -536,7 +645,7 @@ export default function SignupPage() {
               loginMethod: 'email',
               redirect: false
             });
-            
+
             if (result?.error) {
               toast.error('Account created but login failed. Please try signing in manually.');
               router.push('/auth/signin?message=signup_complete');
@@ -567,6 +676,114 @@ export default function SignupPage() {
 
   const removeSkill = (skillToRemove) => {
     handleInputChange('skills', formData.skills.filter(skill => skill !== skillToRemove));
+  };
+
+  // OTP Functions
+  const sendOTP = async () => {
+    if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) {
+      setErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError('');
+
+    try {
+      const response = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email.toLowerCase(),
+          purpose: 'signup',
+          name: formData.name || 'New User'
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setOtpSent(true);
+        setOtpError('');
+        toast.success('Verification code sent to your email!');
+
+        // Start cooldown timer
+        setResendCooldown(60);
+        const timer = setInterval(() => {
+          setResendCooldown(prev => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        if (response.status === 409) {
+          setOtpError('An account with this email already exists. Please sign in instead.');
+          toast.error('Email already registered. Please sign in.');
+        } else if (response.status === 429) {
+          setOtpError('Too many OTP requests. Please try again later.');
+        } else {
+          setOtpError(data.message || 'Failed to send verification code. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Send OTP error:', error);
+      setOtpError('Network error. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const verifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      setOtpError('Please enter a valid 6-digit code');
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError('');
+
+    try {
+      const response = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email.toLowerCase(),
+          otp: otp,
+          purpose: 'signup'
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setOtpVerified(true);
+        setOtpError('');
+        toast.success('Email verified successfully!');
+        setTimeout(() => {
+          handleNextStep();
+        }, 500);
+      } else {
+        if (response.status === 429) {
+          setOtpError('Too many verification attempts. Please request a new code.');
+        } else {
+          setOtpError(data.message || 'Invalid verification code. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Verify OTP error:', error);
+      setOtpError('Network error. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const resendOTP = async () => {
+    if (resendCooldown > 0) return;
+    setOtp('');
+    setOtpVerified(false);
+    await sendOTP();
   };
 
   const renderStepContent = () => {
@@ -671,10 +888,13 @@ export default function SignupPage() {
             >
               <div className="text-center mb-8">
                 <h2 className="text-2xl font-bold text-fixly-text mb-2">
-                  Create Account
+                  {otpSent ? 'Verify Your Email' : 'Create Account'}
                 </h2>
                 <p className="text-fixly-text-light">
-                  Enter your details to create your account
+                  {otpSent
+                    ? `We've sent a verification code to ${formData.email}`
+                    : 'Enter your details to create your account'
+                  }
                 </p>
               </div>
 
@@ -688,80 +908,186 @@ export default function SignupPage() {
                     <input
                       type="email"
                       value={formData.email}
-                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      onChange={(e) => {
+                        handleInputChange('email', e.target.value);
+                        // Reset OTP state if email changes
+                        if (otpSent) {
+                          setOtpSent(false);
+                          setOtp('');
+                          setOtpVerified(false);
+                          setOtpError('');
+                        }
+                      }}
                       placeholder="Enter your email"
-                      className={`input-field pl-10 ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
+                      className={`input-field pl-10 ${
+                        otpSent ? 'bg-gray-50 text-gray-600' : ''
+                      } ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
+                      disabled={otpSent && !otpVerified}
                     />
+                    {otpSent && !otpVerified && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <Check className="h-4 w-4 text-fixly-accent" />
+                      </div>
+                    )}
                   </div>
                   {errors.email && (
                     <p className="text-red-500 text-sm mt-1">{errors.email}</p>
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={formData.password}
-                      onChange={(e) => handleInputChange('password', e.target.value)}
-                      placeholder="Create a password"
-                      className={`input-field pl-10 pr-10 ${errors.password ? 'border-red-500 focus:border-red-500' : ''}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5 text-fixly-text-muted" />
-                      ) : (
-                        <Eye className="h-5 w-5 text-fixly-text-muted" />
+                {!otpSent && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-fixly-text mb-2">
+                        Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={formData.password}
+                          onChange={(e) => handleInputChange('password', e.target.value)}
+                          placeholder="Create a password"
+                          className={`input-field pl-10 pr-10 ${errors.password ? 'border-red-500 focus:border-red-500' : ''}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-5 w-5 text-fixly-text-muted" />
+                          ) : (
+                            <Eye className="h-5 w-5 text-fixly-text-muted" />
+                          )}
+                        </button>
+                      </div>
+                      {errors.password && (
+                        <p className="text-red-500 text-sm mt-1">{errors.password}</p>
                       )}
-                    </button>
-                  </div>
-                  {errors.password && (
-                    <p className="text-red-500 text-sm mt-1">{errors.password}</p>
-                  )}
-                  {!errors.password && (
-                    <p className="text-xs text-fixly-text-muted mt-1">
-                      Password must be 8+ characters with uppercase, lowercase, number, and special character
-                    </p>
-                  )}
-                </div>
+                      {!errors.password && (
+                        <p className="text-xs text-fixly-text-muted mt-1">
+                          Password must be 8+ characters with uppercase, lowercase, number, and special character
+                        </p>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Confirm Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={formData.confirmPassword}
-                      onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                      placeholder="Confirm your password"
-                      className={`input-field pl-10 pr-10 ${errors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-5 w-5 text-fixly-text-muted" />
-                      ) : (
-                        <Eye className="h-5 w-5 text-fixly-text-muted" />
+                    <div>
+                      <label className="block text-sm font-medium text-fixly-text mb-2">
+                        Confirm Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={formData.confirmPassword}
+                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                          placeholder="Confirm your password"
+                          className={`input-field pl-10 pr-10 ${errors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                        >
+                          {showConfirmPassword ? (
+                            <EyeOff className="h-5 w-5 text-fixly-text-muted" />
+                          ) : (
+                            <Eye className="h-5 w-5 text-fixly-text-muted" />
+                          )}
+                        </button>
+                      </div>
+                      {errors.confirmPassword && (
+                        <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
                       )}
-                    </button>
-                  </div>
-                  {errors.confirmPassword && (
-                    <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
-                  )}
-                </div>
+                    </div>
+                  </>
+                )}
+
+                {/* OTP Input Section */}
+                {otpSent && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="space-y-4"
+                  >
+                    <div className="p-4 bg-fixly-accent/10 border border-fixly-accent/20 rounded-xl">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Mail className="h-4 w-4 text-fixly-accent" />
+                        <span className="text-sm font-medium text-fixly-accent">
+                          Verification code sent!
+                        </span>
+                      </div>
+                      <p className="text-sm text-fixly-text-light">
+                        Check your email and enter the 6-digit code below.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-fixly-text mb-2">
+                        Verification Code
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={otp}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                            setOtp(value);
+                            setOtpError('');
+                          }}
+                          placeholder="Enter 6-digit code"
+                          className={`input-field text-center text-lg tracking-widest ${
+                            errors.otp || otpError ? 'border-red-500 focus:border-red-500' : ''
+                          } ${otpVerified ? 'border-green-500 bg-green-50' : ''}`}
+                          maxLength={6}
+                          disabled={otpLoading || otpVerified}
+                        />
+                        {otpVerified && (
+                          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                            <Check className="h-5 w-5 text-green-500" />
+                          </div>
+                        )}
+                      </div>
+                      {(errors.otp || otpError) && (
+                        <p className="text-red-500 text-sm mt-1">{errors.otp || otpError}</p>
+                      )}
+                      {otpVerified && (
+                        <p className="text-green-600 text-sm mt-1">Email verified successfully!</p>
+                      )}
+                    </div>
+
+                    {!otpVerified && (
+                      <div className="flex justify-between items-center">
+                        <button
+                          type="button"
+                          onClick={verifyOTP}
+                          disabled={otp.length !== 6 || otpLoading}
+                          className="btn-primary flex items-center"
+                        >
+                          {otpLoading ? (
+                            <Loader className="animate-spin h-4 w-4 mr-2" />
+                          ) : (
+                            <Check className="h-4 w-4 mr-2" />
+                          )}
+                          Verify Code
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={resendOTP}
+                          disabled={resendCooldown > 0 || otpLoading}
+                          className="text-sm text-fixly-accent hover:text-fixly-accent-dark disabled:text-fixly-text-muted"
+                        >
+                          {resendCooldown > 0
+                            ? `Resend in ${resendCooldown}s`
+                            : 'Resend Code'
+                          }
+                        </button>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           );
@@ -941,221 +1267,54 @@ export default function SignupPage() {
           >
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-fixly-text mb-2">
-                Location & Skills
+                Address & {formData.role === 'fixer' ? 'Skills' : 'Location'}
               </h2>
               <p className="text-fixly-text-light">
-                Help us connect you with the right opportunities
+                {formData.role === 'fixer'
+                  ? 'Complete your address and showcase your skills'
+                  : 'Provide your address for service requests'
+                }
               </p>
             </div>
 
             <div className="space-y-6">
-              {/* Location Selection */}
+              {/* Enhanced Address Form */}
               <div>
                 <label className="block text-sm font-medium text-fixly-text mb-2">
-                  City
+                  Complete Address <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                  <input
-                    type="text"
-                    value={formData.location ? formData.location.name : citySearch}
-                    onChange={(e) => {
-                      setCitySearch(e.target.value);
-                      if (formData.location) {
-                        handleInputChange('location', null);
-                      }
-                    }}
-                    placeholder="Search for your city"
-                    className={`input-field pl-10 ${errors.location ? 'border-red-500 focus:border-red-500' : ''}`}
-                    disabled={!!formData.location}
-                  />
-                  {formData.location && (
-                    <button
-                      onClick={() => {
-                        handleInputChange('location', null);
-                        setCitySearch('');
-                      }}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                    >
-                      <X className="h-4 w-4 text-fixly-text-muted" />
-                    </button>
-                  )}
-                </div>
-                
-                {showCityDropdown && (
-                  <div className="mt-1 bg-fixly-card border border-fixly-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {cityResults.map((city, index) => (
-                      <button
-                        key={index}
-                        onClick={() => {
-                          const locationData = {
-                            name: city.name,
-                            state: city.state,
-                            lat: city.lat || 0,
-                            lng: city.lng || 0
-                          };
-                          
-                          handleInputChange('location', locationData);
-                          setShowCityDropdown(false);
-                          setCitySearch('');
-                        }}
-                        className="w-full px-4 py-2 text-left hover:bg-fixly-accent/10 first:rounded-t-lg last:rounded-b-lg"
-                      >
-                        <div className="font-medium text-fixly-text">{city.name}</div>
-                        <div className="text-sm text-fixly-text-light">{city.state}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                
-                {errors.location && (
-                  <p className="text-red-500 text-sm mt-1">{errors.location}</p>
+                <p className="text-xs text-fixly-text-light mb-4">
+                  Provide your complete address. We'll use GPS to help auto-fill details.
+                </p>
+
+                <AddressForm
+                  initialAddress={formData.address}
+                  onAddressSelect={(address) => handleInputChange('address', address)}
+                  className="w-full"
+                />
+
+                {errors.address && (
+                  <p className="text-red-500 text-sm mt-1">{errors.address}</p>
                 )}
               </div>
 
-              {/* Smart Skills Selection for Fixers */}
+              {/* Enhanced Skills Selection for Fixers */}
               {formData.role === 'fixer' && (
                 <div>
                   <label className="block text-sm font-medium text-fixly-text mb-2">
                     Skills & Services <span className="text-red-500">*</span>
                   </label>
                   <p className="text-xs text-fixly-text-light mb-4">
-                    Select at least one skill that matches your expertise. We'll suggest related skills to help you get discovered.
+                    Select at least 3 skills that match your expertise. This helps clients find you more easily.
                   </p>
-                  
-                  {/* Selected Skills */}
-                  {formData.skills.length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-fixly-text mb-2">Your Selected Skills ({formData.skills.length})</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {formData.skills.map((skill, index) => (
-                          <span
-                            key={index}
-                            className="skill-chip skill-chip-selected"
-                          >
-                            {skill}
-                            <button
-                              onClick={() => removeSkill(skill)}
-                              className="ml-2 hover:text-fixly-text"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
 
-                  {/* Progressive Skill Suggestions */}
-                  <div className="space-y-4">
-                    {formData.skills.length === 0 ? (
-                      // Initial category view for first-time users
-                      <div>
-                        <h4 className="font-medium text-fixly-text mb-3">
-                          Popular Categories
-                          {errors.skills && (
-                            <span className="text-xs text-red-500 ml-2 font-normal">
-                              (Please select at least one skill)
-                            </span>
-                          )}
-                        </h4>
-                        <div className={`grid grid-cols-2 gap-3 ${errors.skills ? 'ring-2 ring-red-200 rounded-lg p-2' : ''}`}>
-                          {getInitialSkillCategories().map((category, index) => (
-                            <div key={index} className="p-3 border border-fixly-border rounded-lg hover:border-fixly-accent/50 transition-colors">
-                              <div className="flex items-center mb-2">
-                                <span className="text-lg mr-2">{category.icon}</span>
-                                <span className="text-sm font-medium text-fixly-text">{category.name}</span>
-                              </div>
-                              <div className="space-y-1">
-                                {category.topSkills.map((skill, skillIndex) => (
-                                  <button
-                                    key={skillIndex}
-                                    onClick={() => addSkill(skill)}
-                                    className="block w-full text-left text-xs text-fixly-text-light hover:text-fixly-accent transition-colors"
-                                  >
-                                    + {skill}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      // Smart suggestions based on selected skills
-                      <div>
-                        <h4 className="font-medium text-fixly-text mb-3">
-                          Recommended for you
-                          <span className="text-xs text-fixly-text-light font-normal ml-2">
-                            Based on your selected skills
-                          </span>
-                        </h4>
-                        <div className="flex flex-wrap gap-2">
-                          {getSkillSuggestions(formData.skills, 8).map((skill, index) => (
-                            <button
-                              key={index}
-                              onClick={() => addSkill(skill)}
-                              disabled={formData.skills.includes(skill)}
-                              className="skill-chip text-sm"
-                            >
-                              {skill}
-                            </button>
-                          ))}
-                        </div>
-                        
-                        {/* Show more options button */}
-                        <div className="mt-4">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // Toggle showing all categories
-                              const skillsContainer = document.querySelector('.all-skills-container');
-                              if (skillsContainer) {
-                                skillsContainer.style.display = skillsContainer.style.display === 'none' ? 'block' : 'none';
-                              }
-                            }}
-                            className="text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
-                          >
-                            Browse all skills →
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* All Skills (collapsed by default when suggestions are shown) */}
-                    {formData.skills.length > 0 && (
-                      <div className="all-skills-container" style={{ display: 'none' }}>
-                        <div className="space-y-3 max-h-60 overflow-y-auto">
-                          {skillCategories.slice(0, 6).map((category, categoryIndex) => (
-                            <div key={categoryIndex}>
-                              <h4 className="font-medium text-fixly-text mb-2 text-sm">{category.category}</h4>
-                              <div className="flex flex-wrap gap-2">
-                                {category.skills.slice(0, 8).map((skill, skillIndex) => (
-                                  <button
-                                    key={skillIndex}
-                                    onClick={() => addSkill(skill)}
-                                    disabled={formData.skills.includes(skill)}
-                                    className={`skill-chip text-xs ${
-                                      formData.skills.includes(skill)
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
-                                    }`}
-                                  >
-                                    {skill}
-                                  </button>
-                                ))}
-                                {category.skills.length > 8 && (
-                                  <span className="text-xs text-fixly-text-muted">
-                                    +{category.skills.length - 8} more
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <SkillsSelection
+                    initialSkills={formData.skills}
+                    onSkillsSelect={(skills) => handleInputChange('skills', skills)}
+                    minSkills={3}
+                    maxSkills={15}
+                    className="w-full"
+                  />
 
                   {errors.skills && (
                     <p className="text-red-500 text-sm mt-1">{errors.skills}</p>
@@ -1269,14 +1428,23 @@ export default function SignupPage() {
                       handleNextStep();
                     }
                   }}
-                  disabled={loading || (currentStep === 1 && !authMethod)}
+                  disabled={
+                    loading ||
+                    otpLoading ||
+                    (currentStep === 1 && !authMethod) ||
+                    (currentStep === 2 && authMethod === 'email' && otpSent && !otpVerified)
+                  }
                   className="btn-primary flex items-center"
                 >
-                  {loading ? (
+                  {loading || otpLoading ? (
                     <Loader className="animate-spin h-4 w-4 mr-2" />
                   ) : null}
-                  {currentStep === 1 
+                  {currentStep === 1
                     ? (authMethod === 'google' ? 'Continue with Google' : 'Next')
+                    : currentStep === 2 && authMethod === 'email' && !otpSent
+                    ? 'Send Verification Code'
+                    : currentStep === 2 && authMethod === 'email' && otpSent && !otpVerified
+                    ? 'Verify Email First'
                     : 'Next'
                   }
                   <ArrowRight className="h-4 w-4 ml-2" />

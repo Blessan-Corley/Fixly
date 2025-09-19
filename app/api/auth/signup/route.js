@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
-import { rateLimit } from '../../../../utils/rateLimiting';
+import { redisRateLimit, redisUtils } from '../../../../lib/redis';
 import { validateSignupForm, detectFakeAccount, ValidationRules } from '../../../../utils/validation';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
@@ -11,11 +11,20 @@ import { sendWelcomeEmail } from '../../../../lib/email';
 
 export async function POST(request) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'signup', 5, 60 * 60 * 1000); // 5 signups per hour
+    // Get client IP for rate limiting
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
+
+    // Enhanced Redis-based rate limiting - 3 signups per hour per IP
+    const rateLimitResult = await redisRateLimit(`signup:${ip}`, 3, 3600);
     if (!rateLimitResult.success) {
+      const resetTime = new Date(rateLimitResult.resetTime || Date.now() + 3600000);
       return NextResponse.json(
-        { message: 'Too many registration attempts. Please try again later.' },
+        {
+          message: 'Too many registration attempts. Please try again later.',
+          resetTime: resetTime.toISOString(),
+          remaining: rateLimitResult.remaining
+        },
         { status: 429 }
       );
     }
@@ -27,14 +36,80 @@ export async function POST(request) {
       role: body.role,
       hasLocation: !!body.location,
       hasSkills: !!body.skills,
+      isGoogleCompletion: body.isGoogleCompletion
     });
 
     // Get current session for Google auth verification
     const session = await getServerSession(authOptions);
 
-    // ✅ TEMPORARY: Bypass validation for testing
-    console.log('🧪 TESTING: Bypassing validation temporarily');
-    
+    // ✅ GOOGLE COMPLETION FLOW - Handle existing Google users completing their profile
+    if (body.isGoogleCompletion === true) {
+      console.log('🔄 Processing Google completion request');
+
+      if (!session?.user?.id) {
+        return NextResponse.json(
+          { message: 'Authentication required for Google completion' },
+          { status: 401 }
+        );
+      }
+
+      if (!body.role || !['hirer', 'fixer'].includes(body.role)) {
+        return NextResponse.json(
+          { message: 'Valid role is required' },
+          { status: 400 }
+        );
+      }
+
+      await connectDB();
+
+      const user = await User.findById(session.user.id);
+      if (!user) {
+        return NextResponse.json(
+          { message: 'User not found' },
+          { status: 404 }
+        );
+      }
+
+      // Update user with complete profile
+      const updateData = {
+        role: body.role,
+        isRegistered: true,
+        profileCompletedAt: new Date(),
+        lastActivityAt: new Date()
+      };
+
+      if (body.phone) {
+        const cleanPhone = body.phone.replace(/[^\d]/g, '');
+        updateData.phone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+      }
+      if (body.location) updateData.location = body.location;
+      if (body.skills && body.role === 'fixer') updateData.skills = body.skills;
+
+      const updatedUser = await User.findByIdAndUpdate(
+        session.user.id,
+        updateData,
+        { new: true }
+      );
+
+      console.log('✅ Google signup completion successful');
+
+      return NextResponse.json({
+        success: true,
+        message: 'Profile completed successfully',
+        user: {
+          id: updatedUser._id,
+          name: updatedUser.name,
+          username: updatedUser.username,
+          email: updatedUser.email,
+          role: updatedUser.role,
+          isRegistered: true
+        }
+      });
+    }
+
+    // ✅ FAST VALIDATION: Basic checks only
+    console.log('🧪 TESTING: Using fast validation');
+
     // Basic validation only
     if (!body.email || !body.name || !body.role) {
       return NextResponse.json(
@@ -46,6 +121,15 @@ export async function POST(request) {
     if (body.authMethod === 'email' && !body.password) {
       return NextResponse.json(
         { message: 'Password is required for email registration' },
+        { status: 400 }
+      );
+    }
+
+    // Fast email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(body.email)) {
+      return NextResponse.json(
+        { message: 'Please enter a valid email address' },
         { status: 400 }
       );
     }
@@ -74,15 +158,25 @@ export async function POST(request) {
 
     await connectDB();
 
-    // ✅ COMPREHENSIVE DUPLICATE CHECK
-    const existingUser = await User.findOne({
-      $or: [
-        { email: validatedData.email },
-        { username: validatedData.username },
-        { phone: validatedData.phone },
-        ...(body.googleId ? [{ googleId: body.googleId }] : [])
-      ]
-    });
+    // ✅ COMPREHENSIVE DUPLICATE CHECK WITH REDIS CACHING
+    const cacheKey = `user_check:${validatedData.email}:${validatedData.username}`;
+    let existingUser = await redisUtils.get(cacheKey);
+
+    if (!existingUser) {
+      existingUser = await User.findOne({
+        $or: [
+          { email: validatedData.email },
+          { username: validatedData.username },
+          { phone: validatedData.phone },
+          ...(body.googleId ? [{ googleId: body.googleId }] : [])
+        ]
+      });
+
+      // Cache the result for 5 minutes (short cache to prevent stale data)
+      if (existingUser) {
+        await redisUtils.set(cacheKey, existingUser, 300);
+      }
+    }
 
     if (existingUser) {
       // ✅ SPECIAL HANDLING: Update temp Google users
@@ -160,9 +254,12 @@ export async function POST(request) {
       passwordHash = body.password; // Store raw password, model will hash it
     }
 
-    // Format phone number
-    const cleanPhone = validatedData.phone.replace(/[^\d]/g, '');
-    const formattedPhone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+    // Format phone number (optional field)
+    let formattedPhone = null;
+    if (validatedData.phone) {
+      const cleanPhone = validatedData.phone.replace(/[^\d]/g, '');
+      formattedPhone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+    }
 
     // Format location data
     const location = validatedData.location ? {
@@ -172,12 +269,35 @@ export async function POST(request) {
       lng: validatedData.location.lng || 0
     } : null;
 
+    // Auto-generate username if not provided
+    let username = validatedData.username;
+    if (!username) {
+      // Generate username from email
+      const emailPrefix = validatedData.email.split('@')[0];
+      let cleanPrefix = emailPrefix.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+      // Truncate if too long to stay under 20 chars total
+      if (cleanPrefix.length > 12) {
+        cleanPrefix = cleanPrefix.substring(0, 12);
+      }
+
+      const randomSuffix = Math.floor(Math.random() * 999) + 1;
+
+      // Avoid suspicious patterns like "test123" by modifying prefix
+      if (['test', 'demo', 'temp', 'fake', 'sample'].some(word => cleanPrefix.includes(word))) {
+        cleanPrefix = `u${cleanPrefix}`;  // Prefix with 'u' instead
+      }
+
+      username = `${cleanPrefix}${randomSuffix}`;
+      console.log('🏷️ Auto-generated username:', username);
+    }
+
     // Validate and format username using our validation rules
-    const usernameValidation = ValidationRules.validateUsername(validatedData.username);
-    
+    const usernameValidation = ValidationRules.validateUsername(username);
+
     if (!usernameValidation.valid) {
       return NextResponse.json(
-        { 
+        {
           message: 'Invalid username',
           errors: [{ field: 'username', error: usernameValidation.error }],
           details: usernameValidation.error
@@ -185,15 +305,14 @@ export async function POST(request) {
         { status: 400 }
       );
     }
-    
-    const username = usernameValidation.value;
+
+    username = usernameValidation.value;
 
     const userData = {
       // Basic Info
       name: validatedData.name.trim(),
       username: username,
       email: validatedData.email.toLowerCase().trim(),
-      phone: formattedPhone,
       role: validatedData.role,
       location: location,
 
@@ -268,6 +387,11 @@ export async function POST(request) {
 
     if (body.authMethod === 'phone') {
       userData.uid = body.firebaseUid;
+    }
+
+    // Add phone if provided
+    if (formattedPhone) {
+      userData.phone = formattedPhone;
     }
 
     // Add skills for fixers
