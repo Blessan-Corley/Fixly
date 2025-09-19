@@ -11,12 +11,12 @@ import {
   CheckCircle,
   AlertCircle,
   MapPin,
-  Tool,
+  Settings as Tool,
   Mail,
   Phone
 } from 'lucide-react';
 import { toast } from 'sonner';
-import EnhancedSignupPage from '../../auth/signup/enhanced-page';
+import SignupPage from '../../auth/signup/page';
 
 export default function EnhancedSignupTestPage() {
   const [testMode, setTestMode] = useState('hirer');

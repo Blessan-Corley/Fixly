@@ -446,6 +446,10 @@ const AddressForm = ({
               disabled={disabled}
               height="400px"
               zoom={15}
+              showRecentLocations={true}
+              maxRecentLocations={5}
+              showQuickCities={true}
+              placeholder="Search for your address..."
               className="rounded-lg border border-fixly-border overflow-hidden"
             />
 

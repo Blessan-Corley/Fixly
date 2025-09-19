@@ -23,32 +23,57 @@ export async function GET(request) {
       }, { status: 400 });
     }
 
-    // Get cached data
-    const cacheKey = `location:${type}:${key}`;
-    const cachedData = await redisUtils.get(cacheKey);
-
-    if (cachedData) {
-      console.log(`📍 Cache hit for ${type}: ${key}`);
+    // Check if Redis is available
+    if (!redisUtils || typeof redisUtils.get !== 'function') {
+      console.warn('📍 Redis not available for cache retrieval');
       return NextResponse.json({
-        success: true,
-        data: JSON.parse(cachedData),
-        cached: true,
-        timestamp: new Date().toISOString()
-      });
+        success: false,
+        message: 'Cache not available',
+        cached: false
+      }, { status: 404 });
     }
 
-    console.log(`📍 Cache miss for ${type}: ${key}`);
-    return NextResponse.json({
-      success: false,
-      message: 'No cached data found',
-      cached: false
-    }, { status: 404 });
+    try {
+      // Get cached data with timeout
+      const cacheKey = `location:${type}:${key}`;
+      const cachedData = await Promise.race([
+        redisUtils.get(cacheKey),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Redis timeout')), 3000)
+        )
+      ]);
+
+      if (cachedData) {
+        console.log(`📍 Cache hit for ${type}: ${key}`);
+        return NextResponse.json({
+          success: true,
+          data: JSON.parse(cachedData),
+          cached: true,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      console.log(`📍 Cache miss for ${type}: ${key}`);
+      return NextResponse.json({
+        success: false,
+        message: 'No cached data found',
+        cached: false
+      }, { status: 404 });
+    } catch (redisError) {
+      console.warn('📍 Redis cache retrieval failed:', redisError.message);
+      return NextResponse.json({
+        success: false,
+        message: 'Cache retrieval failed',
+        cached: false
+      }, { status: 404 });
+    }
 
   } catch (error) {
     console.error('💥 Cache retrieval error:', error);
     return NextResponse.json({
       success: false,
-      message: 'Failed to retrieve cached data'
+      message: 'Failed to process cache request',
+      error: error.message
     }, { status: 500 });
   }
 }
@@ -64,28 +89,56 @@ export async function POST(request) {
       }, { status: 400 });
     }
 
+    // Check if Redis is available
+    if (!redisUtils || typeof redisUtils.setex !== 'function') {
+      console.warn('📍 Redis not available, skipping cache storage');
+      return NextResponse.json({
+        success: true,
+        message: 'Cache not available, data processed without caching',
+        cached: false,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     // Determine TTL based on type
     const ttl = customTTL || CACHE_TTL[type.toUpperCase()] || CACHE_TTL.SEARCH_RESULTS;
     const cacheKey = `location:${type}:${key}`;
 
-    // Store in Redis
-    await redisUtils.setex(cacheKey, ttl, JSON.stringify(data));
+    try {
+      // Store in Redis with timeout
+      await Promise.race([
+        redisUtils.setex(cacheKey, ttl, JSON.stringify(data)),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Redis timeout')), 3000)
+        )
+      ]);
 
-    console.log(`📍 Cached ${type} data for key: ${key} (TTL: ${ttl}s)`);
+      console.log(`📍 Cached ${type} data for key: ${key} (TTL: ${ttl}s)`);
 
-    return NextResponse.json({
-      success: true,
-      message: 'Data cached successfully',
-      key: cacheKey,
-      ttl: ttl,
-      timestamp: new Date().toISOString()
-    });
+      return NextResponse.json({
+        success: true,
+        message: 'Data cached successfully',
+        key: cacheKey,
+        ttl: ttl,
+        cached: true,
+        timestamp: new Date().toISOString()
+      });
+    } catch (redisError) {
+      console.warn('📍 Redis cache failed, continuing without cache:', redisError.message);
+      return NextResponse.json({
+        success: true,
+        message: 'Data processed without caching (Redis unavailable)',
+        cached: false,
+        timestamp: new Date().toISOString()
+      });
+    }
 
   } catch (error) {
     console.error('💥 Cache storage error:', error);
     return NextResponse.json({
       success: false,
-      message: 'Failed to cache data'
+      message: 'Failed to process cache request',
+      error: error.message
     }, { status: 500 });
   }
 }

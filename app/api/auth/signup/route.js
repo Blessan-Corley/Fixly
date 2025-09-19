@@ -102,6 +102,7 @@ export async function POST(request) {
           username: updatedUser.username,
           email: updatedUser.email,
           role: updatedUser.role,
+          skills: updatedUser.skills,
           isRegistered: true
         }
       });
@@ -429,6 +430,7 @@ export async function POST(request) {
         username: user.username,
         email: user.email,
         role: user.role,
+        skills: user.skills,
         isVerified: user.isVerified,
         authMethod: user.authMethod,
         isRegistered: true

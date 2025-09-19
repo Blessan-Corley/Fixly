@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn, getSession, signOut } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Phone, 
-  Mail, 
-  Lock, 
-  User, 
-  MapPin, 
+import {
+  Phone,
+  Mail,
+  Lock,
+  User,
+  MapPin,
   Check,
+  CheckCircle,
   ArrowLeft,
   ArrowRight,
   Eye,
@@ -21,9 +22,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
-import SkillSelectionModal from '../../../components/SkillSelectionModal';
 import AddressForm from '../../../components/AddressForm/AddressForm';
-import SkillsSelection from '../../../components/SkillsSelection/SkillsSelection';
+import SkillSelector from '../../../components/SkillSelector/SkillSelector';
 import { validateContent } from '../../../lib/validations/content-validator';
 
 // Username validation with content validation
@@ -158,6 +158,9 @@ export default function SignupPage() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Abandonment dialog state
+  const [showAbandonDialog, setShowAbandonDialog] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState({
@@ -786,6 +789,32 @@ export default function SignupPage() {
     await sendOTP();
   };
 
+  // Handle signup abandonment
+  const handleAbandonSignup = () => {
+    // Check if user has made progress
+    const hasProgress =
+      formData.email ||
+      formData.name ||
+      formData.username ||
+      formData.password ||
+      formData.address ||
+      (formData.skills && formData.skills.length > 0) ||
+      currentStep > 1 ||
+      otpSent;
+
+    if (hasProgress) {
+      setShowAbandonDialog(true);
+    } else {
+      // No progress made, go directly to home
+      window.location.href = '/';
+    }
+  };
+
+  const confirmAbandonSignup = () => {
+    setShowAbandonDialog(false);
+    window.location.href = '/';
+  };
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
@@ -909,6 +938,7 @@ export default function SignupPage() {
                       type="email"
                       value={formData.email}
                       onChange={(e) => {
+                        if (otpVerified) return; // Prevent changes after verification
                         handleInputChange('email', e.target.value);
                         // Reset OTP state if email changes
                         if (otpSent) {
@@ -920,13 +950,28 @@ export default function SignupPage() {
                       }}
                       placeholder="Enter your email"
                       className={`input-field pl-10 ${
-                        otpSent ? 'bg-gray-50 text-gray-600' : ''
+                        otpVerified
+                          ? 'bg-green-50 border-green-300 text-green-800 cursor-not-allowed'
+                          : otpSent
+                            ? 'bg-gray-50 text-gray-600 cursor-not-allowed'
+                            : ''
                       } ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
-                      disabled={otpSent && !otpVerified}
+                      disabled={otpSent || otpVerified}
+                      readOnly={otpVerified}
+                      style={otpVerified ? {
+                        filter: 'blur(1px)',
+                        userSelect: 'none',
+                        pointerEvents: 'none'
+                      } : {}}
                     />
                     {otpSent && !otpVerified && (
                       <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                         <Check className="h-4 w-4 text-fixly-accent" />
+                      </div>
+                    )}
+                    {otpVerified && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <CheckCircle className="h-5 w-5 text-green-500" />
                       </div>
                     )}
                   </div>
@@ -1308,9 +1353,10 @@ export default function SignupPage() {
                     Select at least 3 skills that match your expertise. This helps clients find you more easily.
                   </p>
 
-                  <SkillsSelection
-                    initialSkills={formData.skills}
-                    onSkillsSelect={(skills) => handleInputChange('skills', skills)}
+                  <SkillSelector
+                    isModal={false}
+                    selectedSkills={formData.skills}
+                    onSkillsChange={(skills) => handleInputChange('skills', skills)}
                     minSkills={3}
                     maxSkills={15}
                     className="w-full"
@@ -1482,12 +1528,12 @@ export default function SignupPage() {
         {/* Footer Navigation */}
         <div className="text-center mt-8 pt-6 border-t border-fixly-border space-y-3">
           <div>
-            <a 
-              href="/"
+            <button
+              onClick={handleAbandonSignup}
               className="text-fixly-text-light hover:text-fixly-accent text-sm transition-colors"
             >
               ← Back to Home
-            </a>
+            </button>
           </div>
           <div className="flex justify-center items-center space-x-4 text-xs text-fixly-text-light">
             <a 
@@ -1519,6 +1565,49 @@ export default function SignupPage() {
             </a>
           </div>
         </div>
+
+        {/* Signup Abandonment Confirmation Modal */}
+        <AnimatePresence>
+          {showAbandonDialog && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 mx-4"
+              >
+                <div className="text-center">
+                  <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100 mb-4">
+                    <X className="h-6 w-6 text-orange-600" />
+                  </div>
+
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Abandon Signup Process?
+                  </h3>
+
+                  <p className="text-sm text-gray-600 mb-6">
+                    You have unsaved progress in your signup form. Are you sure you want to leave and lose this information?
+                  </p>
+
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setShowAbandonDialog(false)}
+                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2.5 px-4 rounded-lg transition-colors"
+                    >
+                      Continue Signup
+                    </button>
+                    <button
+                      onClick={confirmAbandonSignup}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
+                    >
+                      Yes, Leave
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

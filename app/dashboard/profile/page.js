@@ -24,8 +24,9 @@ import { useApp } from '../../providers';
 import { toast } from 'sonner';
 import { usePageLoading } from '../../../contexts/LoadingContext';
 import { GlobalLoading } from '../../../components/ui/GlobalLoading';
-import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
-import { ProfileVerificationStatus } from '@/components/dashboard/VerificationPrompt';
+import { searchCities } from '../../../data/cities';
+import SkillSelector from '../../../components/SkillSelector/SkillSelector';
+import { ProfileVerificationStatus } from '../../../components/dashboard/VerificationPrompt';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
@@ -59,7 +60,6 @@ export default function ProfilePage() {
   const [citySearch, setCitySearch] = useState('');
   const [cityResults, setCityResults] = useState([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const [customSkill, setCustomSkill] = useState('');
 
   useEffect(() => {
     if (user && !editing) {
@@ -115,22 +115,6 @@ export default function ProfilePage() {
     setShowCityDropdown(false);
   }, [handleInputChange]);
 
-  const addSkill = useCallback((skill) => {
-    if (!formData.skills.includes(skill)) {
-      handleInputChange('skills', [...formData.skills, skill]);
-    }
-  }, [formData.skills, handleInputChange]);
-
-  const removeSkill = useCallback((skillToRemove) => {
-    handleInputChange('skills', formData.skills.filter(skill => skill !== skillToRemove));
-  }, [formData.skills, handleInputChange]);
-
-  const addCustomSkill = useCallback(() => {
-    if (customSkill.trim() && !formData.skills.includes(customSkill.trim())) {
-      addSkill(customSkill.trim());
-      setCustomSkill('');
-    }
-  }, [customSkill, formData.skills, addSkill]);
 
   const handlePhotoUpload = async (event) => {
     const file = event.target.files[0];
@@ -471,149 +455,15 @@ export default function ProfilePage() {
             <ProfileSection title="Skills & Services" editable={true}>
               {editing ? (
                 <div className="space-y-4">
-                  {/* Selected Skills */}
-                  {formData.skills.length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-fixly-text mb-2">Your Skills ({formData.skills.length})</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {formData.skills.map((skill, index) => (
-                          <span
-                            key={index}
-                            className="skill-chip skill-chip-selected"
-                          >
-                            {skill}
-                            <button
-                              onClick={() => removeSkill(skill)}
-                              className="ml-2 hover:text-fixly-text"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Add Custom Skill */}
-                  <div className="flex gap-2 mb-4">
-                    <input
-                      type="text"
-                      value={customSkill}
-                      onChange={(e) => setCustomSkill(e.target.value)}
-                      placeholder="Add custom skill"
-                      className="input-field flex-1"
-                      onKeyPress={(e) => e.key === 'Enter' && addCustomSkill()}
-                    />
-                    <button
-                      onClick={addCustomSkill}
-                      disabled={!customSkill.trim()}
-                      className="btn-secondary px-4"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {/* Smart Skill Suggestions */}
-                  <div className="space-y-4">
-                    {formData.skills.length === 0 ? (
-                      // Initial category view for users with no skills
-                      <div>
-                        <h4 className="font-medium text-fixly-text mb-3">Popular Categories</h4>
-                        <div className="grid grid-cols-2 gap-3">
-                          {getInitialSkillCategories().map((category, index) => (
-                            <div key={index} className="p-3 border border-fixly-border rounded-lg hover:border-fixly-accent/50 transition-colors">
-                              <div className="flex items-center mb-2">
-                                <span className="text-lg mr-2">{category.icon}</span>
-                                <span className="text-sm font-medium text-fixly-text">{category.name}</span>
-                              </div>
-                              <div className="space-y-1">
-                                {category.topSkills.map((skill, skillIndex) => (
-                                  <button
-                                    key={skillIndex}
-                                    onClick={() => addSkill(skill)}
-                                    className="block w-full text-left text-xs text-fixly-text-light hover:text-fixly-accent transition-colors"
-                                  >
-                                    + {skill}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      // Smart suggestions for users with existing skills
-                      <div>
-                        <h4 className="font-medium text-fixly-text mb-3">
-                          Recommended Skills
-                          <span className="text-xs text-fixly-text-light font-normal ml-2">
-                            Based on your current skills
-                          </span>
-                        </h4>
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {getSkillSuggestions(formData.skills, 8).map((skill, index) => (
-                            <button
-                              key={index}
-                              onClick={() => addSkill(skill)}
-                              disabled={formData.skills.includes(skill)}
-                              className="skill-chip text-sm"
-                            >
-                              {skill}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Browse All Skills - Collapsed by default */}
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const container = document.querySelector('.all-skills-container-profile');
-                          if (container) {
-                            container.style.display = container.style.display === 'none' ? 'block' : 'none';
-                          }
-                        }}
-                        className="text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
-                      >
-                        Browse all categories →
-                      </button>
-                      
-                      <div className="all-skills-container-profile mt-3" style={{ display: 'none' }}>
-                        <div className="space-y-3 max-h-48 overflow-y-auto">
-                          {skillCategories.slice(0, 8).map((category, categoryIndex) => (
-                            <div key={categoryIndex}>
-                              <h4 className="font-medium text-fixly-text mb-2 text-sm">
-                                {category.category}
-                              </h4>
-                              <div className="flex flex-wrap gap-1">
-                                {category.skills.slice(0, 6).map((skill, skillIndex) => (
-                                  <button
-                                    key={skillIndex}
-                                    onClick={() => addSkill(skill)}
-                                    disabled={formData.skills.includes(skill)}
-                                    className={`skill-chip text-xs ${
-                                      formData.skills.includes(skill)
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : ''
-                                    }`}
-                                  >
-                                    {skill}
-                                  </button>
-                                ))}
-                                {category.skills.length > 6 && (
-                                  <span className="text-xs text-fixly-text-muted">
-                                    +{category.skills.length - 6} more
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <SkillSelector
+                    isModal={false}
+                    selectedSkills={formData.skills}
+                    onSkillsChange={(skills) => handleInputChange('skills', skills)}
+                    maxSkills={15}
+                    minSkills={1}
+                    required={false}
+                    className="w-full"
+                  />
 
                   {/* Availability */}
                   <div className="pt-4 border-t border-fixly-border">
