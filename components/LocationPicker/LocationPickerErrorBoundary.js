@@ -15,18 +15,20 @@ class LocationPickerErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
+    // Update state so the next render will show the fallback UI
     return { hasError: true };
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('🗺️ LocationPicker Error Boundary caught an error:', error, errorInfo);
+    // Log error details for debugging
+    console.error('LocationPicker Error Boundary caught an error:', error, errorInfo);
 
     this.setState({
       error: error,
       errorInfo: errorInfo
     });
 
-    // Log to external service if available
+    // Report to error monitoring service (if available)
     if (typeof window !== 'undefined' && window.gtag) {
       window.gtag('event', 'exception', {
         description: `LocationPicker Error: ${error.message}`,
@@ -44,152 +46,100 @@ class LocationPickerErrorBoundary extends React.Component {
     }));
   };
 
-  handleFallback = () => {
-    // Call parent's fallback handler if provided
-    if (this.props.onFallback) {
-      this.props.onFallback();
-    }
-  };
-
   render() {
     if (this.state.hasError) {
-      const isGoogleMapsError = this.state.error?.message?.includes('Google') ||
+      const isGoogleMapsError = this.state.error?.message?.includes('google') ||
                                this.state.error?.message?.includes('maps') ||
-                               this.state.error?.stack?.includes('maps.googleapis.com');
-
-      const isNetworkError = this.state.error?.message?.includes('fetch') ||
-                            this.state.error?.message?.includes('network') ||
-                            this.state.error?.name === 'TypeError';
-
-      const isPermissionError = this.state.error?.message?.includes('permission') ||
-                               this.state.error?.message?.includes('geolocation');
-
-      let errorTitle = 'Location Picker Error';
-      let errorMessage = 'Something went wrong with the location picker.';
-      let suggestions = [];
-
-      if (isGoogleMapsError) {
-        errorTitle = 'Maps Service Error';
-        errorMessage = 'Unable to load Google Maps. This might be due to API key issues or network connectivity.';
-        suggestions = [
-          'Check your internet connection',
-          'Verify Google Maps API key is valid',
-          'Ensure required APIs are enabled (Maps JavaScript API, Places API)'
-        ];
-      } else if (isNetworkError) {
-        errorTitle = 'Network Error';
-        errorMessage = 'Unable to connect to location services.';
-        suggestions = [
-          'Check your internet connection',
-          'Try refreshing the page',
-          'Contact support if the issue persists'
-        ];
-      } else if (isPermissionError) {
-        errorTitle = 'Location Permission Error';
-        errorMessage = 'Unable to access your location.';
-        suggestions = [
-          'Allow location access in your browser',
-          'Check browser location settings',
-          'You can still select location manually'
-        ];
-      } else {
-        suggestions = [
-          'Try refreshing the component',
-          'Check your internet connection',
-          'Contact support if the issue continues'
-        ];
-      }
+                               this.state.error?.message?.includes('API');
 
       return (
-        <div className="location-picker-error-boundary w-full h-full min-h-[400px] flex items-center justify-center bg-fixly-bg border-2 border-dashed border-fixly-border rounded-xl">
-          <div className="text-center p-8 max-w-md mx-auto">
-            {/* Error Icon */}
-            <div className="mb-6">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <AlertTriangle className="w-8 h-8 text-red-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-fixly-text mb-2">
-                {errorTitle}
-              </h3>
-              <p className="text-fixly-text-light text-sm">
-                {errorMessage}
-              </p>
-            </div>
+        <div className="bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
+          <div className="flex items-center justify-center w-16 h-16 bg-red-50 dark:bg-red-900/20 rounded-full mx-auto mb-4">
+            <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
+          </div>
 
-            {/* Suggestions */}
-            {suggestions.length > 0 && (
-              <div className="mb-6 text-left">
-                <h4 className="text-sm font-medium text-fixly-text mb-2">
-                  Try these solutions:
-                </h4>
-                <ul className="text-xs text-fixly-text-light space-y-1">
-                  {suggestions.map((suggestion, index) => (
-                    <li key={index} className="flex items-start">
-                      <span className="w-1 h-1 bg-fixly-accent rounded-full mt-2 mr-2 flex-shrink-0"></span>
-                      {suggestion}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+          <h3 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">
+            Location Service Error
+          </h3>
 
-            {/* Action Buttons */}
-            <div className="space-y-3">
+          <p className="text-sm text-red-700 dark:text-red-300 mb-4 max-w-md mx-auto">
+            {isGoogleMapsError
+              ? "There's an issue with the Google Maps service. This might be due to network connectivity or API limitations."
+              : "Something went wrong with the location picker. Please try again or use manual address entry."
+            }
+          </p>
+
+          {/* Error details (only in development) */}
+          {process.env.NODE_ENV === 'development' && this.state.error && (
+            <details className="text-left bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4 text-xs">
+              <summary className="cursor-pointer font-medium text-red-800 dark:text-red-200">
+                Debug Information
+              </summary>
+              <div className="mt-2 text-red-700 dark:text-red-300">
+                <strong>Error:</strong> {this.state.error.message}
+                <br />
+                <strong>Stack:</strong>
+                <pre className="mt-1 whitespace-pre-wrap text-xs">
+                  {this.state.error.stack}
+                </pre>
+              </div>
+            </details>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-3">
+            {this.state.retryCount < 3 && (
               <button
                 onClick={this.handleRetry}
-                disabled={this.state.retryCount >= 3}
-                className="btn-primary w-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary flex items-center space-x-2"
               >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                {this.state.retryCount >= 3 ? 'Max Retries Reached' : 'Try Again'}
+                <RefreshCw className="h-4 w-4" />
+                <span>Try Again</span>
               </button>
-
-              {this.props.allowFallback && (
-                <button
-                  onClick={this.handleFallback}
-                  className="btn-ghost w-full flex items-center justify-center"
-                >
-                  <MapPin className="w-4 h-4 mr-2" />
-                  Use Text Input Instead
-                </button>
-              )}
-            </div>
-
-            {/* Debug Info (only in development) */}
-            {process.env.NODE_ENV === 'development' && this.state.error && (
-              <details className="mt-6 text-left">
-                <summary className="text-xs text-fixly-text-muted cursor-pointer hover:text-fixly-text">
-                  Debug Information
-                </summary>
-                <div className="mt-2 p-3 bg-gray-100 rounded text-xs font-mono overflow-auto max-h-32">
-                  <div className="text-red-600 mb-2">
-                    <strong>Error:</strong> {this.state.error.message}
-                  </div>
-                  {this.state.error.stack && (
-                    <div className="text-gray-600">
-                      <strong>Stack:</strong>
-                      <pre className="whitespace-pre-wrap mt-1">
-                        {this.state.error.stack}
-                      </pre>
-                    </div>
-                  )}
-                </div>
-              </details>
             )}
 
-            {/* Retry Count */}
-            {this.state.retryCount > 0 && (
-              <div className="mt-4 text-xs text-fixly-text-muted">
-                Retry attempts: {this.state.retryCount}/3
-              </div>
+            {this.props.onFallbackMode && (
+              <button
+                onClick={this.props.onFallbackMode}
+                className="btn-secondary flex items-center space-x-2"
+              >
+                <MapPin className="h-4 w-4" />
+                <span>Enter Address Manually</span>
+              </button>
+            )}
+          </div>
+
+          {/* Help text */}
+          <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+            {isGoogleMapsError && (
+              <p>
+                If this problem persists, try refreshing the page or check your internet connection.
+              </p>
+            )}
+            {this.state.retryCount >= 3 && (
+              <p className="text-red-600 dark:text-red-400">
+                Multiple retry attempts failed. Please contact support if the issue continues.
+              </p>
             )}
           </div>
         </div>
       );
     }
 
+    // No error, render children normally
     return this.props.children;
   }
 }
+
+// HOC wrapper for easier usage with functional components
+export const withLocationErrorBoundary = (WrappedComponent) => {
+  return function LocationPickerWithErrorBoundary(props) {
+    return (
+      <LocationPickerErrorBoundary onFallbackMode={props.onFallbackMode}>
+        <WrappedComponent {...props} />
+      </LocationPickerErrorBoundary>
+    );
+  };
+};
 
 export default LocationPickerErrorBoundary;

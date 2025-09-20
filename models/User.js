@@ -748,7 +748,24 @@ const userSchema = new mongoose.Schema({
   lastActivityAt: Date,
   emailVerifiedAt: Date,
   phoneVerifiedAt: Date,
-  profileCompletedAt: Date
+  profileCompletedAt: Date,
+
+  // Registration metadata
+  registrationMetadata: {
+    deviceInfo: {
+      type: String,
+      os: String,
+      browser: String,
+      userAgent: String
+    },
+    ip: String,
+    timestamp: Date,
+    source: {
+      type: String,
+      enum: ['web_signup', 'mobile_app', 'api'],
+      default: 'web_signup'
+    }
+  }
 }, {
   timestamps: true
 });

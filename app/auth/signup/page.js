@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { searchCities, skillCategories, getSkillSuggestions, getInitialSkillCategories } from '../../../data/cities';
-import AddressForm from '../../../components/AddressForm/AddressForm';
+import EnhancedLocationSelector from '../../../components/LocationPicker/EnhancedLocationSelector';
 import SkillSelector from '../../../components/SkillSelector/SkillSelector';
 import { validateContent } from '../../../lib/validations/content-validator';
 
@@ -182,6 +182,7 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showStartFresh, setShowStartFresh] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [googleUser, setGoogleUser] = useState(null);
@@ -191,6 +192,7 @@ export default function SignupPage() {
   const [citySearch, setCitySearch] = useState('');
   const [cityResults, setCityResults] = useState([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
+  const [hasCheckedSession, setHasCheckedSession] = useState(false);
 
   // Initialize role from URL or sessionStorage (client-side only)
   useEffect(() => {
@@ -209,20 +211,48 @@ export default function SignupPage() {
   // Check for existing session and handle Google auth
   useEffect(() => {
     const checkExistingUser = async () => {
+      // Prevent multiple checks
+      if (hasCheckedSession) {
+        console.log('🔄 Session already checked, skipping');
+        return;
+      }
+
       try {
+        setHasCheckedSession(true);
         const session = await getSession();
-        console.log('🔍 Checking existing session');
-        
+        console.log('🔍 Checking existing session', {
+          hasSession: !!session,
+          email: session?.user?.email,
+          isRegistered: session?.user?.isRegistered,
+          authMethod: session?.user?.authMethod,
+          needsOnboarding: session?.user?.needsOnboarding,
+          userId: session?.user?.id
+        });
+
         if (session?.user) {
-          // Check if user has completed profile
-          const isProfileComplete = session.user.isRegistered && 
-                                  session.user.role && 
-                                  session.user.username && 
-                                  !session.user.username.startsWith('temp_');
-          
+          console.log('👤 Session user found:', {
+            email: session.user.email,
+            role: session.user.role,
+            username: session.user.username,
+            isRegistered: session.user.isRegistered,
+            needsOnboarding: session.user.needsOnboarding,
+            authMethod: session.user.authMethod
+          });
+
+          // ✅ ENHANCED: More thorough profile completion check
+          const isProfileComplete = session.user.isRegistered &&
+                                  session.user.role &&
+                                  session.user.username &&
+                                  !session.user.needsOnboarding &&
+                                  (session.user.id || session.user.authMethod === 'google'); // Allow Google users without DB ID
+
           if (isProfileComplete) {
             console.log('✅ User already registered, redirecting to dashboard');
-            toast.success('Welcome back!');
+            // Clear any stored incomplete session data
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem('selectedRole');
+              sessionStorage.removeItem('incompleteSignup');
+            }
             router.replace('/dashboard');
             return;
           }
@@ -254,14 +284,65 @@ export default function SignupPage() {
               role: session.user.role || preferredRole
             }));
             
-            // Skip to profile completion step
-            setCurrentStep(3);
-            toast.info('Please complete your profile setup');
+            // Store incomplete signup state for persistence
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem('incompleteSignup', JSON.stringify({
+                email: session.user.email,
+                name: session.user.name,
+                authMethod: session.user.authMethod,
+                timestamp: Date.now()
+              }));
+            }
+
+            // For Google users, determine the appropriate step to continue from
+            if (session.user.authMethod === 'google') {
+              // Google users skip email verification (step 2) and go to profile completion (step 3)
+              if (!session.user.role || !session.user.username || !session.user.phone) {
+                console.log('🔄 Google user continuing signup at profile completion step');
+                setCurrentStep(3);
+                setAuthMethod('google');
+                setOtpVerified(true); // Google email is already verified
+              } else {
+                // Somehow already complete, redirect to dashboard
+                console.log('✅ Google user signup already complete, redirecting to dashboard');
+                router.push('/dashboard');
+              }
+            } else {
+              // For email users, start fresh if they're in wrong flow
+              console.log('🔄 Email user with incomplete signup, starting fresh');
+              await startFreshSignup();
+            }
             return;
           }
         }
         
-        console.log('👤 New user signup');
+        console.log('👤 New user signup - no existing session');
+
+        // Check for any stored signup state from previous attempts
+        if (typeof window !== 'undefined') {
+          const storedSignup = sessionStorage.getItem('incompleteSignup');
+          if (storedSignup) {
+            try {
+              const signupData = JSON.parse(storedSignup);
+              console.log('🔄 Found incomplete signup data:', signupData);
+
+              // Pre-fill form if data is recent (less than 24 hours)
+              const isRecent = Date.now() - signupData.timestamp < 24 * 60 * 60 * 1000;
+              if (isRecent && signupData.email) {
+                setFormData(prev => ({
+                  ...prev,
+                  name: signupData.name || '',
+                  email: signupData.email || ''
+                }));
+                setAuthMethod(signupData.authMethod || 'google');
+                console.log('🔄 Pre-filled form with stored data');
+              }
+            } catch (e) {
+              console.warn('Failed to parse stored signup data:', e);
+              sessionStorage.removeItem('incompleteSignup');
+            }
+          }
+        }
         
       } catch (error) {
         console.error('Session check error:', error);
@@ -270,7 +351,36 @@ export default function SignupPage() {
     };
 
     checkExistingUser();
-  }, [router, urlRole]);
+  }, [hasCheckedSession]); // Only run when flag changes or on mount
+
+  // Clear incomplete signup data when user navigates away from page
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Only clear if user is in middle of signup (not completed)
+      if (currentStep > 1 && !formData.username) {
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('incompleteSignup');
+          console.log('🗑️ Cleared incomplete signup on page unload');
+        }
+      }
+    };
+
+    const handlePopState = () => {
+      // Clear data when user uses browser back button
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('incompleteSignup');
+        console.log('🗑️ Cleared incomplete signup on navigation');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [currentStep, formData.username]);
 
   // Username availability check with content validation
   useEffect(() => {
@@ -337,6 +447,46 @@ export default function SignupPage() {
     }
   };
 
+  // Clear incomplete signup session and start fresh
+  const startFreshSignup = async () => {
+    console.log('🔄 Starting fresh signup process');
+
+    // Clear all stored data
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('selectedRole');
+      sessionStorage.removeItem('incompleteSignup');
+      localStorage.removeItem('selectedRole');
+    }
+
+    // Sign out any existing session
+    await signOut({ redirect: false });
+
+    // Reset all form state
+    setFormData({
+      role: urlRole,
+      name: '',
+      email: '',
+      username: '',
+      phone: '',
+      password: '',
+      confirmPassword: '',
+      location: null,
+      skills: []
+    });
+
+    // Reset UI state
+    setCurrentStep(1);
+    setAuthMethod('');
+    setGoogleUser(null);
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtp('');
+    setErrors({});
+    setShowStartFresh(false);
+
+    console.log('✅ Fresh signup initialized');
+  };
+
   const validateStep = async (step) => {
     const newErrors = {};
 
@@ -381,6 +531,8 @@ export default function SignupPage() {
         break;
 
       case 3:
+        // Email is already validated in step 2, no need to validate again
+
         // Name validation with content check
         if (!formData.name.trim()) {
           newErrors.name = 'Full name is required';
@@ -494,23 +646,24 @@ export default function SignupPage() {
     setLoading(true);
     try {
       console.log('🔄 Starting Google authentication...');
-      
+
       // Save role to sessionStorage to preserve it through OAuth flow
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('selectedRole', formData.role);
       }
-      
+
       // Clear any existing session
       await signOut({ redirect: false });
-      
-      // Start Google OAuth
-      await signIn('google', { 
+
+      // Start Google OAuth (no toast needed - user will see the redirect)
+      await signIn('google', {
         callbackUrl: `/auth/signup?role=${formData.role}&method=google`
       });
-      
+
     } catch (error) {
       console.error('Google auth error:', error);
-      toast.error('Google authentication failed. Please try again.');
+      // Only show toast for actual errors
+      toast.error('Authentication failed. Please try again.');
       setLoading(false);
     }
   };
@@ -805,13 +958,16 @@ export default function SignupPage() {
     if (hasProgress) {
       setShowAbandonDialog(true);
     } else {
-      // No progress made, go directly to home
-      window.location.href = '/';
+      // No progress made, clean up and go directly to home
+      startFreshSignup().then(() => {
+        window.location.href = '/';
+      });
     }
   };
 
-  const confirmAbandonSignup = () => {
+  const confirmAbandonSignup = async () => {
     setShowAbandonDialog(false);
+    await startFreshSignup();
     window.location.href = '/';
   };
 
@@ -950,19 +1106,12 @@ export default function SignupPage() {
                       }}
                       placeholder="Enter your email"
                       className={`input-field pl-10 ${
-                        otpVerified
-                          ? 'bg-green-50 border-green-300 text-green-800 cursor-not-allowed'
-                          : otpSent
-                            ? 'bg-gray-50 text-gray-600 cursor-not-allowed'
-                            : ''
+                        otpSent && !otpVerified
+                          ? 'bg-fixly-bg-secondary text-fixly-text-muted cursor-not-allowed'
+                          : ''
                       } ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
-                      disabled={otpSent || otpVerified}
+                      disabled={otpSent && !otpVerified}
                       readOnly={otpVerified}
-                      style={otpVerified ? {
-                        filter: 'blur(1px)',
-                        userSelect: 'none',
-                        pointerEvents: 'none'
-                      } : {}}
                     />
                     {otpSent && !otpVerified && (
                       <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -971,7 +1120,7 @@ export default function SignupPage() {
                     )}
                     {otpVerified && (
                       <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                        <CheckCircle className="h-5 w-5 text-green-500" />
+                        <Check className="h-4 w-4 text-fixly-accent" />
                       </div>
                     )}
                   </div>
@@ -1159,23 +1308,49 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Google User Info Display */}
+            {/* User Info Display - Google or Email */}
             {authMethod === 'google' && googleUser && (
               <div className="mb-6 p-4 bg-fixly-accent/10 border border-fixly-accent/20 rounded-xl">
                 <div className="flex items-center space-x-3">
                   {googleUser.image && (
-                    <img 
-                      src={googleUser.image} 
-                      alt="Profile" 
+                    <img
+                      src={googleUser.image}
+                      alt="Profile"
                       className="w-12 h-12 rounded-full border-2 border-fixly-accent/20"
                     />
                   )}
                   <div>
                     <div className="font-medium text-fixly-text">
-                      Signed in with Google
+                      {googleUser.name}
                     </div>
                     <div className="text-sm text-fixly-text-light">
                       {googleUser.email}
+                    </div>
+                    <div className="text-xs text-fixly-text-muted">
+                      Signed in with Google
+                    </div>
+                  </div>
+                  <Check className="h-5 w-5 text-fixly-accent ml-auto" />
+                </div>
+              </div>
+            )}
+
+            {/* Email User Info Display */}
+            {authMethod === 'email' && otpVerified && formData.email && (
+              <div className="mb-6 p-4 bg-fixly-accent/10 border border-fixly-accent/20 rounded-xl">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-fixly-primary rounded-full flex items-center justify-center">
+                    <Mail className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-fixly-text">
+                      Email Verified
+                    </div>
+                    <div className="text-sm text-fixly-text-light">
+                      {formData.email}
+                    </div>
+                    <div className="text-xs text-fixly-text-muted">
+                      Email verification completed
                     </div>
                   </div>
                   <Check className="h-5 w-5 text-fixly-accent ml-auto" />
@@ -1184,6 +1359,40 @@ export default function SignupPage() {
             )}
 
             <div className="space-y-4">
+              {/* Email Field - Only show for non-Google users who haven't verified email yet */}
+              {authMethod === 'email' && !otpVerified && (
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleInputChange('email', e.target.value)}
+                      placeholder="Your email address"
+                      className="input-field pl-10"
+                      disabled={otpVerified}
+                      readOnly={otpVerified}
+                    />
+                    {otpVerified && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <Check className="h-4 w-4 text-fixly-accent" />
+                      </div>
+                    )}
+                  </div>
+                  {otpVerified && (
+                    <p className="text-sm text-fixly-text-muted mt-1">
+                      Email verified successfully
+                    </p>
+                  )}
+                  {errors.email && (
+                    <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-fixly-text mb-2">
                   Full Name
@@ -1194,17 +1403,9 @@ export default function SignupPage() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
-                    placeholder="Enter your full name"
-                    className={`input-field pl-10 ${
-                      authMethod === 'google' ? 'bg-gray-50 text-gray-600' : ''
-                    } ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
-                    disabled={authMethod === 'google'}
+                    placeholder={authMethod === 'google' ? 'Edit your name from Google' : 'Enter your full name'}
+                    className={`input-field pl-10 ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
                   />
-                  {authMethod === 'google' && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <Check className="h-4 w-4 text-fixly-accent" />
-                    </div>
-                  )}
                 </div>
                 {errors.name && (
                   <p className="text-red-500 text-sm mt-1">{errors.name}</p>
@@ -1248,34 +1449,6 @@ export default function SignupPage() {
                 )}
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-fixly-text mb-2">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange('email', e.target.value)}
-                    placeholder="Enter your email"
-                    className={`input-field pl-10 ${
-                      authMethod === 'google' 
-                        ? 'bg-gray-50 text-gray-600 cursor-not-allowed' 
-                        : ''
-                    }`}
-                    disabled={authMethod === 'google'}
-                  />
-                  {authMethod === 'google' && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <Check className="h-4 w-4 text-fixly-accent" />
-                    </div>
-                  )}
-                </div>
-                {errors.email && (
-                  <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-                )}
-              </div>
 
               {/* Phone for both email and Google users */}
               <div>
@@ -1332,9 +1505,10 @@ export default function SignupPage() {
                   Provide your complete address. We'll use GPS to help auto-fill details.
                 </p>
 
-                <AddressForm
-                  initialAddress={formData.address}
-                  onAddressSelect={(address) => handleInputChange('address', address)}
+                <EnhancedLocationSelector
+                  initialLocation={formData.address}
+                  onLocationSelect={(location) => handleInputChange('address', location)}
+                  required={true}
                   className="w-full"
                 />
 
@@ -1404,17 +1578,19 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-fixly-bg flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-fixly-text mb-2">
             Join Fixly as a {urlRole === 'hirer' ? 'Hirer' : 'Fixer'}
           </h1>
           <p className="text-fixly-text-light">
-            {urlRole === 'hirer' 
-              ? 'Post jobs and hire skilled professionals' 
+            {urlRole === 'hirer'
+              ? 'Post jobs and hire skilled professionals'
               : 'Find work opportunities and grow your business'
             }
           </p>
+
         </div>
 
         {/* Progress Indicator */}

@@ -9,11 +9,49 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 import { sendWelcomeEmail } from '../../../../lib/email';
 
+// Device detection helper function
+function detectDevice(userAgent) {
+  if (!userAgent) return { type: 'unknown', os: 'unknown', browser: 'unknown' };
+
+  const ua = userAgent.toLowerCase();
+
+  // Mobile detection
+  const isMobile = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  const isTablet = /ipad|tablet/i.test(userAgent);
+  const isDesktop = !isMobile && !isTablet;
+
+  // OS detection
+  let os = 'unknown';
+  if (/windows nt 10.0/.test(ua)) os = 'Windows 10';
+  else if (/windows nt/.test(ua)) os = 'Windows';
+  else if (/mac os x/.test(ua)) os = 'macOS';
+  else if (/android/.test(ua)) os = 'Android';
+  else if (/iphone os/.test(ua)) os = 'iOS';
+  else if (/linux/.test(ua)) os = 'Linux';
+
+  // Browser detection
+  let browser = 'unknown';
+  if (/chrome/.test(ua) && !/edge/.test(ua)) browser = 'Chrome';
+  else if (/safari/.test(ua) && !/chrome/.test(ua)) browser = 'Safari';
+  else if (/firefox/.test(ua)) browser = 'Firefox';
+  else if (/edge/.test(ua)) browser = 'Edge';
+  else if (/opera/.test(ua)) browser = 'Opera';
+
+  return {
+    type: isMobile ? 'mobile' : isTablet ? 'tablet' : 'desktop',
+    os,
+    browser,
+    userAgent
+  };
+}
+
 export async function POST(request) {
   try {
-    // Get client IP for rate limiting
+    // Get client IP and user agent for analytics and device detection
     const forwarded = request.headers.get('x-forwarded-for');
     const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
+    const userAgent = request.headers.get('user-agent') || '';
+    const deviceInfo = detectDevice(userAgent);
 
     // Enhanced Redis-based rate limiting - 3 signups per hour per IP
     const rateLimitResult = await redisRateLimit(`signup:${ip}`, 3, 3600);
@@ -42,11 +80,11 @@ export async function POST(request) {
     // Get current session for Google auth verification
     const session = await getServerSession(authOptions);
 
-    // ✅ GOOGLE COMPLETION FLOW - Handle existing Google users completing their profile
+    // ✅ GOOGLE COMPLETION FLOW - Handle Google users completing their profile
     if (body.isGoogleCompletion === true) {
       console.log('🔄 Processing Google completion request');
 
-      if (!session?.user?.id) {
+      if (!session?.user?.email) {
         return NextResponse.json(
           { message: 'Authentication required for Google completion' },
           { status: 401 }
@@ -62,10 +100,57 @@ export async function POST(request) {
 
       await connectDB();
 
-      const user = await User.findById(session.user.id);
+      // Handle Google users - find existing or create new
+      let user;
+      if (session.user.id) {
+        // For Google users, the ID might not be a valid MongoDB ObjectId
+        // First try to find by googleId, then by email
+        try {
+          // Try to find by MongoDB _id first (if it's a valid ObjectId)
+          if (/^[0-9a-fA-F]{24}$/.test(session.user.id)) {
+            user = await User.findById(session.user.id);
+          }
+        } catch (error) {
+          console.log('🔍 Session user ID is not a valid MongoDB ObjectId, searching by googleId/email');
+        }
+
+        // If not found by _id, try by googleId or email
+        if (!user) {
+          user = await User.findOne({
+            $or: [
+              { googleId: session.user.id },
+              { email: session.user.email }
+            ]
+          });
+        }
+      } else {
+        // New Google user without ID - check by email
+        user = await User.findOne({ email: session.user.email });
+
+        if (!user) {
+          console.log('🆕 Creating new Google user in database');
+
+          user = new User({
+            name: session.user.name,
+            email: session.user.email,
+            googleId: session.user.googleId,
+            picture: session.user.image,
+            emailVerified: true,
+            isVerified: true,
+            authMethod: 'google',
+            providers: ['google'],
+            createdAt: new Date(),
+            lastLoginAt: new Date()
+          });
+
+          await user.save();
+          console.log('✅ New Google user created:', user._id);
+        }
+      }
+
       if (!user) {
         return NextResponse.json(
-          { message: 'User not found' },
+          { message: 'User not found. Please try signing in again.' },
           { status: 404 }
         );
       }
@@ -82,11 +167,43 @@ export async function POST(request) {
         const cleanPhone = body.phone.replace(/[^\d]/g, '');
         updateData.phone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
       }
-      if (body.location) updateData.location = body.location;
+      if (body.username) {
+        updateData.username = body.username.toLowerCase().trim();
+      }
+      if (body.location) {
+        // Enhanced location storage with proper schema mapping
+        updateData.location = {
+          // Backwards compatibility
+          city: body.location.components?.city || body.location.city || '',
+          state: body.location.components?.state || body.location.state || '',
+          lat: body.location.coordinates?.lat || body.location.lat || 0,
+          lng: body.location.coordinates?.lng || body.location.lng || 0,
+
+          // Enhanced location storage
+          homeAddress: {
+            formattedAddress: body.location.formatted || body.location.address || '',
+            coordinates: {
+              lat: body.location.coordinates?.lat || body.location.lat || 0,
+              lng: body.location.coordinates?.lng || body.location.lng || 0
+            },
+            state: body.location.components?.state || body.location.state || '',
+            district: body.location.components?.city || body.location.city || '',
+            setAt: new Date()
+          },
+
+          // Current location (same as home for new users)
+          currentLocation: {
+            lat: body.location.coordinates?.lat || body.location.lat || 0,
+            lng: body.location.coordinates?.lng || body.location.lng || 0,
+            lastUpdated: new Date(),
+            source: 'manual'
+          }
+        };
+      }
       if (body.skills && body.role === 'fixer') updateData.skills = body.skills;
 
       const updatedUser = await User.findByIdAndUpdate(
-        session.user.id,
+        user._id,
         updateData,
         { new: true }
       );
@@ -180,70 +297,70 @@ export async function POST(request) {
     }
 
     if (existingUser) {
-      // ✅ SPECIAL HANDLING: Update temp Google users
-      if (body.authMethod === 'google' &&
-          existingUser.googleId === body.googleId &&
-          (!existingUser.isRegistered || !existingUser.role)) {
-        
-        console.log('🔄 Updating temporary Google user with validated data');
-        
-        const updatedUser = await User.findByIdAndUpdate(existingUser._id, {
-          name: validatedData.name,
-          username: validatedData.username,
-          phone: validatedData.phone,
-          role: validatedData.role,
-          location: validatedData.location,
-          skills: validatedData.skills || [],
-          availableNow: validatedData.role === 'fixer',
-          // Remove temp status
-          $unset: { 
-            temporaryUser: 1 
-          }
-        }, { new: true });
+      // Handle existing user scenarios
+      if (existingUser) {
+        // Check if this is an incomplete Google user that can be updated
+        if (body.authMethod === 'google' &&
+            existingUser.googleId === body.googleId &&
+            (!existingUser.isRegistered || !existingUser.role)) {
 
-        // Add welcome notification
-        await updatedUser.addNotification(
-          'welcome',
-          'Welcome to Fixly!',
-          `Welcome ${validatedData.name}! Your account setup is complete.`
-        );
+          console.log('🔄 Updating incomplete Google user with validated data');
 
-        // Send welcome email for Google users
-        await sendWelcomeEmail(updatedUser);
-
-        return NextResponse.json({
-          success: true,
-          message: 'Account setup completed successfully',
-          user: {
-            id: updatedUser._id,
-            name: updatedUser.name,
-            username: updatedUser.username,
-            email: updatedUser.email,
-            role: updatedUser.role,
-            isVerified: updatedUser.isVerified,
+          const updatedUser = await User.findByIdAndUpdate(existingUser._id, {
+            name: validatedData.name,
+            username: validatedData.username,
+            phone: validatedData.phone,
+            role: validatedData.role,
+            location: validatedData.location,
+            skills: validatedData.skills || [],
+            availableNow: validatedData.role === 'fixer',
             isRegistered: true
-          },
-          redirect: '/dashboard'
-        });
-      } else {
-        // Handle duplicate user scenarios
-        if (existingUser.email === validatedData.email) {
-          return NextResponse.json(
-            { message: 'An account with this email already exists' },
-            { status: 409 }
+          }, { new: true });
+
+          // Add welcome notification
+          await updatedUser.addNotification(
+            'welcome',
+            'Welcome to Fixly!',
+            `Welcome ${validatedData.name}! Your account setup is complete.`
           );
-        }
-        if (existingUser.username === validatedData.username) {
-          return NextResponse.json(
-            { message: 'This username is already taken' },
-            { status: 409 }
-          );
-        }
-        if (existingUser.phone === validatedData.phone) {
-          return NextResponse.json(
-            { message: 'An account with this phone number already exists' },
-            { status: 409 }
-          );
+
+          // Send welcome email for Google users
+          await sendWelcomeEmail(updatedUser);
+
+          return NextResponse.json({
+            success: true,
+            message: 'Account setup completed successfully',
+            user: {
+              id: updatedUser._id,
+              name: updatedUser.name,
+              username: updatedUser.username,
+              email: updatedUser.email,
+              role: updatedUser.role,
+              isVerified: updatedUser.isVerified,
+              isRegistered: true
+            },
+            redirect: '/dashboard'
+          });
+        } else {
+          // Handle duplicate user scenarios
+          if (existingUser.email === validatedData.email) {
+            return NextResponse.json(
+              { message: 'An account with this email already exists' },
+              { status: 409 }
+            );
+          }
+          if (existingUser.username === validatedData.username) {
+            return NextResponse.json(
+              { message: 'This username is already taken' },
+              { status: 409 }
+            );
+          }
+          if (existingUser.phone === validatedData.phone) {
+            return NextResponse.json(
+              { message: 'An account with this phone number already exists' },
+              { status: 409 }
+            );
+          }
         }
       }
     }
@@ -262,12 +379,35 @@ export async function POST(request) {
       formattedPhone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
     }
 
-    // Format location data
+    // Format location data with enhanced schema support
     const location = validatedData.location ? {
-      city: validatedData.location.city || validatedData.location.name,
-      state: validatedData.location.state,
-      lat: validatedData.location.lat || 0,
-      lng: validatedData.location.lng || 0
+      // Backwards compatibility
+      city: validatedData.location.components?.city || validatedData.location.city || validatedData.location.name || '',
+      state: validatedData.location.components?.state || validatedData.location.state || '',
+      lat: validatedData.location.coordinates?.lat || validatedData.location.lat || 0,
+      lng: validatedData.location.coordinates?.lng || validatedData.location.lng || 0,
+
+      // Enhanced location storage
+      homeAddress: {
+        formattedAddress: validatedData.location.formatted || validatedData.location.address || '',
+        coordinates: {
+          lat: validatedData.location.coordinates?.lat || validatedData.location.lat || 0,
+          lng: validatedData.location.coordinates?.lng || validatedData.location.lng || 0
+        },
+        state: validatedData.location.components?.state || validatedData.location.state || '',
+        district: validatedData.location.components?.city || validatedData.location.city || '',
+        street: validatedData.location.components?.street || '',
+        postalCode: validatedData.location.components?.pincode || '',
+        setAt: new Date()
+      },
+
+      // Current location (same as home for new users)
+      currentLocation: {
+        lat: validatedData.location.coordinates?.lat || validatedData.location.lat || 0,
+        lng: validatedData.location.coordinates?.lng || validatedData.location.lng || 0,
+        lastUpdated: new Date(),
+        source: 'manual'
+      }
     } : null;
 
     // Auto-generate username if not provided
@@ -342,6 +482,14 @@ export async function POST(request) {
       lastLoginAt: new Date(),
       lastActivityAt: new Date(),
       profileCompletedAt: new Date(),
+
+      // Device and registration metadata
+      registrationMetadata: {
+        deviceInfo,
+        ip,
+        timestamp: new Date(),
+        source: 'web_signup'
+      },
 
       // Privacy settings
       privacy: {

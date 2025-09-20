@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { MapPin, Code, Copy, Check } from 'lucide-react';
 import { toast } from 'sonner';
-import LocationPicker from '../../../components/LocationPicker/LocationPicker';
+import EnhancedLocationSelector from '../../../components/LocationPicker/EnhancedLocationSelector';
 
 export default function LocationPickerTestPage() {
   const [selectedLocation, setSelectedLocation] = useState(null);
@@ -208,20 +208,11 @@ export default function LocationPickerTestPage() {
                 Interactive Location Picker
               </h2>
 
-              <LocationPicker
+              <EnhancedLocationSelector
                 onLocationSelect={handleLocationSelect}
                 initialLocation={selectedLocation}
-                placeholder={settings.placeholder}
-                height={settings.height}
-                showQuickCities={settings.showQuickCities}
-                allowCurrentLocation={settings.allowCurrentLocation}
-                mapType={settings.mapType}
-                zoom={settings.zoom}
-                theme={settings.theme}
-                enableStreetView={true}
-                enableFullscreen={true}
-                showMapTypeControl={true}
-                showZoomControl={true}
+                required={false}
+                className="w-full"
               />
             </div>
           </motion.div>

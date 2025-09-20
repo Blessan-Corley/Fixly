@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -68,8 +68,8 @@ export default function SkillSelector({
   onClose,
   selectedSkills = [],
   onSkillsChange,
-  maxSkills = 10,
-  minSkills = 1,
+  maxSkills = 50,
+  minSkills = 3,
   required = true,
   className = ""
 }) {
@@ -77,19 +77,49 @@ export default function SkillSelector({
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const searchInputRef = useRef(null);
+  const debounceTimer = useRef(null);
 
-  // Search functionality
+  // Debounce search query to avoid excessive updates
   useEffect(() => {
-    if (searchQuery.length > 0) {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 150); // Small delay to avoid excessive updates
+
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [searchQuery]);
+
+  // Search functionality - runs only on debounced query
+  useEffect(() => {
+    if (debouncedQuery.length > 0) {
+      setIsSearching(true);
       const allSkills = skillCategories.flatMap(cat => cat.skills);
       const results = allSkills.filter(skill =>
-        skill.toLowerCase().includes(searchQuery.toLowerCase())
+        skill.toLowerCase().includes(debouncedQuery.toLowerCase())
       );
       setSearchResults(results);
+
+      // Only switch to search view if user has typed something meaningful
+      if (debouncedQuery.length >= 2 && currentView === 'categories') {
+        setCurrentView('search');
+      }
+      setIsSearching(false);
     } else {
       setSearchResults([]);
+      setIsSearching(false);
+      // Don't automatically switch back to avoid focus loss
     }
-  }, [searchQuery]);
+  }, [debouncedQuery, currentView]);
 
   const handleCategorySelect = (category) => {
     setSelectedCategory(category);
@@ -98,19 +128,23 @@ export default function SkillSelector({
 
   const handleSkillToggle = (skill) => {
     if (selectedSkills.includes(skill)) {
-      // Remove skill
+      // Remove skill - check minimum
+      if (selectedSkills.length <= minSkills) {
+        toast.error(`Minimum ${minSkills} skills required`);
+        return;
+      }
       const updatedSkills = selectedSkills.filter(s => s !== skill);
       onSkillsChange(updatedSkills);
-      toast.success(`Removed "${skill}"`);
+      // Don't show toast for every removal to reduce spam
     } else {
-      // Add skill
+      // Add skill - check maximum
       if (selectedSkills.length >= maxSkills) {
         toast.error(`Maximum ${maxSkills} skills allowed`);
         return;
       }
       const updatedSkills = [...selectedSkills, skill];
       onSkillsChange(updatedSkills);
-      toast.success(`Added "${skill}"`);
+      // Don't show toast for every addition to reduce spam
     }
   };
 
@@ -124,9 +158,18 @@ export default function SkillSelector({
     }
   };
 
-  const handleSearchFocus = () => {
-    setCurrentView('search');
-  };
+  // Handle search input changes without losing focus
+  const handleSearchChange = useCallback((e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    // Maintain focus on the input
+    if (searchInputRef.current && document.activeElement !== searchInputRef.current) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 0);
+    }
+  }, []);
 
   const skillSuggestions = useMemo(() => {
     return getSkillSuggestions(selectedSkills, 6);
@@ -152,7 +195,7 @@ export default function SkillSelector({
               {currentView === 'skills' && selectedCategory?.category}
               {currentView === 'search' && 'Search Skills'}
             </h2>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               {currentView === 'categories' && 'Choose categories that match your expertise'}
               {currentView === 'skills' && `Select skills from ${selectedCategory?.category}`}
               {currentView === 'search' && 'Find specific skills quickly'}
@@ -172,14 +215,15 @@ export default function SkillSelector({
       {/* Search Bar */}
       <div className="p-6 pb-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search for skills..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={handleSearchFocus}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            onChange={handleSearchChange}
+            className="input-field pl-10"
+            autoComplete="off"
           />
         </div>
       </div>
@@ -190,14 +234,14 @@ export default function SkillSelector({
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
-          className="px-6 pb-4 border-b border-gray-100"
+          className="px-6 pb-4 border-b border-gray-100 dark:border-gray-700"
         >
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-gray-700 flex items-center">
-              <Check className="h-4 w-4 mr-2 text-purple-500" />
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center">
+              <Check className="h-4 w-4 mr-2 text-fixly-primary" />
               Selected Skills ({selectedSkills.length})
             </h3>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-500 dark:text-gray-400">
               {selectedSkills.length}/{maxSkills} selected
             </div>
           </div>
@@ -210,7 +254,7 @@ export default function SkillSelector({
                 exit={{ scale: 0.8, opacity: 0 }}
                 transition={{ delay: index * 0.05 }}
                 onClick={() => handleSkillToggle(skill)}
-                className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-sm rounded-full hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-sm hover:shadow-md group"
+                className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-fixly-primary to-fixly-primary-light text-white text-sm rounded-full hover:from-fixly-primary-hover hover:to-fixly-primary transition-all duration-200 shadow-sm hover:shadow-md group"
               >
                 <span className="font-medium">{skill}</span>
                 <X className="h-3 w-3 ml-2 group-hover:scale-110 transition-transform" />
@@ -221,7 +265,7 @@ export default function SkillSelector({
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-xs text-amber-600 mt-2 flex items-center"
+              className="text-xs text-amber-600 dark:text-amber-400 mt-2 flex items-center"
             >
               <Sparkles className="h-3 w-3 mr-1" />
               You've reached the maximum of {maxSkills} skills
@@ -231,7 +275,7 @@ export default function SkillSelector({
       )}
 
       {/* Content */}
-      <div className="px-6 pb-6 overflow-y-auto max-h-96">
+      <div className="px-6 pb-6 overflow-y-auto max-h-96 min-h-[300px]">
         <AnimatePresence mode="wait">
           {/* Categories View */}
           {currentView === 'categories' && (
@@ -244,8 +288,8 @@ export default function SkillSelector({
               {/* Smart Suggestions */}
               {skillSuggestions.length > 0 && (
                 <div className="mb-6">
-                  <h4 className="flex items-center text-sm font-medium text-gray-700 mb-3">
-                    <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+                  <h4 className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    <Sparkles className="h-4 w-4 mr-2 text-fixly-primary" />
                     Recommended for you
                   </h4>
                   <div className="flex flex-wrap gap-2">
@@ -256,8 +300,8 @@ export default function SkillSelector({
                         disabled={selectedSkills.includes(skill)}
                         className={`px-3 py-2 rounded-lg text-sm transition-all ${
                           selectedSkills.includes(skill)
-                            ? 'bg-purple-500 text-white'
-                            : 'bg-gray-100 text-gray-700 border hover:border-purple-500 hover:text-purple-600'
+                            ? 'bg-fixly-primary text-white'
+                            : 'bg-fixly-card dark:bg-gray-800 text-fixly-text dark:text-gray-300 border border-fixly-border dark:border-gray-600 hover:border-fixly-primary hover:text-fixly-primary dark:hover:text-fixly-primary'
                         }`}
                       >
                         {skill}
@@ -282,19 +326,19 @@ export default function SkillSelector({
                   <button
                     key={index}
                     onClick={() => handleCategorySelect(category)}
-                    className="w-full p-4 bg-gray-50 hover:bg-white border border-gray-200 hover:border-purple-300 rounded-xl transition-all duration-200 group hover:shadow-lg"
+                    className="w-full p-4 bg-fixly-bg-secondary dark:bg-gray-800 hover:bg-fixly-card dark:hover:bg-gray-700 border border-fixly-border dark:border-gray-600 hover:border-fixly-primary-light dark:hover:border-fixly-primary rounded-xl transition-all duration-200 group hover:shadow-lg"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <div className={`w-12 h-12 ${iconData.color} rounded-xl flex items-center justify-center mr-4 group-hover:scale-105 transition-transform`}>
-                          <IconComponent className="h-6 w-6" />
+                        <div className={`w-12 h-12 ${iconData.color} dark:bg-gray-700 rounded-xl flex items-center justify-center mr-4 group-hover:scale-105 transition-transform`}>
+                          <IconComponent className="h-6 w-6 dark:text-gray-300" />
                         </div>
                         <div className="text-left">
-                          <h3 className="font-medium text-gray-900 group-hover:text-purple-700">{category.category}</h3>
-                          <p className="text-sm text-gray-500">
+                          <h3 className="font-medium text-fixly-text dark:text-white group-hover:text-fixly-primary dark:group-hover:text-fixly-primary">{category.category}</h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
                             {category.skills.length} skills available
                             {categorySkillCount > 0 && (
-                              <span className="ml-2 text-purple-600 font-medium">
+                              <span className="ml-2 text-fixly-primary dark:text-fixly-primary font-medium">
                                 • {categorySkillCount} selected
                               </span>
                             )}
@@ -303,11 +347,11 @@ export default function SkillSelector({
                       </div>
                       <div className="flex items-center">
                         {categorySkillCount > 0 && (
-                          <div className="bg-purple-500 text-white text-xs px-2 py-1 rounded-full mr-2 shadow-sm">
+                          <div className="bg-fixly-primary text-white text-xs px-2 py-1 rounded-full mr-2 shadow-sm">
                             {categorySkillCount}
                           </div>
                         )}
-                        <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-purple-500 transition-colors" />
+                        <ChevronRight className="h-5 w-5 text-fixly-text-muted dark:text-gray-500 group-hover:text-fixly-primary transition-colors" />
                       </div>
                     </div>
                   </button>
@@ -325,7 +369,7 @@ export default function SkillSelector({
               className="space-y-4"
             >
               {/* Category Skills */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 auto-rows-max">
                 {selectedCategory.skills.map((skill, index) => {
                   const isSelected = selectedSkills.includes(skill);
                   return (
@@ -334,22 +378,22 @@ export default function SkillSelector({
                       onClick={() => handleSkillToggle(skill)}
                       className={`p-3 rounded-xl text-left transition-all duration-200 group ${
                         isSelected
-                          ? 'bg-purple-100 border-2 border-purple-300 text-purple-900 shadow-sm scale-[0.98]'
-                          : 'bg-gray-50 hover:bg-white border border-gray-200 hover:border-purple-300 text-gray-900 hover:shadow-md hover:scale-[1.02]'
+                          ? 'bg-fixly-primary-bg dark:bg-fixly-primary/20 border-2 border-fixly-primary-light dark:border-fixly-primary text-fixly-primary dark:text-fixly-primary shadow-sm scale-[0.98]'
+                          : 'bg-fixly-bg-secondary dark:bg-gray-800 hover:bg-fixly-card dark:hover:bg-gray-700 border border-fixly-border dark:border-gray-600 hover:border-fixly-primary-light dark:hover:border-fixly-primary text-fixly-text dark:text-white hover:shadow-md hover:scale-[1.02]'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`font-medium ${isSelected ? 'text-purple-900' : 'text-gray-700 group-hover:text-purple-700'}`}>
+                        <span className={`font-medium ${isSelected ? 'text-fixly-primary' : 'text-fixly-text group-hover:text-fixly-primary'}`}>
                           {skill}
                         </span>
                         {isSelected ? (
                           <div className="flex items-center space-x-2">
-                            <div className="bg-purple-500 text-white rounded-full p-1">
+                            <div className="bg-fixly-primary text-white rounded-full p-1">
                               <Check className="h-3 w-3" />
                             </div>
                           </div>
                         ) : (
-                          <div className="w-5 h-5 border border-gray-300 rounded-full group-hover:border-purple-400 transition-colors"></div>
+                          <div className="w-5 h-5 border border-fixly-border rounded-full group-hover:border-fixly-primary transition-colors"></div>
                         )}
                       </div>
                     </button>
@@ -383,8 +427,8 @@ export default function SkillSelector({
                       onClick={() => handleSkillToggle(skill)}
                       className={`w-full p-3 rounded-xl text-left transition-all duration-200 group ${
                         isSelected
-                          ? 'bg-purple-100 border-2 border-purple-300 text-purple-900 shadow-sm'
-                          : 'bg-gray-50 hover:bg-white border border-gray-200 hover:border-purple-300 text-gray-900 hover:shadow-md'
+                          ? 'bg-fixly-primary-bg border-2 border-fixly-primary-light text-fixly-primary shadow-sm'
+                          : 'bg-fixly-bg-secondary hover:bg-fixly-card border border-fixly-border hover:border-fixly-primary-light text-fixly-text hover:shadow-md'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -393,18 +437,18 @@ export default function SkillSelector({
                             <IconComponent className="h-4 w-4" />
                           </div>
                           <div>
-                            <span className={`font-medium ${isSelected ? 'text-purple-900' : 'text-gray-700 group-hover:text-purple-700'}`}>
+                            <span className={`font-medium ${isSelected ? 'text-fixly-primary' : 'text-fixly-text group-hover:text-fixly-primary'}`}>
                               {skill}
                             </span>
-                            <p className="text-xs text-gray-500">{category?.category}</p>
+                            <p className="text-xs text-fixly-text-muted">{category?.category}</p>
                           </div>
                         </div>
                         {isSelected ? (
-                          <div className="bg-purple-500 text-white rounded-full p-1">
+                          <div className="bg-fixly-primary text-white rounded-full p-1">
                             <Check className="h-3 w-3" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 border border-gray-300 rounded-full group-hover:border-purple-400 transition-colors"></div>
+                          <div className="w-5 h-5 border border-fixly-border rounded-full group-hover:border-fixly-primary transition-colors"></div>
                         )}
                       </div>
                     </motion.button>
@@ -427,30 +471,51 @@ export default function SkillSelector({
       </div>
 
       {/* Footer */}
-      {isModal && (
-        <div className="p-6 pt-4 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-600">
+      <div className="p-6 pt-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            {/* Back button for non-category views */}
+            {(currentView === 'skills' || currentView === 'search') && (
+              <button
+                onClick={handleBack}
+                className="flex items-center px-3 py-2 text-sm text-fixly-text-muted dark:text-gray-400 hover:text-fixly-primary dark:hover:text-fixly-primary transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Back
+              </button>
+            )}
+
+            <div className="text-sm text-gray-600 dark:text-gray-400">
               {selectedSkills.length > 0 ? (
-                <span>{selectedSkills.length} skill{selectedSkills.length !== 1 ? 's' : ''} selected</span>
+                <span>
+                  {selectedSkills.length} of {maxSkills} skills selected
+                  {selectedSkills.length < minSkills && (
+                    <span className="text-amber-600 dark:text-amber-400 ml-2">
+                      (need {minSkills - selectedSkills.length} more)
+                    </span>
+                  )}
+                </span>
               ) : (
-                <span>Select at least {minSkills} skill{minSkills !== 1 ? 's' : ''} to continue</span>
+                <span>Select {minSkills}-{maxSkills} skills</span>
               )}
             </div>
+          </div>
+
+          {isModal && (
             <button
               onClick={onClose}
               disabled={required && selectedSkills.length < minSkills}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              className={`btn-primary ${
                 required && selectedSkills.length < minSkills
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-purple-600 text-white hover:bg-purple-700'
+                  ? 'opacity-50 cursor-not-allowed'
+                  : ''
               }`}
             >
               Done
             </button>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 
