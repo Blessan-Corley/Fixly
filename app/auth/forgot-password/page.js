@@ -57,6 +57,32 @@ export default function ForgotPasswordPage() {
     return { valid: true };
   };
 
+  // Password strength calculator
+  const getPasswordStrength = (password) => {
+    if (!password) return { level: 0, text: '', color: 'gray' };
+
+    let score = 0;
+    const checks = {
+      length: password.length >= 8,
+      lowercase: /[a-z]/.test(password),
+      uppercase: /[A-Z]/.test(password),
+      numbers: /\d/.test(password),
+      special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+      longLength: password.length >= 12
+    };
+
+    // Calculate score
+    Object.values(checks).forEach(check => {
+      if (check) score++;
+    });
+
+    // Return strength level
+    if (score <= 2) return { level: 1, text: 'Weak', color: 'red' };
+    if (score <= 4) return { level: 2, text: 'Medium', color: 'yellow' };
+    if (score <= 5) return { level: 3, text: 'Strong', color: 'green' };
+    return { level: 4, text: 'Very Strong', color: 'green' };
+  };
+
   // Send OTP for password reset
   const sendOTP = async () => {
     if (!email || !/\S+@\S+\.\S+/.test(email)) {
@@ -218,11 +244,11 @@ export default function ForgotPasswordPage() {
             className="space-y-6"
           >
             <div>
-              <label className="block text-sm font-medium text-fixly-text mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="email"
                   value={email}
@@ -231,7 +257,7 @@ export default function ForgotPasswordPage() {
                     setError('');
                   }}
                   placeholder="Enter your email address"
-                  className="input-field pl-10"
+                  className="w-full px-4 py-3 pl-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   disabled={loading}
                 />
               </div>
@@ -246,7 +272,7 @@ export default function ForgotPasswordPage() {
             <button
               onClick={sendOTP}
               disabled={loading || !email}
-              className="btn-primary w-full"
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center"
             >
               {loading ? (
                 <Loader className="animate-spin h-5 w-5 mr-2" />
@@ -367,11 +393,11 @@ export default function ForgotPasswordPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-fixly-text mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 New Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={newPassword}
@@ -380,29 +406,74 @@ export default function ForgotPasswordPage() {
                     setError('');
                   }}
                   placeholder="Create a new password"
-                  className="input-field pl-10 pr-10"
+                  className="w-full px-4 py-3 pl-10 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-fixly-text-muted" />
+                    <EyeOff className="h-5 w-5" />
                   ) : (
-                    <Eye className="h-5 w-5 text-fixly-text-muted" />
+                    <Eye className="h-5 w-5" />
                   )}
                 </button>
               </div>
+
+              {/* Password Strength Indicator */}
+              {newPassword && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Password Strength:</span>
+                    <span className={`text-sm font-medium ${
+                      getPasswordStrength(newPassword).color === 'red' ? 'text-red-500' :
+                      getPasswordStrength(newPassword).color === 'yellow' ? 'text-yellow-500' :
+                      'text-green-500'
+                    }`}>
+                      {getPasswordStrength(newPassword).text}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        getPasswordStrength(newPassword).color === 'red' ? 'bg-red-500' :
+                        getPasswordStrength(newPassword).color === 'yellow' ? 'bg-yellow-500' :
+                        'bg-green-500'
+                      }`}
+                      style={{ width: `${(getPasswordStrength(newPassword).level / 4) * 100}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    <div className="grid grid-cols-2 gap-1">
+                      <div className={newPassword.length >= 8 ? 'text-green-600 dark:text-green-400' : ''}>
+                        ✓ At least 8 characters
+                      </div>
+                      <div className={/[A-Z]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                        ✓ Uppercase letter
+                      </div>
+                      <div className={/[a-z]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                        ✓ Lowercase letter
+                      </div>
+                      <div className={/\d/.test(newPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                        ✓ Number
+                      </div>
+                      <div className={/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword) ? 'text-green-600 dark:text-green-400' : ''}>
+                        ✓ Special character
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-fixly-text mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Confirm New Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={confirmPassword}
@@ -411,21 +482,37 @@ export default function ForgotPasswordPage() {
                     setError('');
                   }}
                   placeholder="Confirm your new password"
-                  className="input-field pl-10 pr-10"
+                  className="w-full px-4 py-3 pl-10 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   {showConfirmPassword ? (
-                    <EyeOff className="h-5 w-5 text-fixly-text-muted" />
+                    <EyeOff className="h-5 w-5" />
                   ) : (
-                    <Eye className="h-5 w-5 text-fixly-text-muted" />
+                    <Eye className="h-5 w-5" />
                   )}
                 </button>
               </div>
+
+              {/* Password Match Indicator */}
+              {confirmPassword && (
+                <div className="mt-2 flex items-center">
+                  {newPassword === confirmPassword ? (
+                    <CheckCircle className="h-4 w-4 text-green-500 mr-2" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-500 mr-2" />
+                  )}
+                  <span className={`text-sm ${
+                    newPassword === confirmPassword ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {newPassword === confirmPassword ? 'Passwords match' : 'Passwords do not match'}
+                  </span>
+                </div>
+              )}
             </div>
 
             {error && (
@@ -437,8 +524,8 @@ export default function ForgotPasswordPage() {
 
             <button
               onClick={resetPassword}
-              disabled={loading || !newPassword || !confirmPassword}
-              className="btn-primary w-full"
+              disabled={loading || !newPassword || !confirmPassword || newPassword !== confirmPassword}
+              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center"
             >
               {loading ? (
                 <Loader className="animate-spin h-5 w-5 mr-2" />
@@ -456,14 +543,14 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-fixly-bg flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-fixly-text mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             {step === 1 ? 'Reset Password' : step === 2 ? 'Verify Email' : 'New Password'}
           </h1>
-          <p className="text-fixly-text-light">
+          <p className="text-gray-600 dark:text-gray-400">
             {step === 1
               ? 'Enter your email to receive a verification code'
               : step === 2
@@ -481,17 +568,17 @@ export default function ForgotPasswordPage() {
                 key={stepNum}
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                   step >= stepNum
-                    ? 'bg-fixly-accent text-fixly-text'
-                    : 'bg-fixly-border text-fixly-text-muted'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                 }`}
               >
                 {step > stepNum ? <Check className="h-4 w-4" /> : stepNum}
               </div>
             ))}
           </div>
-          <div className="h-2 bg-fixly-border rounded-full">
+          <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
             <div
-              className="h-full bg-fixly-accent rounded-full transition-all duration-300"
+              className="h-full bg-purple-600 rounded-full transition-all duration-300"
               style={{ width: `${(step / 3) * 100}%` }}
             />
           </div>
@@ -501,7 +588,7 @@ export default function ForgotPasswordPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="card"
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 border border-gray-200 dark:border-gray-700"
         >
           {renderStepContent()}
 

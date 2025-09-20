@@ -358,6 +358,34 @@
   .input-field {
     @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 placeholder:text-fixly-text-light;
   }
+
+  /* Password input styling - Better dot spacing */
+  .input-field[type="password"] {
+    letter-spacing: 0.15em;
+    font-family: 'Courier New', Consolas, Monaco, monospace;
+  }
+
+  /* Ensure consistent focus states */
+  .input-field:focus {
+    @apply outline-none ring-2 ring-fixly-primary-light border-fixly-primary;
+  }
+
+  /* Better placeholder styling */
+  .input-field::placeholder {
+    @apply text-fixly-text-light opacity-75;
+  }
+
+  /* Ensure consistent input styling - no grey backgrounds */
+  .input-field:not(:disabled):not([readonly]) {
+    @apply bg-fixly-card;
+  }
+
+  /* Disabled/readonly input styling - More consistent */
+  .input-field:disabled,
+  .input-field[readonly] {
+    @apply bg-fixly-bg-secondary dark:bg-gray-800/50 text-fixly-text-muted dark:text-gray-400 cursor-not-allowed border-fixly-border-light;
+    opacity: 0.8;
+  }
   
   .textarea-field {
     @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 resize-none placeholder:text-fixly-text-light;

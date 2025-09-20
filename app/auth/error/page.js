@@ -23,16 +23,16 @@ export default function AuthErrorPage() {
         const email = searchParams.get('email');
         const name = searchParams.get('name');
         return {
-          title: 'Google Login Successful! 🎉',
-          description: `We successfully authenticated your Google account${email ? ` (${email})` : ''}, but couldn't find a Fixly account associated with this Google account.`,
+          title: "We Couldn't Find Your Fixly Account",
+          description: "We couldn't find your Fixly account. Try Google signup again with an existing account or create a new account.",
           solutions: [
-            'Create a Fixly account first using this Google account',
-            'Then you can login with Google in the future',
-            'All your Google account details will be automatically filled'
+            'Create a new Fixly account using this Google account',
+            'Try signing in with a different Google account that has a Fixly account',
+            'Make sure you have already created a Fixly account before trying to login'
           ],
-          action: 'Create Account with Google',
+          action: 'Create New Account',
           actionPath: `/auth/signup?method=google${email ? `&email=${encodeURIComponent(email)}` : ''}${name ? `&name=${encodeURIComponent(name)}` : ''}`,
-          isSuccess: true
+          isSuccess: false
         };
       case 'AccessDenied':
         return {
@@ -140,7 +140,17 @@ export default function AuthErrorPage() {
               <RefreshCw className="h-4 w-4 mr-2" />
               {errorDetails.action}
             </button>
-            
+
+            {error === 'AccountNotFound' && (
+              <button
+                onClick={() => router.push('/auth/signin')}
+                className="btn-secondary w-full"
+              >
+                <User className="h-4 w-4 mr-2" />
+                Try Different Account
+              </button>
+            )}
+
             <button
               onClick={() => router.push('/')}
               className="btn-ghost w-full"

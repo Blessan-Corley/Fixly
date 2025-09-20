@@ -8,6 +8,40 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const token = req.nextauth.token;
 
+    console.log('🔒 Middleware:', { pathname, hasToken: !!token, userRole: token?.role, isRegistered: token?.isRegistered });
+
+    // ✅ CRITICAL: Check if user has incomplete profile
+    if (token && !token.isRegistered && pathname.startsWith('/dashboard')) {
+      console.log('🚫 Incomplete profile detected, redirecting to signup');
+      const redirectUrl = new URL('/auth/signup', req.url);
+
+      // Add method parameter for Google users
+      if (token.authMethod === 'google') {
+        redirectUrl.searchParams.set('method', 'google');
+      }
+
+      // Preserve role if available
+      if (token.role) {
+        redirectUrl.searchParams.set('role', token.role);
+      }
+
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // ✅ NEW: Handle new Google users without ID
+    if (token && token.isNewUser && !token.id && pathname.startsWith('/dashboard')) {
+      console.log('🚫 New Google user without completion, redirecting to signup');
+      const redirectUrl = new URL('/auth/signup', req.url);
+      redirectUrl.searchParams.set('method', 'google');
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // ✅ Redirect completed users away from auth pages (except signout)
+    if (token && token.isRegistered && token.id && pathname.startsWith('/auth/') && !pathname.includes('/signout')) {
+      console.log('✅ Completed user accessing auth page, redirecting to dashboard');
+      return NextResponse.redirect(new URL('/dashboard', req.url));
+    }
+
     // Admin routes protection
     if (pathname.startsWith('/dashboard/admin')) {
       if (!token || token.role !== 'admin') {
