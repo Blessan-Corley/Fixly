@@ -251,13 +251,35 @@ const userSchema = new mongoose.Schema({
       coordinates: {
         lat: {
           type: Number,
-          min: [6.4, 'Latitude must be within India bounds'],
-          max: [37.6, 'Latitude must be within India bounds']
+          validate: {
+            validator: function(lat) {
+              // Allow null/undefined for optional coordinates
+              if (lat == null || lat === undefined) return true;
+              // For actual coordinates, validate India bounds
+              if (lat !== 0) {
+                return lat >= 6.4 && lat <= 37.6;
+              }
+              // Allow exactly 0 as a valid value (no location set)
+              return true;
+            },
+            message: 'Latitude must be within India bounds (6.4 to 37.6)'
+          }
         },
         lng: {
           type: Number,
-          min: [68.7, 'Longitude must be within India bounds'],
-          max: [97.25, 'Longitude must be within India bounds']
+          validate: {
+            validator: function(lng) {
+              // Allow null/undefined for optional coordinates
+              if (lng == null || lng === undefined) return true;
+              // For actual coordinates, validate India bounds
+              if (lng !== 0) {
+                return lng >= 68.7 && lng <= 97.25;
+              }
+              // Allow exactly 0 as a valid value (no location set)
+              return true;
+            },
+            message: 'Longitude must be within India bounds (68.7 to 97.25)'
+          }
         },
         accuracy: Number // GPS accuracy in meters
       },
@@ -271,13 +293,35 @@ const userSchema = new mongoose.Schema({
     currentLocation: {
       lat: {
         type: Number,
-        min: [6.4, 'Latitude must be within India bounds'],
-        max: [37.6, 'Latitude must be within India bounds']
+        validate: {
+          validator: function(lat) {
+            // Allow null/undefined for optional coordinates
+            if (lat == null || lat === undefined) return true;
+            // For actual coordinates, validate India bounds
+            if (lat !== 0) {
+              return lat >= 6.4 && lat <= 37.6;
+            }
+            // Allow exactly 0 as a valid value (no location set)
+            return true;
+          },
+          message: 'Latitude must be within India bounds (6.4 to 37.6)'
+        }
       },
       lng: {
         type: Number,
-        min: [68.7, 'Longitude must be within India bounds'],
-        max: [97.25, 'Longitude must be within India bounds']
+        validate: {
+          validator: function(lng) {
+            // Allow null/undefined for optional coordinates
+            if (lng == null || lng === undefined) return true;
+            // For actual coordinates, validate India bounds
+            if (lng !== 0) {
+              return lng >= 68.7 && lng <= 97.25;
+            }
+            // Allow exactly 0 as a valid value (no location set)
+            return true;
+          },
+          message: 'Longitude must be within India bounds (68.7 to 97.25)'
+        }
       },
       accuracy: Number,
       lastUpdated: {
@@ -711,7 +755,7 @@ const userSchema = new mongoose.Schema({
     type: {
       type: String,
       enum: {
-        values: ['job_applied', 'job_accepted', 'job_completed', 'payment_due', 'review_received', 'dispute_opened', 'settings_updated', 'privacy_updated', 'welcome', 'job_question', 'comment_reply'],
+        values: ['job_applied', 'job_accepted', 'job_completed', 'payment_due', 'review_received', 'dispute_opened', 'settings_updated', 'privacy_updated', 'welcome', 'job_question', 'comment_reply', 'subscription_success', 'subscription_cancelled', 'credits_reset'],
         message: 'Invalid notification type'
       }
     },
@@ -753,7 +797,11 @@ const userSchema = new mongoose.Schema({
   // Registration metadata
   registrationMetadata: {
     deviceInfo: {
-      type: String,
+      type: {
+        type: String,
+        enum: ['mobile', 'tablet', 'desktop', 'unknown'],
+        default: 'unknown'
+      },
       os: String,
       browser: String,
       userAgent: String

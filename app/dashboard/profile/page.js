@@ -459,7 +459,7 @@ export default function ProfilePage() {
                     isModal={false}
                     selectedSkills={formData.skills}
                     onSkillsChange={(skills) => handleInputChange('skills', skills)}
-                    maxSkills={15}
+                    maxSkills={30}
                     minSkills={1}
                     required={false}
                     className="w-full"

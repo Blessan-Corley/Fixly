@@ -1,7 +1,7 @@
 // app/api/user/location/route.js - API endpoints for user location management
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { authOptions } from '../../../../lib/auth';
 import {
   getCurrentUserLocation,
   updateCurrentLocation,

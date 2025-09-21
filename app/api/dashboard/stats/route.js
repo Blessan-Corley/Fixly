@@ -51,13 +51,21 @@ export async function GET(request) {
       );
     }
 
-    // ✅ CRITICAL FIX: Validate ObjectId format
-    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
-      console.error('❌ Invalid user ID format in stats:', userId);
-      return NextResponse.json(
-        { message: 'Invalid user session. Please sign in again.' },
-        { status: 400 }
-      );
+    // ✅ CRITICAL FIX: Handle Google users vs MongoDB users
+    const isGoogleUser = !userId.match(/^[0-9a-fA-F]{24}$/);
+
+    if (isGoogleUser) {
+      console.log('🔍 Google user stats request:', userId);
+      // For Google users who haven't completed signup, return empty stats
+      return NextResponse.json({
+        totalJobs: 0,
+        activeJobs: 0,
+        completedJobs: 0,
+        pendingApplications: 0,
+        totalEarnings: 0,
+        monthlyStats: [],
+        recentActivity: []
+      });
     }
 
     console.log('📊 Stats request for user:', session.user.id, 'role:', session.user.role);

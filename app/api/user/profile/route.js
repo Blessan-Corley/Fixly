@@ -54,17 +54,68 @@ export async function GET(request) {
 
     await connectDB();
 
-    // ✅ CRITICAL FIX: Validate ObjectId format
-    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
-      console.error('❌ Invalid user ID format:', userId);
-      return NextResponse.json(
-        { message: 'Invalid user session. Please sign in again.' },
-        { status: 400 }
-      );
-    }
+    // ✅ CRITICAL FIX: Handle Google users vs MongoDB users
+    const isGoogleUser = !userId.match(/^[0-9a-fA-F]{24}$/);
 
-    // Find user with all necessary fields
-    const user = await User.findById(userId).select(`
+    let user;
+
+    if (isGoogleUser) {
+      console.log('🔍 Google user profile request (non-ObjectId):', userId);
+      // For Google users, find by googleId instead of _id
+      user = await User.findOne({ googleId: userId }).select(`
+        name
+        username
+        email
+        phone
+        role
+        profilePhoto
+        isRegistered
+        isVerified
+        emailVerified
+        phoneVerified
+        authMethod
+        picture
+        location
+        skills
+        rating
+        jobsCompleted
+        totalEarnings
+        privacy
+        preferences
+        banned
+        isActive
+        lastLoginAt
+        createdAt
+        plan
+      `);
+
+      if (!user) {
+        console.log('❌ Google user not found in database:', userId);
+        return NextResponse.json(
+          { message: 'User not found. Please complete signup first.' },
+          { status: 404 }
+        );
+      }
+
+      // Check if Google user needs to complete profile
+      if (!user.isRegistered || user.username?.startsWith('temp_')) {
+        console.log('⚠️ Google user profile incomplete:', user.username);
+        return NextResponse.json(
+          {
+            message: 'Profile incomplete. Please complete signup first.',
+            needsCompletion: true,
+            user: {
+              name: user.name,
+              email: user.email,
+              authMethod: user.authMethod
+            }
+          },
+          { status: 200 } // Return 200 so frontend can handle properly
+        );
+      }
+    } else {
+      // Find MongoDB user with all necessary fields
+      user = await User.findById(userId).select(`
       name
       username
       email
@@ -88,6 +139,7 @@ export async function GET(request) {
       phoneVerified
       googleId
     `);
+    }
 
     if (!user) {
       console.error('❌ User not found for ID:', userId);

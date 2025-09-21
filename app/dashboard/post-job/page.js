@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { 
+import {
   ChevronLeft,
-  ChevronRight,      // ← Add this
+  ChevronRight,
   ChevronDown,
   ChevronUp,
   CheckCircle,
@@ -42,9 +42,9 @@ import {
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
-import { searchCities, skillCategories, searchSkills } from '../../../data/cities';
-import LocationPermission from '../../../components/ui/LocationPermission';
-import { loadUserLocation, getUserLocation } from '../../../utils/locationUtils';
+import { skillCategories } from '../../../data/cities';
+import SkillSelector from '../../../components/SkillSelector/SkillSelector';
+import EnhancedLocationSelector from '../../../components/LocationPicker/EnhancedLocationSelector';
 
 export default function PostJobPage() {
   return (
@@ -104,31 +104,12 @@ function PostJobContent() {
   const [showProModal, setShowProModal] = useState(false);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
 
-  // Search states
-  const [citySearch, setCitySearch] = useState('');
-  const [cityResults, setCityResults] = useState([]);
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const [skillSearch, setSkillSearch] = useState('');
-  const [skillResults, setSkillResults] = useState([]);
-  const [showSkillDropdown, setShowSkillDropdown] = useState(false);
-
-  // Location states
-  const [userLocation, setUserLocation] = useState(null);
-  const [locationEnabled, setLocationEnabled] = useState(false);
 
   // Fetch subscription info
   useEffect(() => {
     fetchSubscriptionInfo();
   }, []);
 
-  // Load user location on component mount
-  useEffect(() => {
-    const savedLocation = loadUserLocation();
-    if (savedLocation) {
-      setUserLocation(savedLocation);
-      setLocationEnabled(true);
-    }
-  }, []);
 
   const fetchSubscriptionInfo = async () => {
     try {
@@ -144,29 +125,7 @@ function PostJobContent() {
     }
   };
 
-  // City search
-  useEffect(() => {
-    if (citySearch.length > 0) {
-      const results = searchCities(citySearch);
-      setCityResults(results);
-      setShowCityDropdown(results.length > 0);
-    } else {
-      setCityResults([]);
-      setShowCityDropdown(false);
-    }
-  }, [citySearch]);
 
-  // Skill search
-  useEffect(() => {
-    if (skillSearch.length > 0) {
-      const results = searchSkills(skillSearch);
-      setSkillResults(results);
-      setShowSkillDropdown(results.length > 0);
-    } else {
-      setSkillResults([]);
-      setShowSkillDropdown(false);
-    }
-  }, [skillSearch]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => {
@@ -188,55 +147,8 @@ function PostJobContent() {
     }
   };
 
-  const addSkill = (skill) => {
-    if (!formData.skillsRequired.includes(skill)) {
-      handleInputChange('skillsRequired', [...formData.skillsRequired, skill]);
-    }
-    setSkillSearch('');
-    setShowSkillDropdown(false);
-  };
 
-  const removeSkill = (skillToRemove) => {
-    handleInputChange('skillsRequired', formData.skillsRequired.filter(skill => skill !== skillToRemove));
-  };
 
-  const selectCity = (city) => {
-    handleInputChange('location', {
-      ...formData.location,
-      city: city.name,
-      state: city.state,
-      lat: city.lat,
-      lng: city.lng
-    });
-    setCitySearch('');
-    setShowCityDropdown(false);
-  };
-
-  // Location handling functions
-  const handleLocationUpdate = (location) => {
-    setUserLocation(location);
-    setLocationEnabled(!!location);
-  };
-
-  const useCurrentLocation = async () => {
-    try {
-      const location = await getUserLocation();
-      
-      // Update form with GPS coordinates
-      handleInputChange('location', {
-        ...formData.location,
-        lat: location.lat,
-        lng: location.lng
-      });
-
-      setUserLocation(location);
-      setLocationEnabled(true);
-      toast.success('GPS location added to job posting');
-    } catch (error) {
-      console.error('Error getting current location:', error);
-      toast.error('Unable to get current location: ' + error.message);
-    }
-  };
 
   // Media upload functions
   const handleFileSelect = async (files) => {
@@ -511,56 +423,23 @@ function PostJobContent() {
 
       <div>
         <label className="block text-sm font-medium text-fixly-text mb-2">
-          Skills Required *
+          Skills Required <span className="text-red-500">*</span>
         </label>
-        
-        {/* Selected Skills */}
-        {formData.skillsRequired.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {formData.skillsRequired.map((skill, index) => (
-              <span
-                key={index}
-                className="skill-chip skill-chip-selected"
-              >
-                {skill}
-                <button
-                  onClick={() => removeSkill(skill)}
-                  className="ml-2 hover:text-fixly-text"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+        <p className="text-xs text-fixly-text-light mb-4">
+          Select the skills needed for this job. This helps fixers understand the requirements.
+        </p>
 
-        {/* Skill Categories */}
-        <div className="space-y-4">
-          {skillCategories.map((category, categoryIndex) => (
-            <div key={categoryIndex}>
-              <h4 className="font-medium text-fixly-text mb-2">{category.category}</h4>
-              <div className="flex flex-wrap gap-2">
-                {category.skills.map((skill, skillIndex) => (
-                  <button
-                    key={skillIndex}
-                    onClick={() => addSkill(skill)}
-                    disabled={formData.skillsRequired.includes(skill)}
-                    className={`skill-chip ${
-                      formData.skillsRequired.includes(skill)
-                        ? 'opacity-50 cursor-not-allowed'
-                        : ''
-                    }`}
-                  >
-                    {skill}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <SkillSelector
+          isModal={false}
+          selectedSkills={formData.skillsRequired}
+          onSkillsChange={(skills) => handleInputChange('skillsRequired', skills)}
+          minSkills={1}
+          maxSkills={15}
+          className="w-full"
+        />
 
         {errors.skillsRequired && (
-          <p className="text-red-500 text-sm mt-2">{errors.skillsRequired}</p>
+          <p className="text-red-500 text-sm mt-1">{errors.skillsRequired}</p>
         )}
       </div>
     </motion.div>
@@ -640,113 +519,24 @@ function PostJobContent() {
         </label>
       </div>
 
-      {/* Location Helper */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <MapPin className="h-5 w-5 text-blue-600 mr-2" />
-            <div>
-              <p className="text-sm font-medium text-blue-900">Add precise location</p>
-              <p className="text-xs text-blue-700">
-                {formData.location.lat && formData.location.lng ? (
-                  `GPS coordinates added (${formData.location.lat.toFixed(4)}, ${formData.location.lng.toFixed(4)})`
-                ) : (
-                  'Add GPS coordinates to help fixers find the exact location'
-                )}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={useCurrentLocation}
-            className="btn-primary text-xs px-3 py-2 flex items-center"
-          >
-            <Navigation className="h-3 w-3 mr-1" />
-            Use Current Location
-          </button>
-        </div>
-        {!locationEnabled && (
-          <div className="mt-3 pt-3 border-t border-blue-200">
-            <LocationPermission 
-              onLocationUpdate={handleLocationUpdate}
-              showBanner={false}
-            />
-          </div>
-        )}
-      </div>
-
       <div>
         <label className="block text-sm font-medium text-fixly-text mb-2">
-          Complete Address *
+          Job Location <span className="text-red-500">*</span>
         </label>
-        <textarea
-          value={formData.location.address}
-          onChange={(e) => handleInputChange('location.address', e.target.value)}
-          placeholder="Enter the complete address where work needs to be done"
-          className="textarea-field h-20"
+        <p className="text-xs text-fixly-text-light mb-4">
+          Provide the complete address where the work needs to be done. We'll use GPS to help auto-fill details.
+        </p>
+
+        <EnhancedLocationSelector
+          initialLocation={formData.location}
+          onLocationSelect={(location) => handleInputChange('location', location)}
+          required={true}
+          className="w-full"
         />
+
         {errors['location.address'] && (
           <p className="text-red-500 text-sm mt-1">{errors['location.address']}</p>
         )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="relative">
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            City *
-          </label>
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-            <input
-              type="text"
-              value={formData.location.city || citySearch}
-              onChange={(e) => {
-                setCitySearch(e.target.value);
-                if (formData.location.city) {
-                  handleInputChange('location.city', '');
-                }
-              }}
-              placeholder="Search for your city"
-              className="input-field pl-10"
-            />
-          </div>
-          
-          {showCityDropdown && (
-            <div className="absolute z-10 mt-1 w-full bg-fixly-card border border-fixly-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-              {cityResults.map((city, index) => (
-                <button
-                  key={index}
-                  onClick={() => selectCity(city)}
-                  className="w-full px-4 py-2 text-left hover:bg-fixly-accent/10"
-                >
-                  <div className="font-medium text-fixly-text">{city.name}</div>
-                  <div className="text-sm text-fixly-text-light">{city.state}</div>
-                </button>
-              ))}
-            </div>
-          )}
-          
-          {errors['location.city'] && (
-            <p className="text-red-500 text-sm mt-1">{errors['location.city']}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Pincode
-          </label>
-          <input
-            type="text"
-            value={formData.location.pincode}
-            onChange={(e) => handleInputChange('location.pincode', e.target.value)}
-            placeholder="6-digit pincode"
-            className="input-field"
-            maxLength={6}
-          />
-          {errors['location.pincode'] && (
-            <p className="text-red-500 text-sm mt-1">{errors['location.pincode']}</p>
-          )}
-        </div>
       </div>
     </motion.div>
   );

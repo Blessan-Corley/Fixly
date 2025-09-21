@@ -144,7 +144,8 @@ const validatePassword = (password) => {
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [urlRole, setUrlRole] = useState('hirer');
+
+  const [urlRole, setUrlRole] = useState(''); // NO DEFAULT ROLE
   const method = searchParams.get('method');
   
   // Form steps
@@ -164,7 +165,7 @@ export default function SignupPage() {
 
   // Form data
   const [formData, setFormData] = useState({
-    role: urlRole,
+    role: urlRole || undefined, // Never use empty string
     name: '',
     username: '',
     email: '',
@@ -183,8 +184,16 @@ export default function SignupPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [showStartFresh, setShowStartFresh] = useState(false);
+
+  // Validation states
   const [usernameAvailable, setUsernameAvailable] = useState(null);
+  const [usernameMessage, setUsernameMessage] = useState('');
+  const [emailAvailable, setEmailAvailable] = useState(null);
+  const [phoneAvailable, setPhoneAvailable] = useState(null);
+  const [phoneMessage, setPhoneMessage] = useState('');
   const [checkingUsername, setCheckingUsername] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [checkingPhone, setCheckingPhone] = useState(false);
   const [googleUser, setGoogleUser] = useState(null);
   const [showSkillModal, setShowSkillModal] = useState(false);
   
@@ -199,10 +208,13 @@ export default function SignupPage() {
     const initializeRole = () => {
       const paramRole = searchParams.get('role');
       const storedRole = typeof window !== 'undefined' ? sessionStorage.getItem('selectedRole') : null;
-      const finalRole = paramRole || storedRole || 'hirer';
-      
-      setUrlRole(finalRole);
-      setFormData(prev => ({ ...prev, role: finalRole }));
+      const finalRole = paramRole || storedRole; // NO DEFAULT ROLE - user must choose
+
+      if (finalRole) {
+        setUrlRole(finalRole);
+        setFormData(prev => ({ ...prev, role: finalRole }));
+      }
+      // If no role is set, user will be prompted to choose in step 1
     };
     
     initializeRole();
@@ -269,19 +281,19 @@ export default function SignupPage() {
               .replace(/[^a-z0-9_]/g, '')
               .slice(0, 10);
             
-            // Determine the correct role to use
+            // Determine the correct role to use - NO DEFAULT ROLE
             const paramRole = searchParams.get('role');
             const storedRole = typeof window !== 'undefined' ? sessionStorage.getItem('selectedRole') : null;
-            const preferredRole = paramRole || storedRole || session.user.role || 'fixer';
+            const preferredRole = paramRole || storedRole || session.user.role; // NO DEFAULT - user must choose
             
             setFormData(prev => ({
               ...prev,
               name: session.user.name,
               email: session.user.email,
-              username: session.user.username?.startsWith('temp_') 
-                ? emailUsername 
+              username: session.user.username?.startsWith('temp_')
+                ? emailUsername
                 : (session.user.username || emailUsername),
-              role: session.user.role || preferredRole
+              role: session.user.role || preferredRole || undefined // Never use empty string
             }));
             
             // Store incomplete signup state for persistence
@@ -382,51 +394,109 @@ export default function SignupPage() {
     };
   }, [currentStep, formData.username]);
 
-  // Username availability check with content validation
+  // Universal availability checking function using the enhanced check-username API
+  const checkAvailability = async (type, value) => {
+    if (!value || value.length < 2) return;
+
+    try {
+      let requestBody;
+
+      if (type === 'username') {
+        // Legacy format for backward compatibility
+        requestBody = { username: value };
+      } else {
+        // New format with type parameter
+        requestBody = { type, [type]: value };
+      }
+
+      const response = await fetch('/api/auth/check-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error(`${type} check error:`, error);
+      return { available: null, message: `Could not check ${type} availability` };
+    }
+  };
+
+  // Username availability check
   useEffect(() => {
     const checkUsername = async () => {
       if (formData.username.length < 3) {
         setUsernameAvailable(null);
-        setErrors(prev => ({ ...prev, username: '' }));
-        return;
-      }
-
-      const validation = await validateUsername(formData.username);
-      if (!validation.valid) {
-        setUsernameAvailable(false);
-        setCheckingUsername(false);
-        setErrors(prev => ({ ...prev, username: validation.error }));
+        setUsernameMessage('');
         return;
       }
 
       setCheckingUsername(true);
-      try {
-        const response = await fetch('/api/auth/check-username', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: formData.username })
-        });
 
-        const data = await response.json();
-        setUsernameAvailable(data.available);
+      const result = await checkAvailability('username', formData.username);
 
-        if (!data.available) {
-          setErrors(prev => ({ ...prev, username: data.message || 'Username is taken' }));
-        } else {
-          setErrors(prev => ({ ...prev, username: '' }));
-        }
-      } catch (error) {
-        console.error('Error checking username:', error);
-        setUsernameAvailable(false);
-        setErrors(prev => ({ ...prev, username: 'Unable to check username availability' }));
-      } finally {
-        setCheckingUsername(false);
-      }
+      setUsernameAvailable(result?.available);
+      setUsernameMessage(result?.message || '');
+      setCheckingUsername(false);
     };
 
     const timer = setTimeout(checkUsername, 500);
     return () => clearTimeout(timer);
   }, [formData.username]);
+
+  // Email availability check
+  useEffect(() => {
+    const checkEmail = async () => {
+      if (!formData.email || formData.email.length < 5) {
+        setEmailAvailable(null);
+        setErrors(prev => ({ ...prev, email: '' }));
+        return;
+      }
+
+      // Skip check for Google users (their email is already validated)
+      if (authMethod === 'google' && googleUser?.email === formData.email) {
+        setEmailAvailable(true);
+        return;
+      }
+
+      setCheckingEmail(true);
+
+      const result = await checkAvailability('email', formData.email);
+
+      setEmailAvailable(result.available);
+      setErrors(prev => ({
+        ...prev,
+        email: result.available === false ? result.message : ''
+      }));
+      setCheckingEmail(false);
+    };
+
+    const timer = setTimeout(checkEmail, 800);
+    return () => clearTimeout(timer);
+  }, [formData.email, authMethod, googleUser]);
+
+  // Phone availability check
+  useEffect(() => {
+    const checkPhone = async () => {
+      if (!formData.phone || formData.phone.length < 10) {
+        setPhoneAvailable(null);
+        setPhoneMessage('');
+        return;
+      }
+
+      setCheckingPhone(true);
+
+      const result = await checkAvailability('phone', formData.phone);
+
+      setPhoneAvailable(result.available);
+      setPhoneMessage(result?.message || '');
+      setCheckingPhone(false);
+    };
+
+    const timer = setTimeout(checkPhone, 800);
+    return () => clearTimeout(timer);
+  }, [formData.phone]);
 
   // City search
   useEffect(() => {
@@ -711,47 +781,80 @@ export default function SignupPage() {
         }
       } : null;
 
-      if (authMethod === 'google' && googleUser) {
-        // Google completion API
-        console.log('🔄 Using Google completion API');
+      // if (authMethod === 'google' && googleUser) {
+      //   // Google completion API
+      //   console.log('🔄 Using Google completion API');
 
-        const googleCompletionData = {
-          role: formData.role,
-          phone: formattedPhone,
-          location: locationData,
-          username: formData.username.trim().toLowerCase() // Add username for Google users
-        };
+      //   const googleCompletionData = {
+      //     role: formData.role,
+      //     phone: formattedPhone,
+      //     location: locationData,
+      //     username: formData.username.trim().toLowerCase() // Add username for Google users
+      //   };
 
-        if (formData.role === 'fixer') {
-          googleCompletionData.skills = formData.skills.map(skill =>
-            typeof skill === 'string' ? skill : skill.name
-          );
-        }
+      //   if (formData.role === 'fixer') {
+      //     googleCompletionData.skills = formData.skills.map(skill =>
+      //       typeof skill === 'string' ? skill : skill.name
+      //     );
+      //   }
 
-        // Add flag to indicate this is Google completion
-        googleCompletionData.isGoogleCompletion = true;
+      //   // Add flag to indicate this is Google completion
+      //   googleCompletionData.isGoogleCompletion = true;
 
-        const response = await fetch('/api/auth/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(googleCompletionData)
-        });
+      //   const response = await fetch('/api/auth/signup', {
+      //     method: 'POST',
+      //     headers: { 'Content-Type': 'application/json' },
+      //     body: JSON.stringify(googleCompletionData)
+      //   });
+        let response, data;
 
-        const data = await response.json();
+        if (authMethod === 'google') {
+          // Google completion API - simplified since user already exists
+          console.log('🔄 Using Google completion API');
+          const googleCompletionData = {
+            isGoogleCompletion: true, // ✅ This is the key flag
+            role: formData.role,
+            phone: formattedPhone,
+            username: formData.username.trim().toLowerCase(),
+            location: locationData
+          };
+          if (formData.role === 'fixer') {
+            googleCompletionData.skills = formData.skills.map(skill =>
+              typeof skill === 'string' ? skill : skill.name
+            );
+          }
 
-        if (response.ok && data.success) {
-          toast.success('Profile completed successfully! 🎉');
+          response = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(googleCompletionData)
+          });
 
-          // Wait for session to update
-          setTimeout(() => {
-            router.replace('/dashboard');
-          }, 1000);
+          data = await response.json();
+
+          if (response.ok && data.success) {
+            toast.success('Profile completed successfully! 🎉');
+
+            // Force session refresh for Google users
+            console.log('🔄 Refreshing session after Google completion');
+            const updatedSession = await getSession();
+            console.log('🔍 Updated session:', updatedSession);
+
+            // Clear any cached session data
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem('selectedRole');
+              sessionStorage.removeItem('incompleteSignup');
+            }
+
+            // Navigate to dashboard
+            setTimeout(() => {
+              router.replace('/dashboard');
+            }, 500);
+          } else {
+            console.error('❌ Google completion failed:', data);
+            toast.error(data.message || 'Failed to complete profile. Please try again.');
+          }
         } else {
-          console.error('❌ Google completion failed:', data);
-          toast.error(data.message || 'Failed to complete profile. Please try again.');
-        }
-
-      } else {
         // Regular signup flow
         console.log('🔄 Using regular signup API');
 
@@ -1105,7 +1208,7 @@ export default function SignupPage() {
                         }
                       }}
                       placeholder="Enter your email"
-                      className={`input-field pl-10 ${
+                      className={`input-field input-field-with-icon ${
                         otpSent && !otpVerified
                           ? 'bg-fixly-bg-secondary text-fixly-text-muted cursor-not-allowed'
                           : ''
@@ -1142,7 +1245,7 @@ export default function SignupPage() {
                           value={formData.password}
                           onChange={(e) => handleInputChange('password', e.target.value)}
                           placeholder="Create a password"
-                          className={`input-field pl-10 pr-10 ${errors.password ? 'border-red-500 focus:border-red-500' : ''}`}
+                          className={`input-field input-field-with-icon pr-10 ${errors.password ? 'border-red-500 focus:border-red-500' : ''}`}
                         />
                         <button
                           type="button"
@@ -1177,7 +1280,7 @@ export default function SignupPage() {
                           value={formData.confirmPassword}
                           onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
                           placeholder="Confirm your password"
-                          className={`input-field pl-10 pr-10 ${errors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
+                          className={`input-field input-field-with-icon pr-10 ${errors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
                         />
                         <button
                           type="button"
@@ -1372,15 +1475,15 @@ export default function SignupPage() {
                       value={formData.email}
                       onChange={(e) => handleInputChange('email', e.target.value)}
                       placeholder="Your email address"
-                      className="input-field pl-10"
+                      className={`input-field input-field-with-icon pr-10 ${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
                       disabled={otpVerified}
                       readOnly={otpVerified}
                     />
-                    {otpVerified && (
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      {otpVerified && (
                         <Check className="h-4 w-4 text-fixly-accent" />
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                   {otpVerified && (
                     <p className="text-sm text-fixly-text-muted mt-1">
@@ -1404,7 +1507,7 @@ export default function SignupPage() {
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     placeholder={authMethod === 'google' ? 'Edit your name from Google' : 'Enter your full name'}
-                    className={`input-field pl-10 ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
+                    className={`input-field input-field-with-icon ${errors.name ? 'border-red-500 focus:border-red-500' : ''}`}
                   />
                 </div>
                 {errors.name && (
@@ -1429,23 +1532,16 @@ export default function SignupPage() {
                       handleInputChange('username', value);
                     }}
                     placeholder="Choose a unique username"
-                    className={`input-field pl-10 pr-10 ${errors.username ? 'border-red-500 focus:border-red-500' : ''}`}
+                    className={`input-field input-field-with-icon ${
+                      (usernameAvailable === false && usernameMessage) ? 'border-red-500 focus:border-red-500' : ''
+                    }`}
                   />
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                    {checkingUsername ? (
-                      <Loader className="animate-spin h-4 w-4 text-fixly-text-muted" />
-                    ) : usernameAvailable === true ? (
-                      <Check className="h-4 w-4 text-green-500" />
-                    ) : usernameAvailable === false ? (
-                      <X className="h-4 w-4 text-red-500" />
-                    ) : null}
-                  </div>
                 </div>
-                {errors.username && (
-                  <p className="text-red-500 text-sm mt-1">{errors.username}</p>
-                )}
-                {usernameAvailable === true && (
-                  <p className="text-green-600 text-sm mt-1">Username is available!</p>
+                {/* Username validation messages - only show errors */}
+                {usernameAvailable === false && usernameMessage && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {usernameMessage}
+                  </p>
                 )}
               </div>
 
@@ -1465,11 +1561,16 @@ export default function SignupPage() {
                       handleInputChange('phone', cleanPhone);
                     }}
                     placeholder="Enter your phone number"
-                    className={`input-field pl-10 ${errors.phone ? 'border-red-500 focus:border-red-500' : ''}`}
+                    className={`input-field input-field-with-icon ${
+                      (phoneAvailable === false && phoneMessage) ? 'border-red-500 focus:border-red-500' : ''
+                    }`}
                   />
                 </div>
-                {errors.phone && (
-                  <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
+                {/* Phone validation messages - only show errors */}
+                {phoneAvailable === false && phoneMessage && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {phoneMessage}
+                  </p>
                 )}
               </div>
             </div>
@@ -1532,7 +1633,7 @@ export default function SignupPage() {
                     selectedSkills={formData.skills}
                     onSkillsChange={(skills) => handleInputChange('skills', skills)}
                     minSkills={3}
-                    maxSkills={15}
+                    maxSkills={30}
                     className="w-full"
                   />
 
@@ -1654,7 +1755,18 @@ export default function SignupPage() {
                     loading ||
                     otpLoading ||
                     (currentStep === 1 && !authMethod) ||
-                    (currentStep === 2 && authMethod === 'email' && otpSent && !otpVerified)
+                    (currentStep === 2 && authMethod === 'email' && otpSent && !otpVerified) ||
+                    (currentStep === 3 && (
+                      usernameAvailable === false ||
+                      emailAvailable === false ||
+                      phoneAvailable === false ||
+                      checkingUsername ||
+                      checkingEmail ||
+                      checkingPhone ||
+                      !formData.username ||
+                      !formData.email ||
+                      !formData.phone
+                    ))
                   }
                   className="btn-primary flex items-center"
                 >

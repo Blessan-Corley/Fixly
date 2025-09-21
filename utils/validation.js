@@ -687,50 +687,77 @@ export const ValidationRules = {
       // System/Admin related
       'admin', 'administrator', 'root', 'system', 'support', 'help',
       'info', 'contact', 'mail', 'webmaster', 'postmaster', 'hostmaster',
-      'moderator', 'mod', 'owner', 'staff', 'team', 'official',
-      
+      'moderator', 'mod', 'owner', 'staff', 'team', 'official', 'operator',
+      'service', 'noreply', 'no-reply', 'mailer-daemon', 'daemon',
+
       // Testing/Demo related
       'test', 'testing', 'demo', 'example', 'sample', 'guest', 'anonymous',
       'temp', 'temporary', 'trial', 'beta', 'alpha', 'dev', 'development',
-      
+      'staging', 'production', 'local', 'localhost', 'debug',
+
       // User/Account related
       'user', 'users', 'member', 'members', 'account', 'accounts',
       'profile', 'profiles', 'settings', 'preferences', 'dashboard',
       'null', 'undefined', 'none', 'empty', 'blank', 'default',
-      
+      'customer', 'client', 'vendor', 'public', 'private',
+
       // Navigation/Pages
       'home', 'index', 'main', 'page', 'site', 'website', 'app',
       'about', 'contact', 'privacy', 'terms', 'legal', 'faq',
-      
+      'blog', 'news', 'forum', 'community', 'social', 'feed',
+      'search', 'browse', 'explore', 'discover', 'trending',
+
       // Auth related
       'login', 'logout', 'signin', 'signout', 'signup', 'register',
       'registration', 'auth', 'authentication', 'password', 'reset',
       'forgot', 'verify', 'verification', 'confirm', 'confirmation',
-      
+      'oauth', 'session', 'token', 'credential', 'authorize',
+
       // Actions
       'activate', 'activation', 'deactivate', 'delete', 'remove',
       'cancel', 'suspend', 'ban', 'block', 'unblock', 'enable', 'disable',
-      
+      'create', 'update', 'edit', 'modify', 'save', 'submit', 'send',
+      'upload', 'download', 'export', 'import', 'sync', 'backup',
+
       // Security/Moderation
       'security', 'safety', 'trust', 'verified', 'certified', 'premium',
       'pro', 'plus', 'enterprise', 'business', 'corporate', 'official',
       'spam', 'abuse', 'report', 'flag', 'moderate', 'moderation',
-      
-      // Platform specific
+      'violation', 'complaint', 'review', 'audit', 'monitor',
+
+      // Platform specific - Fixly
       'fixly', 'fix', 'fixer', 'hire', 'hirer', 'job', 'jobs',
       'work', 'worker', 'service', 'services', 'provider', 'customer',
-      
+      'booking', 'order', 'request', 'quote', 'estimate', 'invoice',
+      'payment', 'billing', 'subscription', 'plan', 'pricing',
+
       // API/Technical
       'api', 'docs', 'documentation', 'swagger', 'graphql', 'rest',
       'webhook', 'callback', 'endpoint', 'server', 'client', 'database',
-      
+      'cache', 'redis', 'mongodb', 'mysql', 'postgres', 'firebase',
+      'cdn', 'aws', 'azure', 'gcp', 'docker', 'kubernetes',
+
       // Common roles
       'ceo', 'cto', 'cfo', 'coo', 'manager', 'director', 'supervisor',
-      'lead', 'head', 'chief', 'president', 'vice', 'senior', 'junior'
+      'lead', 'head', 'chief', 'president', 'vice', 'senior', 'junior',
+      'intern', 'assistant', 'coordinator', 'specialist', 'analyst',
+
+      // Prohibited/Inappropriate
+      'nazi', 'hitler', 'terrorist', 'isis', 'porn', 'sex', 'xxx',
+      'casino', 'gambling', 'drugs', 'weapon', 'gun', 'bomb',
+      'scam', 'fraud', 'hack', 'phish', 'malware', 'virus',
+
+      // Social Media
+      'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'snapchat',
+      'whatsapp', 'telegram', 'discord', 'reddit', 'linkedin',
+
+      // Common Brands/Companies
+      'google', 'apple', 'microsoft', 'amazon', 'meta', 'netflix',
+      'uber', 'airbnb', 'paypal', 'stripe', 'visa', 'mastercard'
     ];
     
     if (reservedUsernames.includes(cleanUsername)) {
-      return { valid: false, error: 'This username is reserved and cannot be used' };
+      return { valid: false, error: 'Username already taken' };
     }
     
     // Check for suspicious patterns
@@ -740,18 +767,64 @@ export const ValidationRules = {
       /^temp\d*$/i,           // temp, temp1
       /^demo\d*$/i,           // demo, demo1
       /^sample\d*$/i,         // sample, sample1
+
+      // Enhanced patterns for usernames containing reserved words
+      /.*test.*/i,            // anything containing "test"
+      /.*user.*/i,            // anything containing "user"
+      /.*temp.*/i,            // anything containing "temp"
+      /.*demo.*/i,            // anything containing "demo"
+      /.*sample.*/i,          // anything containing "sample"
+      /.*admin.*/i,           // anything containing "admin"
+      /.*mod.*/i,             // anything containing "mod"
+      /.*null.*/i,            // anything containing "null"
+      /.*undefined.*/i,       // anything containing "undefined"
+      /.*default.*/i,         // anything containing "default"
       /^guest\d*$/i,          // guest, guest1
       /^admin\d*$/i,          // admin, admin1
       /^fixly/i,              // anything starting with fixly
       /^[a-z]{1,2}\d{4,}$/,   // a1234, ab12345 (short letters + many numbers)
       /^\d+[a-z]{1,2}$/,      // 1234a, 12345ab (many numbers + short letters)
-      /^(fuck|shit|damn|crap|stupid|idiot|moron|dumb)/i, // Profanity
-      /^(sex|porn|xxx|adult)/i, // Adult content
+
+      // Enhanced profanity patterns
+      /^(fuck|shit|damn|crap|stupid|idiot|moron|dumb|bitch|ass|hell)/i,
+      /^(sex|porn|xxx|adult|nude|naked|erotic)/i,
+      /^(nazi|hitler|terrorist|isis|bomb|gun|weapon|kill|murder|death)/i,
+      /^(drug|cocaine|heroin|weed|marijuana|cannabis|meth|crack)/i,
+      /^(scam|fraud|fake|phish|hack|spam|virus|malware)/i,
+      /^(casino|gambling|bet|lottery|poker|blackjack)/i,
+
+      // Hindi/Indian profanity patterns
+      /^(madarchod|behenchod|chutiya|gandu|randi|saala|harami)/i,
+      /^(bc|mc|bkl|lund|lauda|bhosda|chut)/i,
+
+      // Tamil profanity patterns
+      /^(punda|sunni|koodhi|ommala|poda|podi|maire|mairu)/i,
+      /^(naaye|paithiyam|loose|aalu|kena|thevdiya|thevidiya)/i,
+      /^(poolu|kunna|myre|thendi|para|otha|othaiyya)/i,
+
+      // Telugu profanity patterns
+      /^(dengey|lanjkoduku|lanjakoduku|boothulu|modda|puku)/i,
+      /^(gulthi|gudda|dengamma|lanjakodaki|badava|gadida)/i,
+
+      // Malayalam profanity patterns
+      /^(thendi|potta|myre|kunna|pooru|thayoli)/i,
+      /^(maire|para|poda|podi|myru|poorru)/i,
+
+      // Kannada profanity patterns
+      /^(boli|gubbu|bevarsi|nayi|kiru|sullu)/i,
+      /^(waste|kelbedi|muchko|bekku|kathe|chapri)/i,
+
+      // Pattern-based blocking
+      /^(buy|sell|cheap|free|discount|offer|deal).*$/i,  // commercial spam
+      /^(money|cash|earn|income|profit|rich).*$/i,       // financial spam
+      /^(dating|hookup|meet|single|lonely).*$/i,         // dating spam
+      /.*(69|420|666).*/,                                // inappropriate numbers
+      /^(whatsapp|telegram|instagram|facebook).*$/i,     // social media references
     ];
     
     for (const pattern of suspiciousPatterns) {
       if (pattern.test(cleanUsername)) {
-        return { valid: false, error: 'Please choose a more appropriate and unique username' };
+        return { valid: false, error: 'Invalid username' };
       }
     }
     
