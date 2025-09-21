@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, memo, forwardRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -29,23 +29,82 @@ import {
 import { toast } from 'sonner';
 import { skillCategories, getSkillSuggestions } from '../../data/cities';
 
-// Category icon mapping for better visual representation
+// Memoized search input to prevent re-renders and focus loss
+const SearchInput = memo(forwardRef(({ value, onChange, placeholder = "Search for skills..." }, ref) => (
+  <div className="relative">
+    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+    <input
+      ref={ref}
+      type="text"
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      className="w-full px-4 py-3 pl-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-fixly-primary focus:border-transparent outline-none transition-all"
+      autoComplete="off"
+    />
+  </div>
+)));
+
+SearchInput.displayName = 'SearchInput';
+
+// Memoized category button to prevent re-renders
+const CategoryButton = memo(({ category, categorySkillCount, iconData, onClick }) => {
+  const IconComponent = iconData.icon;
+
+  return (
+    <button
+      onClick={() => onClick(category)}
+      className="w-full p-4 bg-fixly-bg-secondary dark:bg-gray-800 hover:bg-fixly-card dark:hover:bg-gray-700 border border-fixly-border dark:border-gray-600 hover:border-fixly-primary-light dark:hover:border-fixly-primary rounded-xl transition-all duration-200 group hover:shadow-lg"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <div className={`w-12 h-12 ${iconData.color} rounded-xl flex items-center justify-center mr-4 group-hover:scale-105 transition-transform`}>
+            <IconComponent className="h-6 w-6" />
+          </div>
+          <div className="text-left">
+            <h3 className="font-medium text-fixly-text dark:text-white group-hover:text-fixly-primary dark:group-hover:text-fixly-primary">{category.category}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {category.skills.length} skills available
+              {categorySkillCount > 0 && (
+                <span className="ml-2 text-fixly-primary dark:text-fixly-primary font-medium">
+                  • {categorySkillCount} selected
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center">
+          {categorySkillCount > 0 && (
+            <div className="bg-fixly-primary text-white text-xs px-2 py-1 rounded-full mr-2 shadow-sm">
+              {categorySkillCount}
+            </div>
+          )}
+          <ChevronRight className="h-5 w-5 text-fixly-text-muted dark:text-gray-500 group-hover:text-fixly-primary transition-colors" />
+        </div>
+      </div>
+    </button>
+  );
+});
+
+CategoryButton.displayName = 'CategoryButton';
+
+// Category icon mapping for better visual representation with proper dark mode support
 const categoryIcons = {
-  'Electrical Services': { icon: Zap, color: 'bg-yellow-100 text-yellow-700', bgColor: 'bg-yellow-500' },
-  'Plumbing Services': { icon: Wrench, color: 'bg-blue-100 text-blue-700', bgColor: 'bg-blue-500' },
-  'Construction & Renovation': { icon: Hammer, color: 'bg-orange-100 text-orange-700', bgColor: 'bg-orange-500' },
-  'Installation Services': { icon: Settings, color: 'bg-gray-100 text-gray-700', bgColor: 'bg-gray-500' },
-  'Device Repair': { icon: Smartphone, color: 'bg-indigo-100 text-indigo-700', bgColor: 'bg-indigo-500' },
-  'Cleaning Services': { icon: Sparkle, color: 'bg-teal-100 text-teal-700', bgColor: 'bg-teal-500' },
-  'Automotive Services': { icon: Car, color: 'bg-red-100 text-red-700', bgColor: 'bg-red-500' },
-  'Gardening Services': { icon: Leaf, color: 'bg-green-100 text-green-700', bgColor: 'bg-green-500' },
-  'Moving Services': { icon: Truck, color: 'bg-purple-100 text-purple-700', bgColor: 'bg-purple-500' },
-  'Beauty & Wellness': { icon: Scissors, color: 'bg-pink-100 text-pink-700', bgColor: 'bg-pink-500' },
-  'Healthcare Services': { icon: Heart, color: 'bg-rose-100 text-rose-700', bgColor: 'bg-rose-500' },
-  'Photography & Events': { icon: Camera, color: 'bg-violet-100 text-violet-700', bgColor: 'bg-violet-500' },
-  'Tutoring & Education': { icon: Briefcase, color: 'bg-cyan-100 text-cyan-700', bgColor: 'bg-cyan-500' },
-  'Security Services': { icon: Users, color: 'bg-slate-100 text-slate-700', bgColor: 'bg-slate-500' },
-  'Digital Services': { icon: Settings, color: 'bg-emerald-100 text-emerald-700', bgColor: 'bg-emerald-500' },
+  'Electrical Services': { icon: Zap, color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400', bgColor: 'bg-yellow-500' },
+  'Plumbing Services': { icon: Wrench, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400', bgColor: 'bg-blue-500' },
+  'Construction & Renovation': { icon: Hammer, color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400', bgColor: 'bg-orange-500' },
+  'Installation Services': { icon: Settings, color: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300', bgColor: 'bg-gray-500' },
+  'Device Repair': { icon: Smartphone, color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400', bgColor: 'bg-indigo-500' },
+  'Cleaning Services': { icon: Sparkle, color: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400', bgColor: 'bg-teal-500' },
+  'Automotive Services': { icon: Car, color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', bgColor: 'bg-red-500' },
+  'Gardening Services': { icon: Leaf, color: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400', bgColor: 'bg-green-500' },
+  'Moving Services': { icon: Truck, color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400', bgColor: 'bg-purple-500' },
+  'Beauty & Wellness': { icon: Scissors, color: 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400', bgColor: 'bg-pink-500' },
+  'Healthcare Services': { icon: Heart, color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400', bgColor: 'bg-rose-500' },
+  'Photography & Events': { icon: Camera, color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400', bgColor: 'bg-violet-500' },
+  'Tutoring & Education': { icon: Briefcase, color: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400', bgColor: 'bg-cyan-500' },
+  'Security Services': { icon: Users, color: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300', bgColor: 'bg-slate-500' },
+  'Digital Services': { icon: Settings, color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400', bgColor: 'bg-emerald-500' },
 };
 
 /**
@@ -68,7 +127,7 @@ export default function SkillSelector({
   onClose,
   selectedSkills = [],
   onSkillsChange,
-  maxSkills = 50,
+  maxSkills = 30,
   minSkills = 3,
   required = true,
   className = ""
@@ -76,7 +135,6 @@ export default function SkillSelector({
   const [currentView, setCurrentView] = useState('categories');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef(null);
@@ -90,7 +148,7 @@ export default function SkillSelector({
 
     debounceTimer.current = setTimeout(() => {
       setDebouncedQuery(searchQuery);
-    }, 150); // Small delay to avoid excessive updates
+    }, 300); // Increased delay to prevent excessive updates
 
     return () => {
       if (debounceTimer.current) {
@@ -99,34 +157,34 @@ export default function SkillSelector({
     };
   }, [searchQuery]);
 
-  // Search functionality - runs only on debounced query
+  // Memoized search results to prevent unnecessary re-renders
+  const searchResults = useMemo(() => {
+    if (debouncedQuery.length < 1) {
+      return [];
+    }
+    const allSkills = skillCategories.flatMap(cat => cat.skills);
+    const query = debouncedQuery.toLowerCase().trim();
+    return allSkills.filter(skill =>
+      skill.toLowerCase().includes(query)
+    ).slice(0, 20); // Limit to 20 results for better performance
+  }, [debouncedQuery]);
+
+  // Update search state only when needed
   useEffect(() => {
     if (debouncedQuery.length > 0) {
-      setIsSearching(true);
-      const allSkills = skillCategories.flatMap(cat => cat.skills);
-      const results = allSkills.filter(skill =>
-        skill.toLowerCase().includes(debouncedQuery.toLowerCase())
-      );
-      setSearchResults(results);
-
-      // Only switch to search view if user has typed something meaningful
-      if (debouncedQuery.length >= 2 && currentView === 'categories') {
-        setCurrentView('search');
-      }
       setIsSearching(false);
     } else {
-      setSearchResults([]);
       setIsSearching(false);
-      // Don't automatically switch back to avoid focus loss
     }
-  }, [debouncedQuery, currentView]);
+  }, [debouncedQuery]);
 
-  const handleCategorySelect = (category) => {
+
+  const handleCategorySelect = useCallback((category) => {
     setSelectedCategory(category);
     setCurrentView('skills');
-  };
+  }, []);
 
-  const handleSkillToggle = (skill) => {
+  const handleSkillToggle = useCallback((skill) => {
     if (selectedSkills.includes(skill)) {
       // Remove skill - check minimum
       if (selectedSkills.length <= minSkills) {
@@ -146,9 +204,9 @@ export default function SkillSelector({
       onSkillsChange(updatedSkills);
       // Don't show toast for every addition to reduce spam
     }
-  };
+  }, [selectedSkills, minSkills, maxSkills, onSkillsChange]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (currentView === 'skills') {
       setCurrentView('categories');
       setSelectedCategory(null);
@@ -156,19 +214,12 @@ export default function SkillSelector({
       setCurrentView('categories');
       setSearchQuery('');
     }
-  };
+  }, [currentView]);
 
-  // Handle search input changes without losing focus
+  // Stable search input handler to prevent re-renders
   const handleSearchChange = useCallback((e) => {
     const value = e.target.value;
     setSearchQuery(value);
-
-    // Maintain focus on the input
-    if (searchInputRef.current && document.activeElement !== searchInputRef.current) {
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 0);
-    }
   }, []);
 
   const skillSuggestions = useMemo(() => {
@@ -176,21 +227,21 @@ export default function SkillSelector({
   }, [selectedSkills]);
 
   // Content component that can be used both in modal and inline
-  const SkillSelectorContent = () => (
-    <div className={`bg-white rounded-2xl ${!isModal ? 'border border-gray-200' : ''}`}>
+  const SkillSelectorContent = useMemo(() => (
+    <div className={`bg-white dark:bg-gray-900 rounded-2xl ${!isModal ? 'border border-gray-200 dark:border-gray-700' : ''}`}>
       {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-gray-200">
+      <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center">
           {(currentView === 'skills' || currentView === 'search') && (
             <button
               onClick={handleBack}
-              className="mr-3 p-1 hover:bg-gray-100 rounded-lg transition-colors"
+              className="mr-3 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
-              <ChevronLeft className="h-5 w-5 text-gray-600" />
+              <ChevronLeft className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             </button>
           )}
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
               {currentView === 'categories' && 'Select Your Skills'}
               {currentView === 'skills' && selectedCategory?.category}
               {currentView === 'search' && 'Search Skills'}
@@ -205,27 +256,21 @@ export default function SkillSelector({
         {isModal && (
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
           >
-            <X className="h-5 w-5 text-gray-400" />
+            <X className="h-5 w-5 text-gray-400 dark:text-gray-500" />
           </button>
         )}
       </div>
 
       {/* Search Bar */}
       <div className="p-6 pb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            placeholder="Search for skills..."
-            value={searchQuery}
-            onChange={handleSearchChange}
-            className="input-field pl-10"
-            autoComplete="off"
-          />
-        </div>
+        <SearchInput
+          ref={searchInputRef}
+          value={searchQuery}
+          onChange={handleSearchChange}
+          placeholder="Search for skills..."
+        />
       </div>
 
       {/* Selected Skills Preview */}
@@ -314,47 +359,65 @@ export default function SkillSelector({
                 </div>
               )}
 
-              {skillCategories.map((category, index) => {
+              {/* Search Results - shown when user is searching */}
+              {searchResults.length > 0 && searchQuery.length >= 1 && (
+                <div className="mb-6">
+                  <h4 className="flex items-center text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                    <Search className="h-4 w-4 mr-2 text-fixly-primary" />
+                    Search Results ({searchResults.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {searchResults.map((skill, index) => {
+                      const isSelected = selectedSkills.includes(skill);
+                      const category = skillCategories.find(cat => cat.skills.includes(skill));
+                      const iconData = categoryIcons[category?.category] || categoryIcons['Digital Services'];
+                      const IconComponent = iconData.icon;
+
+                      return (
+                        <button
+                          key={`search-${index}`}
+                          onClick={() => handleSkillToggle(skill)}
+                          className={`w-full flex items-center p-3 rounded-lg border-2 transition-all text-left ${
+                            isSelected
+                              ? 'border-fixly-primary bg-fixly-primary/10 text-fixly-primary'
+                              : 'border-fixly-border dark:border-gray-600 hover:border-fixly-primary hover:bg-fixly-primary/5'
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-lg ${iconData.color} flex items-center justify-center mr-3`}>
+                            <IconComponent className="h-4 w-4" />
+                          </div>
+                          <div className="flex-1">
+                            <span className="font-medium text-fixly-text dark:text-gray-200">{skill}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                              in {category?.category}
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <Check className="h-4 w-4 text-fixly-primary" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Show categories only when not searching or no results */}
+              {(searchQuery.length < 1 || searchResults.length === 0) && skillCategories.map((category, index) => {
                 const categorySkillCount = category.skills.filter(skill =>
                   selectedSkills.includes(skill)
                 ).length;
 
                 const iconData = categoryIcons[category.category] || categoryIcons['Digital Services'];
-                const IconComponent = iconData.icon;
 
                 return (
-                  <button
-                    key={index}
-                    onClick={() => handleCategorySelect(category)}
-                    className="w-full p-4 bg-fixly-bg-secondary dark:bg-gray-800 hover:bg-fixly-card dark:hover:bg-gray-700 border border-fixly-border dark:border-gray-600 hover:border-fixly-primary-light dark:hover:border-fixly-primary rounded-xl transition-all duration-200 group hover:shadow-lg"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className={`w-12 h-12 ${iconData.color} dark:bg-gray-700 rounded-xl flex items-center justify-center mr-4 group-hover:scale-105 transition-transform`}>
-                          <IconComponent className="h-6 w-6 dark:text-gray-300" />
-                        </div>
-                        <div className="text-left">
-                          <h3 className="font-medium text-fixly-text dark:text-white group-hover:text-fixly-primary dark:group-hover:text-fixly-primary">{category.category}</h3>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {category.skills.length} skills available
-                            {categorySkillCount > 0 && (
-                              <span className="ml-2 text-fixly-primary dark:text-fixly-primary font-medium">
-                                • {categorySkillCount} selected
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center">
-                        {categorySkillCount > 0 && (
-                          <div className="bg-fixly-primary text-white text-xs px-2 py-1 rounded-full mr-2 shadow-sm">
-                            {categorySkillCount}
-                          </div>
-                        )}
-                        <ChevronRight className="h-5 w-5 text-fixly-text-muted dark:text-gray-500 group-hover:text-fixly-primary transition-colors" />
-                      </div>
-                    </div>
-                  </button>
+                  <CategoryButton
+                    key={`${category.category}-${categorySkillCount}`}
+                    category={category}
+                    categorySkillCount={categorySkillCount}
+                    iconData={iconData}
+                    onClick={handleCategorySelect}
+                  />
                 );
               })}
             </motion.div>
@@ -383,7 +446,7 @@ export default function SkillSelector({
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`font-medium ${isSelected ? 'text-fixly-primary' : 'text-fixly-text group-hover:text-fixly-primary'}`}>
+                        <span className={`font-medium ${isSelected ? 'text-fixly-primary' : 'text-fixly-text dark:text-white group-hover:text-fixly-primary'}`}>
                           {skill}
                         </span>
                         {isSelected ? (
@@ -393,7 +456,7 @@ export default function SkillSelector({
                             </div>
                           </div>
                         ) : (
-                          <div className="w-5 h-5 border border-fixly-border rounded-full group-hover:border-fixly-primary transition-colors"></div>
+                          <div className="w-5 h-5 border border-fixly-border dark:border-gray-600 rounded-full group-hover:border-fixly-primary transition-colors"></div>
                         )}
                       </div>
                     </button>
@@ -427,8 +490,8 @@ export default function SkillSelector({
                       onClick={() => handleSkillToggle(skill)}
                       className={`w-full p-3 rounded-xl text-left transition-all duration-200 group ${
                         isSelected
-                          ? 'bg-fixly-primary-bg border-2 border-fixly-primary-light text-fixly-primary shadow-sm'
-                          : 'bg-fixly-bg-secondary hover:bg-fixly-card border border-fixly-border hover:border-fixly-primary-light text-fixly-text hover:shadow-md'
+                          ? 'bg-fixly-primary-bg dark:bg-fixly-primary/20 border-2 border-fixly-primary-light dark:border-fixly-primary text-fixly-primary shadow-sm'
+                          : 'bg-fixly-bg-secondary dark:bg-gray-800 hover:bg-fixly-card dark:hover:bg-gray-700 border border-fixly-border dark:border-gray-600 hover:border-fixly-primary-light dark:hover:border-fixly-primary text-fixly-text dark:text-white hover:shadow-md'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -437,10 +500,10 @@ export default function SkillSelector({
                             <IconComponent className="h-4 w-4" />
                           </div>
                           <div>
-                            <span className={`font-medium ${isSelected ? 'text-fixly-primary' : 'text-fixly-text group-hover:text-fixly-primary'}`}>
+                            <span className={`font-medium ${isSelected ? 'text-fixly-primary' : 'text-fixly-text dark:text-white group-hover:text-fixly-primary'}`}>
                               {skill}
                             </span>
-                            <p className="text-xs text-fixly-text-muted">{category?.category}</p>
+                            <p className="text-xs text-fixly-text-muted dark:text-gray-400">{category?.category}</p>
                           </div>
                         </div>
                         {isSelected ? (
@@ -448,19 +511,19 @@ export default function SkillSelector({
                             <Check className="h-3 w-3" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 border border-fixly-border rounded-full group-hover:border-fixly-primary transition-colors"></div>
+                          <div className="w-5 h-5 border border-fixly-border dark:border-gray-600 rounded-full group-hover:border-fixly-primary transition-colors"></div>
                         )}
                       </div>
                     </motion.button>
                   );
                 })
               ) : searchQuery.length > 0 ? (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No skills found matching "{searchQuery}"</p>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Start typing to search for skills</p>
                 </div>
@@ -517,7 +580,7 @@ export default function SkillSelector({
         </div>
       </div>
     </div>
-  );
+  ), [currentView, selectedCategory, searchQuery, selectedSkills, maxSkills, minSkills, isModal, onClose, handleBack, handleSearchChange, skillSuggestions, searchResults, handleSkillToggle]);
 
   if (isModal) {
     if (!isOpen) return null;
@@ -540,7 +603,7 @@ export default function SkillSelector({
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           className="relative max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
         >
-          <SkillSelectorContent />
+          {SkillSelectorContent}
         </motion.div>
       </div>
     );
@@ -548,7 +611,7 @@ export default function SkillSelector({
 
   return (
     <div className={className}>
-      <SkillSelectorContent />
+      {SkillSelectorContent}
     </div>
   );
 }

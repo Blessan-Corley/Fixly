@@ -54,17 +54,25 @@ export async function POST(request) {
     const deviceInfo = detectDevice(userAgent);
 
     // Enhanced Redis-based rate limiting - 3 signups per hour per IP
-    const rateLimitResult = await redisRateLimit(`signup:${ip}`, 3, 3600);
-    if (!rateLimitResult.success) {
-      const resetTime = new Date(rateLimitResult.resetTime || Date.now() + 3600000);
-      return NextResponse.json(
-        {
-          message: 'Too many registration attempts. Please try again later.',
-          resetTime: resetTime.toISOString(),
-          remaining: rateLimitResult.remaining
-        },
-        { status: 429 }
-      );
+    // Whitelist for development - bypass rate limiting for local IPs
+    const developmentIPs = ['127.0.0.1', '::1', 'localhost', 'unknown'];
+    const isLocalIP = developmentIPs.includes(ip);
+
+    if (!isLocalIP) {
+      const rateLimitResult = await redisRateLimit(`signup:${ip}`, 3, 3600);
+      if (!rateLimitResult.success) {
+        const resetTime = new Date(rateLimitResult.resetTime || Date.now() + 3600000);
+        return NextResponse.json(
+          {
+            message: 'Too many registration attempts. Please try again later.',
+            resetTime: resetTime.toISOString(),
+            remaining: rateLimitResult.remaining
+          },
+          { status: 429 }
+        );
+      }
+    } else {
+      console.log('🔓 Rate limiting bypassed for local development IP:', ip);
     }
 
     const body = await request.json();
@@ -74,11 +82,19 @@ export async function POST(request) {
       role: body.role,
       hasLocation: !!body.location,
       hasSkills: !!body.skills,
-      isGoogleCompletion: body.isGoogleCompletion
+      isGoogleCompletion: body.isGoogleCompletion,
+      timestamp: new Date().toISOString()
     });
 
     // Get current session for Google auth verification
     const session = await getServerSession(authOptions);
+    console.log('🔍 Session info:', {
+      hasSession: !!session,
+      userEmail: session?.user?.email,
+      userId: session?.user?.id,
+      googleId: session?.user?.googleId,
+      name: session?.user?.name
+    });
 
     // ✅ GOOGLE COMPLETION FLOW - Handle Google users completing their profile
     if (body.isGoogleCompletion === true) {
@@ -99,61 +115,92 @@ export async function POST(request) {
       }
 
       await connectDB();
+      console.log('✅ MongoDB connected successfully');
 
       // Handle Google users - find existing or create new
       let user;
+      console.log('🔍 Looking for user with session:', {
+        userId: session.user.id,
+        userEmail: session.user.email,
+        isValidObjectId: /^[0-9a-fA-F]{24}$/.test(session.user.id)
+      });
+
       if (session.user.id) {
         // For Google users, the ID might not be a valid MongoDB ObjectId
         // First try to find by googleId, then by email
         try {
           // Try to find by MongoDB _id first (if it's a valid ObjectId)
           if (/^[0-9a-fA-F]{24}$/.test(session.user.id)) {
+            console.log('🔍 Searching by MongoDB ObjectId');
             user = await User.findById(session.user.id);
           }
         } catch (error) {
           console.log('🔍 Session user ID is not a valid MongoDB ObjectId, searching by googleId/email');
+          console.log('❌ Error details:', error.message);
         }
 
         // If not found by _id, try by googleId or email
         if (!user) {
+          console.log('🔍 Searching by googleId or email');
           user = await User.findOne({
             $or: [
               { googleId: session.user.id },
               { email: session.user.email }
             ]
           });
-        }
-      } else {
-        // New Google user without ID - check by email
-        user = await User.findOne({ email: session.user.email });
-
-        if (!user) {
-          console.log('🆕 Creating new Google user in database');
-
-          user = new User({
-            name: session.user.name,
-            email: session.user.email,
-            googleId: session.user.googleId,
-            picture: session.user.image,
-            emailVerified: true,
-            isVerified: true,
-            authMethod: 'google',
-            providers: ['google'],
-            createdAt: new Date(),
-            lastLoginAt: new Date()
-          });
-
-          await user.save();
-          console.log('✅ New Google user created:', user._id);
+          console.log('🔍 Query result:', user ? 'User found' : 'No user found');
         }
       }
 
+      // For Google completion, create complete user record if needed
       if (!user) {
-        return NextResponse.json(
-          { message: 'User not found. Please try signing in again.' },
-          { status: 404 }
-        );
+        console.log('🆕 Creating complete Google user record during signup completion');
+
+        const userData = {
+          name: session.user.name,
+          email: session.user.email,
+          username: body.username,
+          role: body.role,
+          authMethod: 'google',
+          googleId: session.user.id,
+          picture: session.user.image,
+          providers: ['google'],
+          isVerified: true,
+          emailVerified: true,
+          phoneVerified: false,
+          banned: false,
+          isActive: true,
+          isRegistered: true,
+          lastLoginAt: new Date(),
+          lastActivityAt: new Date(),
+          profileCompletedAt: new Date(),
+          plan: {
+            type: 'free',
+            status: 'active',
+            creditsUsed: 0,
+            startDate: new Date()
+          }
+        };
+
+        if (body.phone) {
+          const cleanPhone = body.phone.replace(/[^\d]/g, '');
+          userData.phone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+        }
+
+        if (body.location) {
+          userData.location = body.location;
+        }
+
+        if (body.skills && body.role === 'fixer') {
+          userData.skills = body.skills;
+        }
+
+        user = new User(userData);
+        await user.save();
+        console.log('✅ New Google user created:', user._id);
       }
+
+      console.log('✅ User found for Google completion:', user.email);
 
       // Update user with complete profile
       const updateData = {
@@ -171,36 +218,76 @@ export async function POST(request) {
         updateData.username = body.username.toLowerCase().trim();
       }
       if (body.location) {
+        console.log('🗺️ Processing location data:', JSON.stringify(body.location, null, 2));
+
+        // Extract coordinates from the frontend structure
+        const lat = body.location.homeAddress?.coordinates?.lat ||
+                   body.location.currentLocation?.lat ||
+                   body.location.coordinates?.lat ||
+                   body.location.lat || 0;
+
+        const lng = body.location.homeAddress?.coordinates?.lng ||
+                   body.location.currentLocation?.lng ||
+                   body.location.coordinates?.lng ||
+                   body.location.lng || 0;
+
+        // Extract address components
+        const city = body.location.homeAddress?.district ||
+                    body.location.components?.city ||
+                    body.location.city || '';
+
+        const state = body.location.homeAddress?.state ||
+                     body.location.components?.state ||
+                     body.location.state || '';
+
+        const formattedAddress = body.location.homeAddress?.formattedAddress ||
+                               body.location.formatted ||
+                               body.location.address || '';
+
         // Enhanced location storage with proper schema mapping
         updateData.location = {
-          // Backwards compatibility
-          city: body.location.components?.city || body.location.city || '',
-          state: body.location.components?.state || body.location.state || '',
-          lat: body.location.coordinates?.lat || body.location.lat || 0,
-          lng: body.location.coordinates?.lng || body.location.lng || 0,
+          // Top-level location fields for backwards compatibility
+          city,
+          state,
+          lat,
+          lng,
 
-          // Enhanced location storage
+          // Home address structure
           homeAddress: {
-            formattedAddress: body.location.formatted || body.location.address || '',
+            doorNo: body.location.homeAddress?.doorNo || '',
+            street: body.location.homeAddress?.street || '',
+            district: city,
+            state,
+            postalCode: body.location.homeAddress?.postalCode || '',
+            formattedAddress,
             coordinates: {
-              lat: body.location.coordinates?.lat || body.location.lat || 0,
-              lng: body.location.coordinates?.lng || body.location.lng || 0
+              lat,
+              lng,
+              accuracy: body.location.homeAddress?.coordinates?.accuracy || null
             },
-            state: body.location.components?.state || body.location.state || '',
-            district: body.location.components?.city || body.location.city || '',
             setAt: new Date()
           },
 
           // Current location (same as home for new users)
           currentLocation: {
-            lat: body.location.coordinates?.lat || body.location.lat || 0,
-            lng: body.location.coordinates?.lng || body.location.lng || 0,
+            lat,
+            lng,
+            accuracy: body.location.currentLocation?.accuracy || null,
             lastUpdated: new Date(),
-            source: 'manual'
+            source: body.location.currentLocation?.source || 'manual'
           }
         };
+
+        console.log('🗺️ Final location data:', JSON.stringify(updateData.location, null, 2));
       }
       if (body.skills && body.role === 'fixer') updateData.skills = body.skills;
+
+      console.log('🔧 About to update user:', {
+        userId: user._id,
+        userIdType: typeof user._id,
+        isValidObjectId: /^[0-9a-fA-F]{24}$/.test(user._id?.toString()),
+        updateDataKeys: Object.keys(updateData)
+      });
 
       const updatedUser = await User.findByIdAndUpdate(
         user._id,
@@ -221,8 +308,9 @@ export async function POST(request) {
           role: updatedUser.role,
           skills: updatedUser.skills,
           isRegistered: true
-        }
-      });
+        },
+        redirect: '/dashboard'
+      }, { status: 201 });
     }
 
     // ✅ FAST VALIDATION: Basic checks only
@@ -380,35 +468,71 @@ export async function POST(request) {
     }
 
     // Format location data with enhanced schema support
-    const location = validatedData.location ? {
-      // Backwards compatibility
-      city: validatedData.location.components?.city || validatedData.location.city || validatedData.location.name || '',
-      state: validatedData.location.components?.state || validatedData.location.state || '',
-      lat: validatedData.location.coordinates?.lat || validatedData.location.lat || 0,
-      lng: validatedData.location.coordinates?.lng || validatedData.location.lng || 0,
+    // Enhanced location processing for email users (matching Google user logic)
+    const location = validatedData.location ? (() => {
+      console.log('🗺️ Processing email user location data:', JSON.stringify(validatedData.location, null, 2));
 
-      // Enhanced location storage
-      homeAddress: {
-        formattedAddress: validatedData.location.formatted || validatedData.location.address || '',
-        coordinates: {
-          lat: validatedData.location.coordinates?.lat || validatedData.location.lat || 0,
-          lng: validatedData.location.coordinates?.lng || validatedData.location.lng || 0
+      // Extract coordinates from multiple possible sources
+      const lat = validatedData.location.homeAddress?.coordinates?.lat ||
+                 validatedData.location.currentLocation?.lat ||
+                 validatedData.location.coordinates?.lat ||
+                 validatedData.location.lat || 0;
+
+      const lng = validatedData.location.homeAddress?.coordinates?.lng ||
+                 validatedData.location.currentLocation?.lng ||
+                 validatedData.location.coordinates?.lng ||
+                 validatedData.location.lng || 0;
+
+      // Extract address components
+      const city = validatedData.location.homeAddress?.district ||
+                  validatedData.location.components?.city ||
+                  validatedData.location.city ||
+                  validatedData.location.name || '';
+
+      const state = validatedData.location.homeAddress?.state ||
+                   validatedData.location.components?.state ||
+                   validatedData.location.state || '';
+
+      const formattedAddress = validatedData.location.homeAddress?.formattedAddress ||
+                             validatedData.location.formatted ||
+                             validatedData.location.address || '';
+
+      const locationData = {
+        // Top-level location fields for backwards compatibility
+        city,
+        state,
+        lat,
+        lng,
+
+        // Home address structure
+        homeAddress: {
+          doorNo: validatedData.location.homeAddress?.doorNo || '',
+          street: validatedData.location.homeAddress?.street || validatedData.location.components?.street || '',
+          district: city,
+          state,
+          postalCode: validatedData.location.homeAddress?.postalCode || validatedData.location.components?.pincode || '',
+          formattedAddress,
+          coordinates: {
+            lat,
+            lng,
+            accuracy: validatedData.location.homeAddress?.coordinates?.accuracy || null
+          },
+          setAt: new Date()
         },
-        state: validatedData.location.components?.state || validatedData.location.state || '',
-        district: validatedData.location.components?.city || validatedData.location.city || '',
-        street: validatedData.location.components?.street || '',
-        postalCode: validatedData.location.components?.pincode || '',
-        setAt: new Date()
-      },
 
-      // Current location (same as home for new users)
-      currentLocation: {
-        lat: validatedData.location.coordinates?.lat || validatedData.location.lat || 0,
-        lng: validatedData.location.coordinates?.lng || validatedData.location.lng || 0,
-        lastUpdated: new Date(),
-        source: 'manual'
-      }
-    } : null;
+        // Current location (same as home for new users)
+        currentLocation: {
+          lat,
+          lng,
+          accuracy: validatedData.location.currentLocation?.accuracy || null,
+          lastUpdated: new Date(),
+          source: validatedData.location.currentLocation?.source || 'manual'
+        }
+      };
+
+      console.log('🗺️ Final email user location data:', JSON.stringify(locationData, null, 2));
+      return locationData;
+    })() : null;
 
     // Auto-generate username if not provided
     let username = validatedData.username;
@@ -485,7 +609,12 @@ export async function POST(request) {
 
       // Device and registration metadata
       registrationMetadata: {
-        deviceInfo,
+        deviceInfo: {
+          type: deviceInfo.type || 'unknown',
+          os: deviceInfo.os || '',
+          browser: deviceInfo.browser || '',
+          userAgent: deviceInfo.userAgent || ''
+        },
         ip,
         timestamp: new Date(),
         source: 'web_signup'
@@ -530,7 +659,7 @@ export async function POST(request) {
     }
 
     if (body.authMethod === 'google') {
-      userData.googleId = body.googleId || session.user.googleId;
+      userData.googleId = body.googleId || session.user.googleId || session.user.id;
       userData.picture = body.picture || session.user.image;
     }
 

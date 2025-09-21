@@ -67,8 +67,21 @@ export async function POST(request) {
         );
       }
 
-      // Send signup OTP
-      const result = await sendSignupOTP(email, name);
+      // Generate OTP first
+      const { generateOTP, storeOTP } = await import('../../../../lib/otpService');
+      const otp = generateOTP();
+
+      // Store OTP in Redis
+      const storeResult = await storeOTP(email, otp, 'signup');
+      if (!storeResult.success) {
+        return NextResponse.json(
+          { message: 'Failed to generate verification code. Please try again.' },
+          { status: 500 }
+        );
+      }
+
+      // Send signup OTP with the generated OTP
+      const result = await sendSignupOTP(email, name, otp);
 
       if (result.success) {
         return NextResponse.json({

@@ -37,7 +37,8 @@ const EnhancedLocationSelector = ({
   const [error, setError] = useState('');
 
   // Map refs
-  const mapRef = useRef(null);
+  const mapRef = useRef(null); // DOM element reference
+  const mapInstanceRef = useRef(null); // Map instance reference
   const markerRef = useRef(null);
   const autocompleteRef = useRef(null);
   const googleMapsLoaded = useRef(false);
@@ -81,75 +82,37 @@ const EnhancedLocationSelector = ({
     return `${(acc / 1000).toFixed(1)}km`;
   }, []);
 
-  // Get device-specific location messages
-  const getLocationMessage = useCallback((accuracy, hasLocation = false) => {
+  // Get device-specific location messages - clean and professional
+  const getLocationMessage = useCallback((hasLocation = false) => {
     const device = getDeviceInfo();
 
     if (!hasLocation) {
       if (device.isDesktop) {
         return {
           type: 'info',
-          icon: '💻',
-          message: 'GPS on laptops/desktops may not be very accurate. Consider using map selection for precise location.',
-          suggestion: 'Use map for better precision'
-        };
-      } else if (device.isTablet) {
-        return {
-          type: 'info',
-          icon: '📱',
-          message: 'Enable location services for better accuracy, or use map selection.',
-          suggestion: 'Use map for precise location'
+          message: 'Seems like you are using a laptop. Try maps for better accuracy.'
         };
       } else {
         return {
           type: 'info',
-          icon: '📍',
-          message: 'Enable location services for automatic detection, or search your address.',
-          suggestion: 'Use GPS or search address'
+          message: 'Use map for precise location.'
         };
       }
     }
 
     // When location is detected
-    if (accuracy) {
-      if (device.isDesktop && accuracy > 1000) {
-        return {
-          type: 'warning',
-          icon: '💻',
-          message: `Location detected but accuracy is ${formatAccuracy(accuracy)}. Laptops use WiFi positioning which may not be precise.`,
-          suggestion: 'Use map to pinpoint exact location'
-        };
-      } else if (device.isDesktop && accuracy <= 1000) {
-        return {
-          type: 'success',
-          icon: '✅',
-          message: `Good location accuracy (${formatAccuracy(accuracy)}) for a desktop device.`,
-          suggestion: 'Use map for fine-tuning if needed'
-        };
-      } else if (device.isMobile && accuracy > 1000) {
-        return {
-          type: 'warning',
-          icon: '📍',
-          message: `Location detected with ${formatAccuracy(accuracy)} accuracy.`,
-          suggestion: 'Use map for better precision'
-        };
-      } else {
-        return {
-          type: 'success',
-          icon: '🎯',
-          message: `Great! Location detected with ${formatAccuracy(accuracy)} accuracy.`,
-          suggestion: 'Location looks good'
-        };
-      }
+    if (device.isDesktop) {
+      return {
+        type: 'info',
+        message: 'Location detected. Use map for better precision.'
+      };
+    } else {
+      return {
+        type: 'info',
+        message: 'Use map for precise location.'
+      };
     }
-
-    return {
-      type: 'success',
-      icon: '📍',
-      message: 'Location detected successfully.',
-      suggestion: 'Use map to verify if needed'
-    };
-  }, [getDeviceInfo, formatAccuracy]);
+  }, [getDeviceInfo]);
 
   // Get current location using GPS
   const getCurrentLocation = useCallback(() => {
@@ -214,9 +177,35 @@ const EnhancedLocationSelector = ({
 
   // Reverse geocode coordinates to address with caching
   const reverseGeocode = useCallback(async (lat, lng) => {
-    // SSR safety check
-    if (typeof window === 'undefined' || !window.google || !window.google.maps) {
-      console.warn('Google Maps not available for geocoding');
+    // Enhanced Google Maps availability check
+    if (typeof window === 'undefined') {
+      console.warn('SSR environment - skipping geocoding');
+      return;
+    }
+
+    // Wait for Google Maps API to be fully loaded
+    let retries = 0;
+    const maxRetries = 10;
+    while ((!window.google || !window.google.maps || !window.google.maps.Geocoder) && retries < maxRetries) {
+      console.log(`⏳ Waiting for Google Maps API... (${retries + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      retries++;
+    }
+
+    if (!window.google || !window.google.maps || !window.google.maps.Geocoder) {
+      console.warn('❌ Google Maps API not available for geocoding after retries');
+      // Create a basic location object without geocoding
+      const basicLocation = {
+        lat,
+        lng,
+        address: `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        formatted: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        coordinates: { lat, lng },
+        components: {},
+        isInIndia: isLocationInIndia(lat, lng)
+      };
+      setSelectedLocation(basicLocation);
+      onLocationSelect(basicLocation);
       return;
     }
 
@@ -254,6 +243,7 @@ const EnhancedLocationSelector = ({
         );
       });
 
+      const components = parseAddressComponents(response.address_components);
       const location = {
         lat,
         lng,
@@ -263,8 +253,18 @@ const EnhancedLocationSelector = ({
           lat,
           lng
         },
-        components: parseAddressComponents(response.address_components)
+        components: components,
+        isInIndia: isLocationInIndia(lat, lng, components)
       };
+
+      // Validate if location is in India
+      if (!location.isInIndia) {
+        toast.error('Fixly is currently available only in India. Please select a location within India.', {
+          duration: 4000,
+        });
+        setError('Location outside India selected. Please choose a location within India.');
+        return;
+      }
 
       // Cache the result
       try {
@@ -295,14 +295,51 @@ const EnhancedLocationSelector = ({
       if (types.includes('administrative_area_level_1')) result.state = component.long_name;
       if (types.includes('postal_code')) result.pincode = component.long_name;
       if (types.includes('country')) result.country = component.long_name;
+      if (types.includes('country')) result.countryCode = component.short_name;
     });
     return result;
   };
 
+  // Check if location is within India borders
+  const isLocationInIndia = useCallback((lat, lng, addressComponents = null) => {
+    // Rough India bounding box check (more accurate than exact polygon for performance)
+    const indiaBounds = {
+      north: 37.6,    // Kashmir
+      south: 6.4,     // Kanyakumari
+      east: 97.25,    // Arunachal Pradesh
+      west: 68.7      // Gujarat
+    };
+
+    const isInBounds = lat >= indiaBounds.south && lat <= indiaBounds.north &&
+                       lng >= indiaBounds.west && lng <= indiaBounds.east;
+
+    // If address components are available, also check country
+    let isIndiaByAddress = true;
+    if (addressComponents && addressComponents.countryCode) {
+      isIndiaByAddress = addressComponents.countryCode === 'IN';
+    }
+
+    return isInBounds && isIndiaByAddress;
+  }, []);
+
   // Initialize Google Maps autocomplete for address search
-  const initializeAutocomplete = useCallback(() => {
+  const initializeAutocomplete = useCallback(async () => {
     // SSR safety and duplicate check
-    if (typeof window === 'undefined' || !window.google || !window.google.maps || !window.google.maps.places || !autocompleteRef.current) {
+    if (typeof window === 'undefined' || !autocompleteRef.current) {
+      return;
+    }
+
+    // Wait for Google Maps Places API to be fully loaded
+    let placesRetries = 0;
+    const maxPlacesRetries = 10;
+    while ((!window.google || !window.google.maps || !window.google.maps.places) && placesRetries < maxPlacesRetries) {
+      console.log(`⏳ Waiting for Google Maps Places API... (${placesRetries + 1}/${maxPlacesRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      placesRetries++;
+    }
+
+    if (!window.google || !window.google.maps || !window.google.maps.places) {
+      console.warn('❌ Google Maps Places API not available for autocomplete');
       return;
     }
 
@@ -324,23 +361,41 @@ const EnhancedLocationSelector = ({
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
       if (place.geometry) {
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        const components = parseAddressComponents(place.address_components);
+
         const location = {
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng(),
+          lat,
+          lng,
           address: place.formatted_address,
           formatted: place.formatted_address,
           coordinates: {
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng()
+            lat,
+            lng
           },
-          components: parseAddressComponents(place.address_components)
+          components: components,
+          isInIndia: isLocationInIndia(lat, lng, components)
         };
+
+        // Validate if location is in India
+        if (!location.isInIndia) {
+          toast.error('Fixly is currently available only in India. Please select a location within India.', {
+            duration: 4000,
+          });
+          setError('Address outside India selected. Please choose a location within India.');
+          // Clear the input
+          if (autocompleteRef.current) {
+            autocompleteRef.current.value = '';
+          }
+          return;
+        }
 
         setSelectedLocation(location);
         onLocationSelect(location);
         setCurrentStep('initial');
-        // Only show success toast for final selection
-        toast.success('Address selected');
+        setError(''); // Clear any previous errors
+        toast.success('Address selected successfully');
       }
     });
   }, [onLocationSelect]);
@@ -351,30 +406,91 @@ const EnhancedLocationSelector = ({
     setTimeout(() => {
       initializeMap();
     }, 100);
-  }, []);
+  }, [initializeMap]);
 
   // Initialize Google Map in modal
-  const initializeMap = useCallback(() => {
+  const initializeMap = useCallback(async () => {
     // SSR safety check
-    if (typeof window === 'undefined' || !window.google || !window.google.maps || !mapRef.current) {
+    if (typeof window === 'undefined' || !mapRef.current) {
       return;
     }
 
-    // Smart center selection: GPS > Previous selection > India center (only when no location exists)
-    const mapCenter = gpsLocation || selectedLocation || { lat: 20.5937, lng: 78.9629 };
-    const hasSpecificLocation = !!(gpsLocation || selectedLocation);
+    // Wait for Google Maps API to be fully loaded
+    let mapRetries = 0;
+    const maxMapRetries = 10;
+    while ((!window.google || !window.google.maps) && mapRetries < maxMapRetries) {
+      console.log(`⏳ Waiting for Google Maps API for map initialization... (${mapRetries + 1}/${maxMapRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      mapRetries++;
+    }
 
-    // Intelligent zoom based on context and device
-    let zoomLevel;
-    if (gpsLocation) {
-      // GPS location - zoom in appropriately based on accuracy
-      zoomLevel = accuracy && accuracy <= 100 ? 18 : accuracy <= 500 ? 16 : 14;
-    } else if (selectedLocation) {
-      // Previously selected location - good detail zoom
-      zoomLevel = 15;
+    if (!window.google || !window.google.maps) {
+      console.warn('❌ Google Maps API not available for map initialization');
+      return;
+    }
+
+    // Smart center selection: Always use selectedLocation if available, then GPS, then India center
+    let mapCenter;
+    let locationSource = 'fallback'; // Track where the location came from for debugging
+
+    // First priority: selectedLocation (from any previous selection - GPS, map, or address)
+    if (selectedLocation) {
+      console.log('📍 Map Modal: Using selectedLocation:', selectedLocation);
+      // Handle different location object formats
+      if (selectedLocation.coordinates && selectedLocation.coordinates.lat && selectedLocation.coordinates.lng) {
+        mapCenter = { lat: selectedLocation.coordinates.lat, lng: selectedLocation.coordinates.lng };
+        locationSource = 'selectedLocation.coordinates';
+      } else if (selectedLocation.lat && selectedLocation.lng && selectedLocation.lat !== 0 && selectedLocation.lng !== 0) {
+        mapCenter = { lat: selectedLocation.lat, lng: selectedLocation.lng };
+        locationSource = 'selectedLocation.lat/lng';
+      } else {
+        console.warn('📍 Map Modal: selectedLocation has invalid coordinates, falling back to GPS:', selectedLocation);
+        // selectedLocation exists but has invalid coordinates, try GPS
+        if (gpsLocation && gpsLocation.lat && gpsLocation.lng) {
+          mapCenter = { lat: gpsLocation.lat, lng: gpsLocation.lng };
+          locationSource = 'gpsLocation (fallback)';
+        } else {
+          // Fallback to India center
+          mapCenter = { lat: 20.5937, lng: 78.9629 };
+          locationSource = 'India center (fallback)';
+        }
+      }
+    } else if (gpsLocation && gpsLocation.lat && gpsLocation.lng) {
+      console.log('📍 Map Modal: Using gpsLocation:', gpsLocation);
+      // Second priority: GPS location if no selectedLocation
+      mapCenter = { lat: gpsLocation.lat, lng: gpsLocation.lng };
+      locationSource = 'gpsLocation';
     } else {
-      // No specific location - country/city level
-      zoomLevel = window.innerWidth < 768 ? 5 : 6; // Mobile vs Desktop
+      console.log('📍 Map Modal: No location available, using India center');
+      // Last fallback: India center
+      mapCenter = { lat: 20.5937, lng: 78.9629 };
+      locationSource = 'India center (no location)';
+    }
+
+    console.log(`📍 Map Modal: Final mapCenter from ${locationSource}:`, mapCenter);
+    // Check if we have a valid specific location (not just India center fallback)
+    const hasSpecificLocation = !!(
+      (selectedLocation && (
+        (selectedLocation.coordinates && selectedLocation.coordinates.lat && selectedLocation.coordinates.lng) ||
+        (selectedLocation.lat && selectedLocation.lng && selectedLocation.lat !== 0 && selectedLocation.lng !== 0)
+      )) ||
+      (gpsLocation && gpsLocation.lat && gpsLocation.lng)
+    );
+
+    // Intelligent zoom based on context and device - adjusted for better footer visibility
+    let zoomLevel;
+    if (selectedLocation && (
+      (selectedLocation.coordinates && selectedLocation.coordinates.lat && selectedLocation.coordinates.lng) ||
+      (selectedLocation.lat && selectedLocation.lng && selectedLocation.lat !== 0 && selectedLocation.lng !== 0)
+    )) {
+      // Selected location (from any source) - good detail zoom showing neighborhood
+      zoomLevel = 12;
+    } else if (gpsLocation && gpsLocation.lat && gpsLocation.lng) {
+      // GPS location - moderate zoom based on accuracy
+      zoomLevel = accuracy && accuracy <= 100 ? 12 : accuracy <= 500 ? 10 : 8;
+    } else {
+      // No specific location - country/city level with good footer visibility
+      zoomLevel = window.innerWidth < 768 ? 4 : 5; // Mobile vs Desktop
     }
 
     const map = new window.google.maps.Map(mapRef.current, {
@@ -392,45 +508,144 @@ const EnhancedLocationSelector = ({
       ]
     });
 
-    // Create draggable marker at the smart center position
-    const marker = new window.google.maps.Marker({
-      position: mapCenter,
-      map: map,
-      draggable: true,
-      title: 'Drag to select location',
-      animation: hasSpecificLocation ? window.google.maps.Animation.DROP : null
-    });
+    // Store map instance in mapInstanceRef for access by toggle button
+    mapInstanceRef.current = map;
+
+    // Create draggable marker with proper error handling
+    let marker;
+
+    // Wait for marker library to be fully loaded
+    let markerRetries = 0;
+    const maxMarkerRetries = 5;
+    while (!window.google?.maps?.marker?.AdvancedMarkerElement && markerRetries < maxMarkerRetries) {
+      console.log(`⏳ Waiting for Google Maps marker library... (${markerRetries + 1}/${maxMarkerRetries})`);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      markerRetries++;
+    }
+
+    try {
+      // Note: AdvancedMarkerElement requires a Map ID from Google Cloud Console
+      // For now, we'll use legacy markers which work without Map ID setup
+      if (false && window.google?.maps?.marker?.AdvancedMarkerElement) {
+        console.log('✅ Using AdvancedMarkerElement (requires Map ID setup)');
+
+        const markerElement = document.createElement('div');
+        markerElement.style.width = '36px';
+        markerElement.style.height = '36px';
+        markerElement.style.backgroundImage = 'url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzYiIGhlaWdodD0iMzYiIHZpZXdCb3g9IjAgMCAzNiAzNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8IS0tIFN1YnRsZSBzaGFkb3cgLS0+CiAgPGVsbGlwc2UgY3g9IjE4IiBjeT0iMzIiIHJ4PSI4IiByeT0iMyIgZmlsbD0icmdiYSgwLDAsMCwwLjIpIi8+CiAgPCEtLSBPdXRlciBnbG93IC0tPgogIDxwYXRoIGQ9Ik0xOCAzQzEzLjAzIDMgOSA3LjAzIDkgMTJDOSAyMC4yNSAxOCAzMSAxOCAzMUMxOCAzMSAyNyAyMC4yNSAyNyAxMkMyNyA3LjAzIDIyLjk3IDMgMTggM1oiIGZpbGw9InVybCgjZ2xvdykiIG9wYWNpdHk9IjAuMyIvPgogIDwhLS0gTWFpbiBtYXJrZXIgYm9keSAtLT4KICA8cGF0aCBkPSJNMTggNEMxMy41OCA0IDEwIDcuNTggMTAgMTJDMTAgMTkuNSAxOCAyOSAxOCAyOUMxOCAyOSAyNiAxOS41IDI2IDEyQzI2IDcuNTggMjIuNDIgNSAxOCA0WiIgZmlsbD0idXJsKCNtYWluKSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDwhLS0gQ2VudGVyIGRvdCAtLT4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjEyIiByPSIzLjUiIGZpbGw9IiNmZmYiLz4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjEyIiByPSIyIiBmaWxsPSIjMEQ5NDg4Ii8+CiAgPCEtLSBHcmFkaWVudCBkZWZpbml0aW9ucyAtLT4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ2xvdyIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRkY2NTAwIiBzdG9wLW9wYWNpdHk9IjAuOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGRjY1MDAiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ibWFpbiIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRkY2NTAwIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0VGNDQ0NCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+Cjwvc3ZnPgo=)';
+        markerElement.style.backgroundSize = 'contain';
+        markerElement.style.backgroundRepeat = 'no-repeat';
+        markerElement.style.cursor = 'pointer';
+        markerElement.style.transition = 'transform 0.2s ease';
+        markerElement.style.transform = 'scale(1)';
+        markerElement.title = 'Drag to select location';
+
+        // Add hover effects
+        markerElement.onmouseenter = () => {
+          markerElement.style.transform = 'scale(1.1)';
+        };
+        markerElement.onmouseleave = () => {
+          markerElement.style.transform = 'scale(1)';
+        };
+
+        console.log('📍 Map Modal: Creating AdvancedMarkerElement at position:', mapCenter);
+        marker = new window.google.maps.marker.AdvancedMarkerElement({
+          map: map,
+          position: mapCenter,
+          content: markerElement,
+          gmpDraggable: true
+        });
+      } else {
+        console.log('⚠️ AdvancedMarkerElement not available, using legacy Marker');
+        // Use legacy Marker with custom icon (no Map ID required for legacy markers)
+        console.log('⚠️ Using legacy Marker (AdvancedMarkerElement requires Map ID)');
+        console.log('📍 Map Modal: Creating marker at position:', mapCenter);
+        marker = new window.google.maps.Marker({
+          position: mapCenter,
+          map: map,
+          draggable: true,
+          title: 'Drag to select location',
+          animation: hasSpecificLocation ? window.google.maps.Animation.DROP : null,
+          icon: {
+            url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzYiIGhlaWdodD0iMzYiIHZpZXdCb3g9IjAgMCAzNiAzNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8IS0tIFN1YnRsZSBzaGFkb3cgLS0+CiAgPGVsbGlwc2UgY3g9IjE4IiBjeT0iMzIiIHJ4PSI4IiByeT0iMyIgZmlsbD0icmdiYSgwLDAsMCwwLjIpIi8+CiAgPCEtLSBPdXRlciBnbG93IC0tPgogIDxwYXRoIGQ9Ik0xOCAzQzEzLjAzIDMgOSA3LjAzIDkgMTJDOSAyMC4yNSAxOCAzMSAxOCAzMUMxOCAzMSAyNyAyMC4yNSAyNyAxMkMyNyA3LjAzIDIyLjk3IDMgMTggM1oiIGZpbGw9InVybCgjZ2xvdykiIG9wYWNpdHk9IjAuMyIvPgogIDwhLS0gTWFpbiBtYXJrZXIgYm9keSAtLT4KICA8cGF0aCBkPSJNMTggNEMxMy41OCA0IDEwIDcuNTggMTAgMTJDMTAgMTkuNSAxOCAyOSAxOCAyOUMxOCAyOSAyNiAxOS41IDI2IDEyQzI2IDcuNTggMjIuNDIgNSAxOCA0WiIgZmlsbD0idXJsKCNtYWluKSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDwhLS0gQ2VudGVyIGRvdCAtLT4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjEyIiByPSIzLjUiIGZpbGw9IiNmZmYiLz4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjEyIiByPSIyIiBmaWxsPSIjMEQ5NDg4Ii8+CiAgPCEtLSBHcmFkaWVudCBkZWZpbml0aW9ucyAtLT4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ2xvdyIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRkY2NTAwIiBzdG9wLW9wYWNpdHk9IjAuOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGRjY1MDAiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ibWFpbiIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRkY2NTAwIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0VGNDQ0NCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+Cjwvc3ZnPgo=',
+            scaledSize: new window.google.maps.Size(36, 36),
+            anchor: new window.google.maps.Point(18, 32)
+          }
+        });
+      }
+    } catch (error) {
+      console.warn('❌ Error creating AdvancedMarkerElement, using legacy Marker:', error);
+      // Fallback to legacy Marker
+      console.log('📍 Map Modal: Creating fallback marker at position:', mapCenter);
+      marker = new window.google.maps.Marker({
+        position: mapCenter,
+        map: map,
+        draggable: true,
+        title: 'Drag to select location',
+        animation: hasSpecificLocation ? window.google.maps.Animation.DROP : null,
+        icon: {
+          url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzYiIGhlaWdodD0iMzYiIHZpZXdCb3g9IjAgMCAzNiAzNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8IS0tIFN1YnRsZSBzaGFkb3cgLS0+CiAgPGVsbGlwc2UgY3g9IjE4IiBjeT0iMzIiIHJ4PSI4IiByeT0iMyIgZmlsbD0icmdiYSgwLDAsMCwwLjIpIi8+CiAgPCEtLSBPdXRlciBnbG93IC0tPgogIDxwYXRoIGQ9Ik0xOCAzQzEzLjAzIDMgOSA3LjAzIDkgMTJDOSAyMC4yNSAxOCAzMSAxOCAzMUMxOCAzMSAyNyAyMC4yNSAyNyAxMkMyNyA3LjAzIDIyLjk3IDMgMTggM1oiIGZpbGw9InVybCgjZ2xvdykiIG9wYWNpdHk9IjAuMyIvPgogIDwhLS0gTWFpbiBtYXJrZXIgYm9keSAtLT4KICA8cGF0aCBkPSJNMTggNEMxMy41OCA0IDEwIDcuNTggMTAgMTJDMTAgMTkuNSAxOCAyOSAxOCAyOUMxOCAyOSAyNiAxOS41IDI2IDEyQzI2IDcuNTggMjIuNDIgNSAxOCA0WiIgZmlsbD0idXJsKCNtYWluKSIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjEuNSIvPgogIDwhLS0gQ2VudGVyIGRvdCAtLT4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjEyIiByPSIzLjUiIGZpbGw9IiNmZmYiLz4KICA8Y2lyY2xlIGN4PSIxOCIgY3k9IjEyIiByPSIyIiBmaWxsPSIjMEQ5NDg4Ii8+CiAgPCEtLSBHcmFkaWVudCBkZWZpbml0aW9ucyAtLT4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ2xvdyIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRkY2NTAwIiBzdG9wLW9wYWNpdHk9IjAuOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNGRjY1MDAiIHN0b3Atb3BhY2l0eT0iMCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ibWFpbiIgeDE9IjAiIHkxPSIwIiB4Mj0iMCIgeTI9IjEiPgogICAgICA8c3RvcCBzdG9wLWNvbG9yPSIjRkY2NTAwIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI0VGNDQ0NCIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+Cjwvc3ZnPgo=',
+          scaledSize: new window.google.maps.Size(36, 36),
+          anchor: new window.google.maps.Point(18, 32)
+        }
+      });
+    }
 
     markerRef.current = marker;
+    console.log('📍 Map Modal: Marker created and stored. Final marker position:', marker.getPosition ? marker.getPosition() : marker.position);
 
     // Update location on marker drag with visual feedback
-    marker.addListener('dragstart', () => {
-      // Visual feedback when dragging starts
-      marker.setAnimation(null);
-    });
+    if (marker.gmpDraggable !== undefined) {
+      // AdvancedMarkerElement events
+      marker.addListener('dragstart', () => {
+        // Visual feedback when dragging starts for AdvancedMarker
+        console.log('AdvancedMarker drag started');
+      });
 
-    marker.addListener('dragend', async () => {
-      const position = marker.getPosition();
-      const lat = position.lat();
-      const lng = position.lng();
+      marker.addListener('dragend', async () => {
+        const position = marker.position;
+        const lat = position.lat;
+        const lng = position.lng;
 
-      // Add bounce animation to indicate processing
-      marker.setAnimation(window.google.maps.Animation.BOUNCE);
-      setTimeout(() => marker.setAnimation(null), 750);
+        await reverseGeocode(lat, lng);
+        // Don't show toast for drag updates, too chatty
+      });
+    } else {
+      // Legacy Marker events
+      marker.addListener('dragstart', () => {
+        // Visual feedback when dragging starts
+        marker.setAnimation(null);
+      });
 
-      await reverseGeocode(lat, lng);
-      // Don't show toast for drag updates, too chatty
-    });
+      marker.addListener('dragend', async () => {
+        const position = marker.getPosition();
+        const lat = position.lat();
+        const lng = position.lng();
+
+        // Add bounce animation to indicate processing
+        marker.setAnimation(window.google.maps.Animation.BOUNCE);
+        setTimeout(() => marker.setAnimation(null), 750);
+
+        await reverseGeocode(lat, lng);
+        // Don't show toast for drag updates, too chatty
+      });
+    }
 
     // Allow clicking on map to move marker
     map.addListener('click', async (event) => {
       const lat = event.latLng.lat();
       const lng = event.latLng.lng();
 
-      // Move marker with animation
-      marker.setPosition({ lat, lng });
-      marker.setAnimation(window.google.maps.Animation.DROP);
-      setTimeout(() => marker.setAnimation(null), 750);
+      // Move marker with animation based on marker type
+      if (marker.gmpDraggable !== undefined) {
+        // AdvancedMarkerElement
+        marker.position = { lat, lng };
+      } else {
+        // Legacy Marker
+        marker.setPosition({ lat, lng });
+        marker.setAnimation(window.google.maps.Animation.DROP);
+        setTimeout(() => marker.setAnimation(null), 750);
+      }
 
       await reverseGeocode(lat, lng);
       // Don't show toast for click updates, too chatty
@@ -461,7 +676,7 @@ const EnhancedLocationSelector = ({
     onLocationSelect(null);
   }, [onLocationSelect]);
 
-  // Load Google Maps API with proper checks
+  // Load Google Maps API with proper async loading
   const loadGoogleMapsAPI = useCallback(() => {
     // SSR safety check
     if (typeof window === 'undefined') return;
@@ -474,12 +689,16 @@ const EnhancedLocationSelector = ({
     googleMapsLoaded.current = true;
     const script = document.createElement('script');
     script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places,marker&loading=async`;
     script.async = true;
     script.defer = true;
 
+    script.onload = () => {
+      console.log('✅ Google Maps API loaded successfully');
+    };
+
     script.onerror = () => {
-      console.error('Failed to load Google Maps API');
+      console.error('❌ Failed to load Google Maps API');
       googleMapsLoaded.current = false;
     };
 
@@ -506,6 +725,47 @@ const EnhancedLocationSelector = ({
     }
   }, [currentStep, initializeAutocomplete]);
 
+  // Re-initialize map when modal opens to ensure marker is placed correctly
+  useEffect(() => {
+    if (showMapModal && mapRef.current) {
+      setTimeout(() => {
+        console.log('🗺️ Map modal opened, re-initializing with current location:', selectedLocation);
+        initializeMap();
+      }, 200);
+    }
+  }, [showMapModal, initializeMap]);
+
+  // Update marker position when selectedLocation changes and map is already open
+  useEffect(() => {
+    if (showMapModal && mapInstanceRef.current && markerRef.current && selectedLocation) {
+      let newPosition;
+
+      // Handle different location object formats
+      if (selectedLocation.coordinates && selectedLocation.coordinates.lat && selectedLocation.coordinates.lng) {
+        newPosition = { lat: selectedLocation.coordinates.lat, lng: selectedLocation.coordinates.lng };
+      } else if (selectedLocation.lat && selectedLocation.lng && selectedLocation.lat !== 0 && selectedLocation.lng !== 0) {
+        newPosition = { lat: selectedLocation.lat, lng: selectedLocation.lng };
+      }
+
+      if (newPosition) {
+        console.log('📍 Updating marker position to:', newPosition);
+
+        // Update marker position based on marker type
+        const marker = markerRef.current;
+        if (marker.gmpDraggable !== undefined) {
+          // AdvancedMarkerElement
+          marker.position = newPosition;
+        } else {
+          // Legacy Marker
+          marker.setPosition(newPosition);
+        }
+
+        // Center map on new position
+        mapInstanceRef.current.panTo(newPosition);
+      }
+    }
+  }, [selectedLocation, showMapModal]);
+
   return (
     <LocationPickerErrorBoundary
       onFallbackMode={() => setCurrentStep('address-search')}
@@ -520,6 +780,35 @@ const EnhancedLocationSelector = ({
 
       {/* Main Interface */}
       <div className="bg-white dark:bg-gray-900 border border-fixly-border dark:border-gray-700 rounded-xl p-6 space-y-4">
+
+        {/* Error Message for locations outside India */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4"
+          >
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-medium text-red-900 dark:text-red-100">Service Area Limitation</h4>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+                <div className="mt-3 p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    <strong>Why this restriction?</strong> Fixly currently provides services only within India to ensure quality service delivery and compliance with local regulations.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setError('')}
+                className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
         {/* Current Step Display */}
         <AnimatePresence mode="wait">
           {currentStep === 'initial' && (
@@ -592,6 +881,18 @@ const EnhancedLocationSelector = ({
                       Select how you'd like to set your location
                     </p>
                   </div>
+
+                  {/* Device-specific guidance message */}
+                  {(() => {
+                    const locationMsg = getLocationMessage(false);
+                    return (
+                      <div className="mt-3 p-3 rounded-lg bg-gray-50 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 max-w-md mx-auto">
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                          {locationMsg.message}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -735,40 +1036,14 @@ const EnhancedLocationSelector = ({
                         {selectedLocation.address}
                       </p>
                     </div>
-                    {/* Device-specific location accuracy message */}
+                    {/* Simple device-appropriate message */}
                     {(() => {
-                      const locationMsg = getLocationMessage(accuracy, true);
+                      const locationMsg = getLocationMessage(true);
                       return (
-                        <div className={`mt-3 p-3 rounded-lg border ${
-                          locationMsg.type === 'warning'
-                            ? 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800'
-                            : locationMsg.type === 'success'
-                            ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
-                            : 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800'
-                        }`}>
-                          <div className="flex items-start space-x-2">
-                            <span className="text-lg">{locationMsg.icon}</span>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-medium ${
-                                locationMsg.type === 'warning'
-                                  ? 'text-amber-800 dark:text-amber-200'
-                                  : locationMsg.type === 'success'
-                                  ? 'text-green-800 dark:text-green-200'
-                                  : 'text-blue-800 dark:text-blue-200'
-                              }`}>
-                                {locationMsg.message}
-                              </p>
-                              <p className={`text-xs mt-1 ${
-                                locationMsg.type === 'warning'
-                                  ? 'text-amber-600 dark:text-amber-300'
-                                  : locationMsg.type === 'success'
-                                  ? 'text-green-600 dark:text-green-300'
-                                  : 'text-blue-600 dark:text-blue-300'
-                              }`}>
-                                💡 {locationMsg.suggestion}
-                              </p>
-                            </div>
-                          </div>
+                        <div className="mt-3 p-3 rounded-lg bg-gray-50 border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
+                            {locationMsg.message}
+                          </p>
                         </div>
                       );
                     })()}
@@ -864,7 +1139,7 @@ const EnhancedLocationSelector = ({
                   ref={autocompleteRef}
                   type="text"
                   placeholder="Type your address..."
-                  className="input-field pl-10"
+                  className="input-field input-field-with-icon"
                   defaultValue=""
                   // onChange handled by Google Autocomplete
                 />
@@ -887,27 +1162,32 @@ const EnhancedLocationSelector = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowMapModal(false);
+              }
+            }}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
+              className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] min-h-[600px] overflow-hidden mx-2 sm:mx-4"
             >
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-6 border-b border-fixly-border">
+              {/* Simple Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-fixly-border dark:border-gray-700 bg-white dark:bg-gray-900">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 bg-fixly-primary/10 rounded-lg flex items-center justify-center">
                     <Map className="h-5 w-5 text-fixly-primary" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-fixly-text">Select Location on Map</h3>
-                    <p className="text-sm text-fixly-text-muted">Drag the marker or click to select your exact location</p>
+                    <h3 className="text-lg font-semibold text-fixly-text dark:text-white">Select Location on Map</h3>
+                    <p className="text-sm text-fixly-text-muted dark:text-gray-300">Drag the marker or click to select your exact location</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowMapModal(false)}
-                  className="text-fixly-text-muted hover:text-fixly-text p-2 hover:bg-gray-100 rounded-lg"
+                  className="text-fixly-text-muted dark:text-gray-400 hover:text-fixly-text dark:hover:text-white p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -917,65 +1197,68 @@ const EnhancedLocationSelector = ({
               <div className="relative">
                 <div
                   ref={mapRef}
-                  className="w-full h-[500px] bg-gray-100"
+                  className="w-full h-[450px] sm:h-[500px] bg-gray-100"
                 />
 
-                {/* Map Controls Overlay */}
-                <div className="absolute top-4 left-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 max-w-xs">
-                  <div className="flex items-center space-x-2 text-sm text-fixly-text-muted dark:text-gray-300">
-                    <Navigation className="h-4 w-4" />
-                    <span>Click or drag marker to select location</span>
-                  </div>
+                {/* Simple Map Toggle */}
+                <div className="absolute top-4 left-4">
+                  <button
+                    onClick={() => {
+                      if (mapInstanceRef.current?.getMapTypeId() === 'roadmap') {
+                        mapInstanceRef.current?.setMapTypeId('satellite');
+                      } else {
+                        mapInstanceRef.current?.setMapTypeId('roadmap');
+                      }
+                    }}
+                    className="bg-white hover:bg-gray-50 p-2 rounded-lg shadow-lg border border-gray-200 transition-colors"
+                    title="Toggle satellite/map view"
+                  >
+                    <Map className="h-4 w-4 text-fixly-primary" />
+                  </button>
                 </div>
 
-                {/* Floating Confirm Button */}
-                {selectedLocation && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    className="absolute bottom-4 right-4"
+                {/* Simple Confirm Button */}
+                <div className="absolute bottom-4 right-4">
+                  <button
+                    onClick={confirmMapSelection}
+                    disabled={!selectedLocation}
+                    className="bg-fixly-primary hover:bg-fixly-primary-hover disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg shadow-lg transition-all hover:shadow-xl flex items-center space-x-2 font-medium"
+                    title="Confirm Location"
                   >
-                    <button
-                      onClick={confirmMapSelection}
-                      className="btn-primary flex items-center space-x-2 text-sm transform hover:-translate-y-1 shadow-lg hover:shadow-xl"
-                    >
-                      <CheckCircle className="h-5 w-5" />
-                      <span>Confirm Location</span>
-                    </button>
-                  </motion.div>
-                )}
+                    <CheckCircle className="h-5 w-5" />
+                    <span>Confirm Location</span>
+                  </button>
+                </div>
+
               </div>
 
-              {/* Selected Address Display */}
+              {/* Simple Selected Address Display */}
               {selectedLocation && (
-                <div className="p-4 bg-gray-50 border-t border-fixly-border">
+                <div className="p-4 bg-fixly-bg dark:bg-gray-800 border-t border-fixly-border dark:border-gray-700">
                   <div className="flex items-start space-x-3">
-                    <MapPin className="h-5 w-5 text-fixly-primary mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-medium text-fixly-text">Selected Location</h4>
-                      <p className="text-sm text-fixly-text-muted mt-1">{selectedLocation.address}</p>
+                    <div className="bg-fixly-primary/10 dark:bg-fixly-primary/20 p-2 rounded-lg flex-shrink-0">
+                      <MapPin className="h-5 w-5 text-fixly-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-fixly-text dark:text-white text-sm mb-2">
+                        Selected Location
+                      </h4>
+                      <p className="text-sm text-fixly-text-muted dark:text-gray-300 leading-relaxed break-words">
+                        {selectedLocation.address}
+                      </p>
+                      {selectedLocation.components && selectedLocation.components.city && (
+                        <div className="flex items-center mt-2 text-xs text-fixly-text-muted dark:text-gray-400">
+                          <div className="w-2 h-2 bg-fixly-primary rounded-full mr-2 flex-shrink-0"></div>
+                          <span>
+                            {selectedLocation.components.city}
+                            {selectedLocation.components.state && `, ${selectedLocation.components.state}`}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               )}
-
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end space-x-3 p-6 border-t border-fixly-border">
-                <button
-                  onClick={() => setShowMapModal(false)}
-                  className="btn-ghost"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmMapSelection}
-                  disabled={!selectedLocation}
-                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Confirm Location
-                </button>
-              </div>
             </motion.div>
           </motion.div>
         )}

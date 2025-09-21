@@ -20,8 +20,9 @@ export default withAuth(
         redirectUrl.searchParams.set('method', 'google');
       }
 
-      // Preserve role if available
-      if (token.role) {
+      // Don't preserve role for Google users - they need to choose it
+      // Only preserve role if it was explicitly set by user during signup
+      if (token.role && token.authMethod !== 'google') {
         redirectUrl.searchParams.set('role', token.role);
       }
 
