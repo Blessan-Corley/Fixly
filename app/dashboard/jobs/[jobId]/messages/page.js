@@ -321,7 +321,7 @@ export default function MessagesPage({ params }) {
                     <p className="font-medium text-fixly-text">{otherUser.name}</p>
                     <div className="flex items-center gap-1 text-xs">
                       <div className={`w-2 h-2 rounded-full ${
-                        onlineStatus ? 'bg-green-500' : 'bg-gray-400'
+                        onlineStatus ? 'bg-fixly-success' : 'bg-fixly-text-muted'
                       }`}></div>
                       <span className="text-fixly-text-muted">
                         {onlineStatus ? 'Online' : `Last seen ${formatLastSeen(otherUser.lastActivityAt)}`}
@@ -361,7 +361,7 @@ export default function MessagesPage({ params }) {
                       className={`rounded-lg p-3 ${
                         isOwn
                           ? 'bg-fixly-accent text-white dark:bg-fixly-accent dark:text-white'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+                          : 'bg-fixly-bg-secondary text-fixly-text'
                       }`}
                     >
                       <p className="text-sm">{message.message}</p>

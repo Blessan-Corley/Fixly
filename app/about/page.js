@@ -3,12 +3,12 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Wrench, 
-  Users, 
-  Target, 
-  Heart, 
-  Award, 
+import {
+  Wrench,
+  Users,
+  Target,
+  Heart,
+  Award,
   Zap,
   ArrowLeft,
   Mail,
@@ -20,9 +20,12 @@ import {
   Twitter
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import ThemeToggle from '../../components/ui/ThemeToggle';
 
 export default function AboutUsPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [hoveredFounder, setHoveredFounder] = useState(null);
 
   const founders = [
@@ -108,14 +111,40 @@ export default function AboutUsPage() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <button
-                onClick={() => router.push('/')}
+                onClick={() => router.push(session ? '/dashboard' : '/')}
                 className="btn-ghost mr-4 flex items-center"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Home
+                {session ? 'Back to Dashboard' : 'Back to Home'}
               </button>
               <Wrench className="h-8 w-8 text-fixly-accent mr-2" />
               <span className="text-2xl font-bold text-fixly-text">Fixly</span>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ThemeToggle />
+              {!session ? (
+                <>
+                  <button
+                    onClick={() => router.push('/auth/signin')}
+                    className="btn-ghost"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={() => router.push('/auth/signup')}
+                    className="btn-primary"
+                  >
+                    Get Started
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="btn-primary"
+                >
+                  Go to Dashboard
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -407,21 +436,22 @@ export default function AboutUsPage() {
                 Contact Support
               </button>
               <button
-                onClick={() => router.push('/')}
+                onClick={() => router.push(session ? '/dashboard' : '/')}
                 className="btn-secondary"
               >
-                Back to Home
+                {session ? 'Back to Dashboard' : 'Back to Home'}
               </button>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* Back to Home */}
+      {/* Back Button */}
       <div className="fixed bottom-6 left-6">
         <button
-          onClick={() => router.push('/')}
+          onClick={() => router.push(session ? '/dashboard' : '/')}
           className="bg-fixly-card hover:bg-fixly-card/80 border border-fixly-border rounded-full p-3 shadow-fixly transition-all duration-200 hover-lift"
+          title={session ? 'Back to Dashboard' : 'Back to Home'}
         >
           <ArrowLeft className="h-5 w-5 text-fixly-text" />
         </button>

@@ -38,6 +38,7 @@ export async function GET(request) {
     const location = searchParams.get('location') || '';
     const minRating = searchParams.get('minRating') ? parseFloat(searchParams.get('minRating')) : null;
     const availability = searchParams.get('availability') || '';
+    const isPro = searchParams.get('isPro') === 'true';
     const sortBy = searchParams.get('sortBy') || 'rating';
 
     // Build query
@@ -77,6 +78,12 @@ export async function GET(request) {
     // Filter by availability (this would need to be implemented based on your availability system)
     if (availability === 'available') {
       query.available = true;
+    }
+
+    // Filter by Pro subscription
+    if (isPro) {
+      query['plan.type'] = 'pro';
+      query['plan.status'] = 'active';
     }
 
     // Sorting
@@ -141,6 +148,7 @@ export async function GET(request) {
         location,
         minRating,
         availability,
+        isPro,
         sortBy
       }
     });

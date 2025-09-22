@@ -30,6 +30,7 @@ const EnhancedLocationSelector = ({
   const [gpsLocation, setGpsLocation] = useState(null);
   const [accuracy, setAccuracy] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(initialLocation);
+  const [userInteracted, setUserInteracted] = useState(false); // Track if user has actually selected a location
   const [isLoading, setIsLoading] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
   // Address input is handled by Google Autocomplete, no state needed
@@ -205,6 +206,7 @@ const EnhancedLocationSelector = ({
         isInIndia: isLocationInIndia(lat, lng)
       };
       setSelectedLocation(basicLocation);
+      setUserInteracted(true);
       onLocationSelect(basicLocation);
       return;
     }
@@ -222,6 +224,7 @@ const EnhancedLocationSelector = ({
         if (isValid) {
           console.log('Using cached geocoding result');
           setSelectedLocation(data);
+          setUserInteracted(true);
           onLocationSelect(data);
           return;
         } else {
@@ -277,6 +280,7 @@ const EnhancedLocationSelector = ({
       }
 
       setSelectedLocation(location);
+      setUserInteracted(true);
       onLocationSelect(location);
     } catch (error) {
       console.error('Reverse geocoding failed:', error);
@@ -392,6 +396,7 @@ const EnhancedLocationSelector = ({
         }
 
         setSelectedLocation(location);
+        setUserInteracted(true);
         onLocationSelect(location);
         setCurrentStep('initial');
         setError(''); // Clear any previous errors
@@ -667,6 +672,7 @@ const EnhancedLocationSelector = ({
     setGpsLocation(null);
     setAccuracy(null);
     setSelectedLocation(null);
+    setUserInteracted(false);
     setError('');
     // Clear autocomplete input if needed
     if (autocompleteRef.current) {
@@ -1023,8 +1029,8 @@ const EnhancedLocationSelector = ({
               exit={{ opacity: 0, y: -10 }}
               className="space-y-6"
             >
-              {/* Show as success if we have location, error only for actual failures */}
-              {selectedLocation && selectedLocation.address ? (
+              {/* Show as success if we have location AND user has interacted */}
+              {selectedLocation && selectedLocation.address && userInteracted ? (
                 <>
                   <div className="text-center">
                     <div className="flex items-center justify-center w-16 h-16 bg-green-50 dark:bg-green-900/20 rounded-full mx-auto mb-4">

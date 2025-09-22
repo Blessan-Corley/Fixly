@@ -1,10 +1,9 @@
-// app/api/user/change-password/route.js
+// app/api/user/update-email/route.js
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../lib/auth';
 import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
-import bcrypt from 'bcryptjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,11 +19,11 @@ export async function PUT(request) {
 
     await connectDB();
 
-    const { currentPassword, newPassword, otp, email } = await request.json();
+    const { email, otp, currentEmail } = await request.json();
 
-    if (!currentPassword || !newPassword || !otp || !email) {
+    if (!email || !otp || !currentEmail) {
       return NextResponse.json(
-        { message: 'Current password, new password, OTP, and email are required' },
+        { message: 'Email, OTP, and current email are required' },
         { status: 400 }
       );
     }
@@ -32,7 +31,7 @@ export async function PUT(request) {
     // Verify OTP first
     try {
       const { verifyOTP } = await import('../../../../lib/otpService');
-      const otpVerification = await verifyOTP(email, otp, 'password_reset');
+      const otpVerification = await verifyOTP(email, otp, 'email_change'); // OTP was sent to the new email
 
       if (!otpVerification.success) {
         return NextResponse.json(
@@ -57,66 +56,76 @@ export async function PUT(request) {
       );
     }
 
-    // Verify email matches
-    if (user.email !== email) {
+    // Verify current email matches
+    if (user.email !== currentEmail) {
       return NextResponse.json(
-        { message: 'Email does not match' },
+        { message: 'Current email does not match' },
         { status: 400 }
       );
     }
 
-    // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isCurrentPasswordValid) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       return NextResponse.json(
-        { message: 'Current password is incorrect' },
+        { message: 'Invalid email format' },
         { status: 400 }
       );
     }
 
-    // Validate new password strength
-    const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
-    if (!passwordRegex.test(newPassword)) {
+    const cleanEmail = email.toLowerCase().trim();
+
+    // Check if email is already taken (double-check)
+    const existingUser = await User.findOne({
+      email: cleanEmail,
+      _id: { $ne: session.user.id }
+    });
+
+    if (existingUser) {
       return NextResponse.json(
-        { message: 'New password must be at least 8 characters and contain letters, numbers, and special characters' },
+        { message: 'This email is already registered' },
         { status: 400 }
       );
     }
 
-    // Check if new password is different from current
-    const isSamePassword = await bcrypt.compare(newPassword, user.password);
-    if (isSamePassword) {
+    // Check if it's the same email
+    if (user.email === cleanEmail) {
       return NextResponse.json(
-        { message: 'New password must be different from current password' },
+        { message: 'This is already your current email' },
         { status: 400 }
       );
     }
 
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    // Update email
+    const oldEmail = user.email;
+    user.email = cleanEmail;
+    user.emailVerified = new Date(); // Mark as verified since OTP was verified
+    user.lastEmailChange = new Date();
 
-    // Update password
-    user.password = hashedPassword;
-    user.lastPasswordChange = new Date();
     await user.save();
 
     // Add notification
     await user.addNotification(
-      'security_update',
-      'Password Changed',
-      'Your account password has been successfully updated.'
+      'settings_updated',
+      'Email Address Updated',
+      `Your email address has been changed from ${oldEmail} to ${cleanEmail}.`
     );
 
     return NextResponse.json({
       success: true,
-      message: 'Password changed successfully'
+      message: 'Email updated successfully',
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        emailVerified: user.emailVerified
+      }
     });
 
   } catch (error) {
-    console.error('Change password error:', error);
+    console.error('Update email error:', error);
     return NextResponse.json(
       {
-        message: 'Failed to change password',
+        message: 'Failed to update email',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
       },
       { status: 500 }

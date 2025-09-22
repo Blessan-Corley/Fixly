@@ -24,6 +24,7 @@ import {
   Image as ImageIcon,
   FileText,
   AlertCircle,
+  AlertTriangle,
   Check,
   Star,
   User,
@@ -38,7 +39,10 @@ import {
   ArrowRight,
   Phone,
   Mail,
-  Loader
+  Loader,
+  FolderOpen,
+  Archive,
+  Timer
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
@@ -58,7 +62,7 @@ function PostJobContent() {
   const { user } = useApp();
   const router = useRouter();
   
-  // Form data
+  // Form data - Updated to match new requirements
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -78,14 +82,8 @@ function PostJobContent() {
     },
     deadline: '',
     urgency: 'flexible',
-    type: 'one-time',
-    experienceLevel: 'intermediate',
     scheduledDate: '',
-    estimatedDuration: {
-      value: '',
-      unit: 'hours'
-    },
-    attachments: []
+    attachments: [] // Cloudinary media with isImage/isVideo flags
   });
 
   // UI states
@@ -103,6 +101,23 @@ function PostJobContent() {
   const [subscriptionInfo, setSubscriptionInfo] = useState(null);
   const [showProModal, setShowProModal] = useState(false);
   const [loadingSubscription, setLoadingSubscription] = useState(true);
+
+  // Draft functionality states
+  const [currentDraftId, setCurrentDraftId] = useState(null);
+  const [draftStatus, setDraftStatus] = useState('unsaved'); // 'unsaved', 'saving', 'saved', 'error'
+  const [lastSaved, setLastSaved] = useState(null);
+  const [autoSaveInterval, setAutoSaveInterval] = useState(null);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const [availableDrafts, setAvailableDrafts] = useState([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  // Real-time validation states (like signup form)
+  const [validationMessages, setValidationMessages] = useState({});
+  const [validationLoading, setValidationLoading] = useState({});
+  const [fieldValidations, setFieldValidations] = useState({});
+  const [locationDetected, setLocationDetected] = useState(false);
 
 
   // Fetch subscription info
@@ -125,7 +140,313 @@ function PostJobContent() {
     }
   };
 
+  // Draft functionality functions
+  const fetchUserDrafts = async () => {
+    setLoadingDrafts(true);
+    try {
+      const response = await fetch('/api/jobs/drafts?limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableDrafts(data.drafts || []);
+      }
+    } catch (error) {
+      console.error('Error fetching drafts:', error);
+      toast.error('Failed to load drafts');
+    } finally {
+      setLoadingDrafts(false);
+    }
+  };
 
+  const saveDraft = async (saveType = 'auto') => {
+    if (draftStatus === 'saving') return;
+
+    setDraftStatus('saving');
+    try {
+      const response = await fetch('/api/jobs/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: currentDraftId,
+          formData,
+          currentStep,
+          saveType,
+          completedSteps: []
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentDraftId(data.draft._id);
+        setLastSaved(new Date());
+        setDraftStatus('saved');
+        setHasUnsavedChanges(false);
+
+        if (saveType === 'manual') {
+          toast.success('Draft saved successfully');
+        }
+
+        return data.draft;
+      } else {
+        throw new Error('Failed to save draft');
+      }
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      setDraftStatus('error');
+      if (saveType === 'manual') {
+        toast.error('Failed to save draft');
+      }
+    }
+  };
+
+  const loadDraft = async (draftId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/jobs/drafts/${draftId}`);
+      if (response.ok) {
+        const data = await response.json();
+        const draft = data.draft;
+
+        setFormData({
+          title: draft.title || '',
+          description: draft.description || '',
+          skillsRequired: draft.skillsRequired || [],
+          budget: draft.budget || { type: 'negotiable', amount: '', materialsIncluded: false },
+          location: draft.location || {
+            address: '', city: '', state: '', pincode: '', lat: null, lng: null
+          },
+          deadline: draft.deadline || '',
+          urgency: draft.urgency || 'flexible',
+          scheduledDate: draft.scheduledDate || '',
+          attachments: draft.attachments || []
+        });
+
+        setCurrentStep(draft.currentStep || 1);
+        setCurrentDraftId(draft._id);
+        setLastSaved(new Date(draft.lastAutoSave || draft.lastManualSave));
+        setDraftStatus('saved');
+        setHasUnsavedChanges(false);
+        setShowDraftModal(false);
+
+        toast.success(`Draft "${draft.title || 'Untitled Job'}" loaded successfully`);
+      } else {
+        throw new Error('Failed to load draft');
+      }
+    } catch (error) {
+      console.error('Error loading draft:', error);
+      toast.error('Failed to load draft');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteDraft = async (draftId) => {
+    try {
+      const response = await fetch(`/api/jobs/drafts?draftId=${draftId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setAvailableDrafts(prev => prev.filter(draft => draft._id !== draftId));
+        if (currentDraftId === draftId) {
+          setCurrentDraftId(null);
+          setDraftStatus('unsaved');
+          setLastSaved(null);
+        }
+        toast.success('Draft deleted successfully');
+      } else {
+        throw new Error('Failed to delete draft');
+      }
+    } catch (error) {
+      console.error('Error deleting draft:', error);
+      toast.error('Failed to delete draft');
+    }
+  };
+
+  // Auto-save functionality
+  useEffect(() => {
+    if (hasUnsavedChanges && !autoSaveInterval) {
+      const interval = setInterval(async () => {
+        await saveDraft('auto');
+      }, 30000); // Auto-save every 30 seconds
+
+      setAutoSaveInterval(interval);
+    }
+
+    return () => {
+      if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+        setAutoSaveInterval(null);
+      }
+    };
+  }, [hasUnsavedChanges, autoSaveInterval, formData, currentStep]);
+
+  // Track form changes - set unsaved changes when form data changes
+  useEffect(() => {
+    // Only mark as unsaved if we have some content (not empty form)
+    const hasContent = formData.title.trim() ||
+                      formData.description.trim() ||
+                      formData.skillsRequired.length > 0 ||
+                      formData.attachments.length > 0;
+
+    if (hasContent) {
+      setHasUnsavedChanges(true);
+      if (draftStatus === 'saved') {
+        setDraftStatus('unsaved');
+      }
+    }
+  }, [formData, currentStep]);
+
+  // Load available drafts on component mount
+  useEffect(() => {
+    fetchUserDrafts();
+  }, []);
+
+  // Cleanup auto-save interval on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveInterval) {
+        clearInterval(autoSaveInterval);
+      }
+    };
+  }, [autoSaveInterval]);
+
+  // Real-time validation for title (like signup form)
+  useEffect(() => {
+    const validateTitle = async () => {
+      if (!formData.title.trim()) {
+        setValidationMessages(prev => ({ ...prev, title: '' }));
+        setFieldValidations(prev => ({ ...prev, title: null }));
+        return;
+      }
+
+      if (formData.title.length > 30) {
+        setValidationMessages(prev => ({ ...prev, title: 'Title cannot exceed 30 characters' }));
+        setFieldValidations(prev => ({ ...prev, title: false }));
+        return;
+      }
+
+      if (formData.title.length < 10) {
+        setValidationMessages(prev => ({ ...prev, title: 'Title must be at least 10 characters' }));
+        setFieldValidations(prev => ({ ...prev, title: false }));
+        return;
+      }
+
+      setValidationLoading(prev => ({ ...prev, title: true }));
+
+      try {
+        const contentValidation = await fetch('/api/validate-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: formData.title,
+            context: 'job_posting',
+            userId: user?.id
+          }),
+        });
+
+        if (contentValidation.ok) {
+          const result = await contentValidation.json();
+          if (!result.isValid && result.violations.length > 0) {
+            const violationTypes = result.violations.map(v => v.type);
+            let message = 'Title contains inappropriate content: ';
+
+            if (violationTypes.includes('profanity') || violationTypes.includes('abuse')) {
+              message += 'abuse words, ';
+            }
+            if (violationTypes.includes('phone_number')) {
+              message += 'phone numbers, ';
+            }
+            if (violationTypes.includes('email_address')) {
+              message += 'email addresses, ';
+            }
+            if (violationTypes.includes('url') || violationTypes.includes('social_media')) {
+              message += 'links/social media, ';
+            }
+
+            message = message.replace(/, $/, '');
+            setValidationMessages(prev => ({ ...prev, title: message }));
+            setFieldValidations(prev => ({ ...prev, title: false }));
+          } else {
+            setValidationMessages(prev => ({ ...prev, title: '' }));
+            setFieldValidations(prev => ({ ...prev, title: true }));
+          }
+        }
+      } catch (error) {
+        console.error('Title validation error:', error);
+      } finally {
+        setValidationLoading(prev => ({ ...prev, title: false }));
+      }
+    };
+
+    const timer = setTimeout(validateTitle, 500);
+    return () => clearTimeout(timer);
+  }, [formData.title, user?.id]);
+
+  // Real-time validation for description
+  useEffect(() => {
+    const validateDescription = async () => {
+      if (!formData.description.trim()) {
+        setValidationMessages(prev => ({ ...prev, description: '' }));
+        setFieldValidations(prev => ({ ...prev, description: null }));
+        return;
+      }
+
+      if (formData.description.length < 30) {
+        setValidationMessages(prev => ({ ...prev, description: 'Description must be at least 30 characters' }));
+        setFieldValidations(prev => ({ ...prev, description: false }));
+        return;
+      }
+
+      setValidationLoading(prev => ({ ...prev, description: true }));
+
+      try {
+        const contentValidation = await fetch('/api/validate-content', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: formData.description,
+            context: 'job_posting',
+            userId: user?.id
+          }),
+        });
+
+        if (contentValidation.ok) {
+          const result = await contentValidation.json();
+          if (!result.isValid && result.violations.length > 0) {
+            const violationTypes = result.violations.map(v => v.type);
+            let message = 'Description contains inappropriate content: ';
+
+            if (violationTypes.includes('profanity') || violationTypes.includes('abuse')) {
+              message += 'abuse words, ';
+            }
+            if (violationTypes.includes('phone_number')) {
+              message += 'phone numbers, ';
+            }
+            if (violationTypes.includes('email_address')) {
+              message += 'email addresses, ';
+            }
+            if (violationTypes.includes('url') || violationTypes.includes('social_media')) {
+              message += 'links/social media, ';
+            }
+
+            message = message.replace(/, $/, '');
+            setValidationMessages(prev => ({ ...prev, description: message }));
+            setFieldValidations(prev => ({ ...prev, description: false }));
+          } else {
+            setValidationMessages(prev => ({ ...prev, description: '' }));
+            setFieldValidations(prev => ({ ...prev, description: true }));
+          }
+        }
+      } catch (error) {
+        console.error('Description validation error:', error);
+      } finally {
+        setValidationLoading(prev => ({ ...prev, description: false }));
+      }
+    };
+
+    const timer = setTimeout(validateDescription, 500);
+    return () => clearTimeout(timer);
+  }, [formData.description, user?.id]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => {
@@ -150,23 +471,58 @@ function PostJobContent() {
 
 
 
-  // Media upload functions
+  // Media upload functions with Cloudinary and limits enforcement
   const handleFileSelect = async (files) => {
+    // Count current media
+    const currentPhotos = formData.attachments.filter(att => att.isImage).length;
+    const currentVideos = formData.attachments.filter(att => att.isVideo).length;
+
     const validFiles = Array.from(files).filter(file => {
       const isImage = file.type.startsWith('image/');
       const isVideo = file.type.startsWith('video/');
-      const maxSize = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024; // 100MB for video, 10MB for image
-      
+
+      // Check file type
       if (!isImage && !isVideo) {
         toast.error(`${file.name}: Only image and video files are allowed`);
         return false;
       }
-      
-      if (file.size > maxSize) {
-        toast.error(`${file.name}: File size too large (max ${isVideo ? '100MB' : '10MB'})`);
+
+      // Check media limits
+      if (isImage && currentPhotos >= 5) {
+        toast.error('Maximum 5 photos allowed');
         return false;
       }
-      
+
+      if (isVideo && currentVideos >= 1) {
+        toast.error('Maximum 1 video allowed');
+        return false;
+      }
+
+      // Check file size limits
+      const maxImageSize = 5 * 1024 * 1024; // 5MB for images
+      const maxVideoSize = 50 * 1024 * 1024; // 50MB for videos
+
+      if (isImage && file.size > maxImageSize) {
+        toast.error(`${file.name}: Image size must be less than 5MB`);
+        return false;
+      }
+
+      if (isVideo && file.size > maxVideoSize) {
+        toast.error(`${file.name}: Video size must be less than 50MB`);
+        return false;
+      }
+
+      // Check specific file types
+      if (isImage && !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        toast.error(`${file.name}: Only JPEG, PNG, and WebP images are allowed`);
+        return false;
+      }
+
+      if (isVideo && !['video/mp4', 'video/mov', 'video/avi', 'video/quicktime'].includes(file.type)) {
+        toast.error(`${file.name}: Only MP4, MOV, and AVI videos are allowed`);
+        return false;
+      }
+
       return true;
     });
 
@@ -177,54 +533,117 @@ function PostJobContent() {
 
     for (const file of validFiles) {
       try {
-        const fileId = Date.now() + Math.random();
+        const fileId = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
         setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
 
-        // Create preview URL
-        const previewUrl = URL.createObjectURL(file);
-        
-        // Simulate upload progress (replace with actual upload logic)
+        // Create FormData for upload
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('existingPhotos', currentPhotos.toString());
+        uploadFormData.append('existingVideos', currentVideos.toString());
+
+        // Upload progress simulation
         const progressInterval = setInterval(() => {
           setUploadProgress(prev => {
             const currentProgress = prev[fileId] || 0;
-            const newProgress = Math.min(currentProgress + 10, 90);
+            const newProgress = Math.min(currentProgress + 15, 85);
             return { ...prev, [fileId]: newProgress };
           });
-        }, 100);
+        }, 200);
 
-        // Simulate upload to server (replace with actual API call)
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
+        // Upload to Cloudinary via API
+        const uploadResponse = await fetch('/api/jobs/upload-media', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+
         clearInterval(progressInterval);
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          throw new Error(errorData.message || 'Upload failed');
+        }
+
+        const uploadResult = await uploadResponse.json();
+
+        if (!uploadResult.success) {
+          throw new Error(uploadResult.message || 'Upload failed');
+        }
+
         setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
 
         newAttachments.push({
-          id: fileId,
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          url: previewUrl, // In real app, this would be the server URL
-          isImage: file.type.startsWith('image/'),
-          isVideo: file.type.startsWith('video/')
+          id: uploadResult.media.id,
+          name: uploadResult.media.filename,
+          type: uploadResult.media.type,
+          size: uploadResult.media.size,
+          url: uploadResult.media.url,
+          publicId: uploadResult.media.publicId,
+          isImage: uploadResult.media.isImage,
+          isVideo: uploadResult.media.isVideo,
+          width: uploadResult.media.width,
+          height: uploadResult.media.height,
+          duration: uploadResult.media.duration,
+          createdAt: uploadResult.media.createdAt
         });
+
+        console.log(`✅ Uploaded: ${file.name}`);
 
       } catch (error) {
         console.error('Upload error:', error);
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(`Failed to upload ${file.name}: ${error.message}`);
+        setUploadProgress(prev => {
+          const newProgress = { ...prev };
+          delete newProgress[fileId];
+          return newProgress;
+        });
       }
     }
 
-    handleInputChange('attachments', [...formData.attachments, ...newAttachments]);
+    if (newAttachments.length > 0) {
+      handleInputChange('attachments', [...formData.attachments, ...newAttachments]);
+      toast.success(`Successfully uploaded ${newAttachments.length} file(s)`);
+    }
+
     setUploading(false);
     setUploadProgress({});
   };
 
-  const removeAttachment = (attachmentId) => {
+  const removeAttachment = async (attachmentId) => {
     const attachment = formData.attachments.find(att => att.id === attachmentId);
-    if (attachment && attachment.url.startsWith('blob:')) {
-      URL.revokeObjectURL(attachment.url);
+
+    if (!attachment) return;
+
+    try {
+      // If it's a Cloudinary upload, delete from server
+      if (attachment.publicId) {
+        const deleteResponse = await fetch(`/api/jobs/upload-media?publicId=${attachment.publicId}`, {
+          method: 'DELETE',
+        });
+
+        if (!deleteResponse.ok) {
+          const errorData = await deleteResponse.json();
+          console.error('Delete error:', errorData.message);
+          toast.error('Failed to delete file from server');
+          return;
+        }
+
+        console.log(`🗑️ Deleted from Cloudinary: ${attachment.name}`);
+      }
+
+      // If it's a blob URL (preview), revoke it
+      if (attachment.url && attachment.url.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.url);
+      }
+
+      // Remove from form data
+      handleInputChange('attachments', formData.attachments.filter(att => att.id !== attachmentId));
+      toast.success('File removed successfully');
+
+    } catch (error) {
+      console.error('Error removing attachment:', error);
+      toast.error('Failed to remove file');
     }
-    handleInputChange('attachments', formData.attachments.filter(att => att.id !== attachmentId));
   };
 
   const handleDragOver = (e) => {
@@ -243,7 +662,57 @@ function PostJobContent() {
     handleFileSelect(e.dataTransfer.files);
   };
 
-  const validateStep = (step) => {
+  // Content validation helper function
+  const validateContent = async (text, fieldName) => {
+    if (!text || text.trim().length === 0) return null;
+
+    try {
+      const contentValidation = await fetch('/api/validate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: text,
+          context: 'job_posting',
+          userId: user?.id
+        }),
+      });
+
+      if (contentValidation.ok) {
+        const result = await contentValidation.json();
+        if (!result.isValid && result.violations.length > 0) {
+          const violationTypes = result.violations.map(v => v.type);
+          let message = `${fieldName} contains inappropriate content: `;
+
+          if (violationTypes.includes('profanity') || violationTypes.includes('abuse')) {
+            message += 'abuse words, ';
+          }
+          if (violationTypes.includes('phone_number')) {
+            message += 'phone numbers, ';
+          }
+          if (violationTypes.includes('email_address')) {
+            message += 'email addresses, ';
+          }
+          if (violationTypes.includes('url') || violationTypes.includes('social_media')) {
+            message += 'links/social media, ';
+          }
+          if (violationTypes.includes('promotional') || violationTypes.includes('spam')) {
+            message += 'promotional content, ';
+          }
+          if (violationTypes.includes('location')) {
+            message += 'location details, ';
+          }
+
+          message = message.replace(/, $/, '');
+          return message;
+        }
+      }
+    } catch (error) {
+      console.error('Content validation error:', error);
+    }
+    return null;
+  };
+
+  const validateStep = async (step) => {
     const newErrors = {};
 
     switch (step) {
@@ -252,12 +721,24 @@ function PostJobContent() {
           newErrors.title = 'Title is required';
         } else if (formData.title.length < 10) {
           newErrors.title = 'Title must be at least 10 characters';
+        } else {
+          // Content validation for title
+          const titleValidation = await validateContent(formData.title, 'Title');
+          if (titleValidation) {
+            newErrors.title = titleValidation;
+          }
         }
 
         if (!formData.description.trim()) {
           newErrors.description = 'Description is required';
         } else if (formData.description.length < 30) {
           newErrors.description = 'Description must be at least 30 characters';
+        } else {
+          // Content validation for description
+          const descValidation = await validateContent(formData.description, 'Description');
+          if (descValidation) {
+            newErrors.description = descValidation;
+          }
         }
 
         if (formData.skillsRequired.length === 0) {
@@ -293,10 +774,80 @@ function PostJobContent() {
         if (formData.scheduledDate && new Date(formData.scheduledDate) <= new Date()) {
           newErrors.scheduledDate = 'Scheduled date must be in the future';
         }
+
+        // Check mandatory photo requirement
+        const photoCount = formData.attachments.filter(att => att.isImage).length;
+        if (photoCount === 0) {
+          newErrors.attachments = 'At least 1 photo is required';
+        }
         break;
 
       case 4:
-        // Final validation
+        // Final comprehensive validation - check all steps
+        // Step 1 validation
+        if (!formData.title.trim()) {
+          newErrors.title = 'Job title is required';
+        } else if (formData.title.length < 10) {
+          newErrors.title = 'Job title must be at least 10 characters';
+        } else if (formData.title.length > 30) {
+          newErrors.title = 'Job title cannot exceed 30 characters';
+        }
+
+        if (!formData.description.trim()) {
+          newErrors.description = 'Job description is required';
+        } else if (formData.description.length < 30) {
+          newErrors.description = 'Description must be at least 30 characters';
+        }
+
+        if (formData.skillsRequired.length === 0) {
+          newErrors.skillsRequired = 'At least one skill must be selected';
+        }
+
+        // Step 2 validation
+        if (!formData.budget.type) {
+          newErrors['budget.type'] = 'Budget type must be selected';
+        }
+
+        if (formData.budget.type !== 'negotiable' && (!formData.budget.amount || formData.budget.amount <= 0)) {
+          newErrors['budget.amount'] = 'Valid budget amount is required';
+        }
+
+        if (!formData.location.address.trim()) {
+          newErrors['location.address'] = 'Complete address is required';
+        }
+
+        if (!formData.location.city.trim()) {
+          newErrors['location.city'] = 'City is required';
+        }
+
+        // Step 3 validation
+        if (!formData.deadline) {
+          newErrors.deadline = 'Job deadline is required';
+        } else if (new Date(formData.deadline) <= new Date()) {
+          newErrors.deadline = 'Deadline must be in the future';
+        }
+
+        if (formData.scheduledDate && new Date(formData.scheduledDate) <= new Date()) {
+          newErrors.scheduledDate = 'Scheduled date must be in the future';
+        }
+
+        if (!formData.urgency) {
+          newErrors.urgency = 'Urgency level must be selected';
+        }
+
+        // Media validation
+        const photos = formData.attachments.filter(att => att.isImage);
+        const videos = formData.attachments.filter(att => att.isVideo);
+
+        if (photos.length === 0) {
+          newErrors.attachments = 'At least 1 photo is required to post a job';
+        } else if (photos.length > 5) {
+          newErrors.attachments = 'Maximum 5 photos allowed';
+        }
+
+        if (videos.length > 1) {
+          newErrors.attachments = 'Maximum 1 video allowed';
+        }
         break;
     }
 
@@ -304,60 +855,101 @@ function PostJobContent() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, totalSteps));
-    } else {
-      // Show a toast indicating which fields need to be filled
-      const errorMessages = Object.values(errors).filter(msg => msg);
-      if (errorMessages.length > 0) {
-        toast.error(`Please fill in all required fields: ${errorMessages.length} error(s) found`);
+  const handleNext = async () => {
+    try {
+      const isValid = await validateStep(currentStep);
+      if (isValid) {
+        // Auto-save when moving to next step
+        if (hasUnsavedChanges) {
+          await saveDraft('step_change');
+        }
+
+        setCurrentStep(prev => Math.min(prev + 1, totalSteps));
+
+        // Scroll to top for better UX
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Show specific validation errors
+        const errorMessages = Object.values(errors).filter(msg => msg);
+        if (errorMessages.length > 0) {
+          const firstError = errorMessages[0];
+          toast.error(firstError);
+        } else {
+          toast.error('Please complete all required fields before proceeding');
+        }
       }
+    } catch (error) {
+      console.error('Navigation error:', error);
+      toast.error('An error occurred. Please try again.');
     }
   };
 
   const handlePrevious = () => {
     setCurrentStep(prev => Math.max(prev - 1, 1));
+
+    // Scroll to top for better UX
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async () => {
-    if (!validateStep(currentStep)) {
-      // Show validation errors
-      const errorMessages = Object.values(errors).filter(msg => msg);
-      if (errorMessages.length > 0) {
-        toast.error(`Please fill in all required fields: ${errorMessages.length} error(s) found`);
-      }
-      return;
-    }
-
-    setLoading(true);
     try {
+      const isValid = await validateStep(currentStep);
+      if (!isValid) {
+        // Show specific validation errors
+        const errorMessages = Object.values(errors).filter(msg => msg);
+        if (errorMessages.length > 0) {
+          const firstError = errorMessages[0];
+          toast.error(firstError);
+        } else {
+          toast.error('Please complete all required fields before submitting');
+        }
+        return;
+      }
+
+      setLoading(true);
+
+      // Prepare submission data with draftId if available
+      const submissionData = {
+        ...formData,
+        draftId: currentDraftId // Include draft ID for conversion
+      };
+
       const response = await fetch('/api/jobs/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(submissionData)
       });
 
-      const text = await response.text();
       let data;
-      
       try {
-        data = text ? JSON.parse(text) : {};
+        data = await response.json();
       } catch (jsonError) {
         console.error('JSON parse error:', jsonError);
-        data = {};
+        throw new Error('Invalid response from server');
       }
 
       if (response.ok && data.success) {
         toast.success('Job posted successfully!');
-        router.push(`/dashboard/jobs/${data.job._id}`);
+
+        // Clear the draft state since job is posted
+        setCurrentDraftId(null);
+        setDraftStatus('unsaved');
+        setHasUnsavedChanges(false);
+
+        // Navigate to job details or dashboard
+        router.push('/dashboard?tab=jobs');
       } else {
         console.error('Error posting job:', data);
-        toast.error(data.message || 'Failed to post job');
+        toast.error(data.message || 'Failed to post job. Please check your input and try again.');
+
+        // Handle specific validation errors
+        if (data.violations) {
+          console.log('Content violations:', data.violations);
+        }
       }
     } catch (error) {
       console.error('Error posting job:', error);
-      toast.error('Failed to post job');
+      toast.error('Failed to post job. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -387,15 +979,33 @@ function PostJobContent() {
           value={formData.title}
           onChange={(e) => handleInputChange('title', e.target.value)}
           placeholder="e.g., Fix kitchen sink leak"
-          className={`input-field ${errors.title ? 'border-red-500 focus:border-red-500' : ''}`}
-          maxLength={100}
+          className={`input-field ${
+            validationLoading.title ? 'border-yellow-400 focus:border-yellow-400' :
+            fieldValidations.title === false ? 'border-red-500 focus:border-red-500' :
+            fieldValidations.title === true ? 'border-green-500 focus:border-green-500' :
+            errors.title ? 'border-red-500 focus:border-red-500' : ''
+          }`}
+          maxLength={30}
         />
         <div className="flex justify-between mt-1">
-          {errors.title && (
-            <p className="text-red-500 text-sm">{errors.title}</p>
-          )}
+          <div className="flex-1">
+            {validationLoading.title && (
+              <p className="text-yellow-600 text-sm flex items-center">
+                <Loader className="h-3 w-3 animate-spin mr-1" />
+                Checking title...
+              </p>
+            )}
+            {validationMessages.title && !validationLoading.title && (
+              <p className={`text-sm ${fieldValidations.title ? 'text-green-600' : 'text-red-500'}`}>
+                {validationMessages.title}
+              </p>
+            )}
+            {errors.title && !validationMessages.title && (
+              <p className="text-red-500 text-sm">{errors.title}</p>
+            )}
+          </div>
           <p className="text-xs text-fixly-text-muted ml-auto">
-            {formData.title.length}/100
+            {formData.title.length}/30
           </p>
         </div>
       </div>
@@ -408,13 +1018,31 @@ function PostJobContent() {
           value={formData.description}
           onChange={(e) => handleInputChange('description', e.target.value)}
           placeholder="Describe the work in detail. Include what needs to be done, any specific requirements, and what materials are needed..."
-          className={`textarea-field h-32 ${errors.description ? 'border-red-500 focus:border-red-500' : ''}`}
+          className={`textarea-field h-32 ${
+            validationLoading.description ? 'border-yellow-400 focus:border-yellow-400' :
+            fieldValidations.description === false ? 'border-red-500 focus:border-red-500' :
+            fieldValidations.description === true ? 'border-green-500 focus:border-green-500' :
+            errors.description ? 'border-red-500 focus:border-red-500' : ''
+          }`}
           maxLength={2000}
         />
         <div className="flex justify-between mt-1">
-          {errors.description && (
-            <p className="text-red-500 text-sm">{errors.description}</p>
-          )}
+          <div className="flex-1">
+            {validationLoading.description && (
+              <p className="text-yellow-600 text-sm flex items-center">
+                <Loader className="h-3 w-3 animate-spin mr-1" />
+                Checking description...
+              </p>
+            )}
+            {validationMessages.description && !validationLoading.description && (
+              <p className={`text-sm ${fieldValidations.description ? 'text-green-600' : 'text-red-500'}`}>
+                {validationMessages.description}
+              </p>
+            )}
+            {errors.description && !validationMessages.description && (
+              <p className="text-red-500 text-sm">{errors.description}</p>
+            )}
+          </div>
           <p className="text-xs text-fixly-text-muted ml-auto">
             {formData.description.length}/2000
           </p>
@@ -496,7 +1124,7 @@ function PostJobContent() {
             value={formData.budget.amount}
             onChange={(e) => handleInputChange('budget.amount', e.target.value)}
             placeholder="Enter amount"
-            className="input-field"
+            className={`input-field ${errors['budget.amount'] ? 'border-red-500 focus:border-red-500' : ''}`}
             min="1"
           />
           {errors['budget.amount'] && (
@@ -634,70 +1262,14 @@ function PostJobContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Job Type
-          </label>
-          <select
-            value={formData.type}
-            onChange={(e) => handleInputChange('type', e.target.value)}
-            className="select-field"
-          >
-            <option value="one-time">One-time Job</option>
-            <option value="recurring">Recurring Job</option>
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-fixly-text mb-2">
-          Estimated Duration
-        </label>
-        <div className="flex gap-4">
-          <input
-            type="number"
-            value={formData.estimatedDuration.value}
-            onChange={(e) => {
-              const value = parseInt(e.target.value);
-              const unit = formData.estimatedDuration.unit;
-              
-              // Apply limits based on unit
-              let maxValue = 1000; // default for weeks
-              if (unit === 'hours') maxValue = 24;
-              if (unit === 'days') maxValue = 7;
-              
-              if (value <= maxValue) {
-                handleInputChange('estimatedDuration.value', e.target.value);
-              }
-            }}
-            placeholder="Duration"
-            className="input-field w-24"
-            min="1"
-            max={
-              formData.estimatedDuration.unit === 'hours' ? 24 :
-              formData.estimatedDuration.unit === 'days' ? 7 : 1000
-            }
-          />
-          <select
-            value={formData.estimatedDuration.unit}
-            onChange={(e) => handleInputChange('estimatedDuration.unit', e.target.value)}
-            className="select-field flex-1"
-          >
-            <option value="hours">Hours</option>
-            <option value="days">Days</option>
-            <option value="weeks">Weeks</option>
-          </select>
-        </div>
-      </div>
 
       {/* Media Upload Section */}
       <div>
         <label className="block text-sm font-medium text-fixly-text mb-2">
-          Photos & Videos (Optional)
+          Photos & Videos <span className="text-red-500">*</span>
         </label>
         <p className="text-fixly-text-muted text-sm mb-4">
-          Upload photos and videos to help fixers understand your requirements better
+          Upload at least 1 photo (max 5 photos and 1 video). Photos help fixers understand your requirements better.
         </p>
 
         {/* Upload Area */}
@@ -722,9 +1294,9 @@ function PostJobContent() {
               Drag and drop files here, or click to browse
             </p>
             <div className="flex items-center gap-4 text-xs text-fixly-text-muted">
-              <span>• Images: max 10MB</span>
-              <span>• Videos: max 100MB</span>
-              <span>• Formats: JPG, PNG, MP4, MOV</span>
+              <span>• Images: max 5MB (5 max)</span>
+              <span>• Videos: max 50MB (1 max)</span>
+              <span>• Formats: JPG, PNG, WebP, MP4, MOV, AVI</span>
             </div>
             <input
               type="file"
@@ -742,6 +1314,19 @@ function PostJobContent() {
               Choose Files
             </label>
           </div>
+        </div>
+
+        {/* Error Display */}
+        {errors.attachments && (
+          <div className="mt-2">
+            <p className="text-red-500 text-sm">{errors.attachments}</p>
+          </div>
+        )}
+
+        {/* Media Count Display */}
+        <div className="mt-4 flex items-center gap-4 text-sm text-fixly-text-muted">
+          <span>Photos: {formData.attachments.filter(att => att.isImage).length}/5</span>
+          <span>Videos: {formData.attachments.filter(att => att.isVideo).length}/1</span>
         </div>
 
         {/* Uploaded Files Preview */}
@@ -922,6 +1507,71 @@ function PostJobContent() {
 
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+      {/* Header with Draft Controls */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-fixly-text">Post New Job</h1>
+          <div className="flex items-center gap-4 mt-2">
+            {/* Draft Status */}
+            <div className="flex items-center gap-2 text-sm">
+              {draftStatus === 'saving' && (
+                <>
+                  <Loader className="h-4 w-4 animate-spin text-fixly-accent" />
+                  <span className="text-fixly-text-muted">Saving...</span>
+                </>
+              )}
+              {draftStatus === 'saved' && lastSaved && (
+                <>
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span className="text-fixly-text-muted">
+                    Saved {new Date(lastSaved).toLocaleTimeString()}
+                  </span>
+                </>
+              )}
+              {draftStatus === 'unsaved' && hasUnsavedChanges && (
+                <>
+                  <Timer className="h-4 w-4 text-amber-500" />
+                  <span className="text-amber-600">Unsaved changes</span>
+                </>
+              )}
+              {draftStatus === 'error' && (
+                <>
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <span className="text-red-600">Save failed</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Draft Actions */}
+        <div className="flex items-center gap-3">
+          {/* Save Draft Button */}
+          <button
+            onClick={() => saveDraft('manual')}
+            disabled={draftStatus === 'saving' || !hasUnsavedChanges}
+            className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Save className="h-4 w-4" />
+            Save Draft
+          </button>
+
+          {/* Load Draft Button */}
+          <button
+            onClick={() => setShowDraftModal(true)}
+            className="btn-outline flex items-center gap-2"
+          >
+            <FolderOpen className="h-4 w-4" />
+            Load Draft
+            {availableDrafts.length > 0 && (
+              <span className="bg-fixly-accent text-fixly-text text-xs px-2 py-1 rounded-full">
+                {availableDrafts.length}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Progress bar */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
@@ -953,6 +1603,51 @@ function PostJobContent() {
         {currentStep === 3 && renderStep3()}
         {currentStep === 4 && renderStep4()}
       </div>
+
+      {/* Comprehensive Validation Summary */}
+      {Object.keys(errors).length > 0 && (
+        <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">
+                Please fix the following issues:
+              </h3>
+              <div className="mt-2 text-sm text-red-700">
+                <ul className="list-disc pl-5 space-y-1">
+                  {Object.entries(errors).map(([field, message]) => {
+                    // Better field name formatting
+                    const fieldNames = {
+                      'title': 'Job Title',
+                      'description': 'Job Description',
+                      'skillsRequired': 'Required Skills',
+                      'budget.type': 'Budget Type',
+                      'budget.amount': 'Budget Amount',
+                      'location.address': 'Job Address',
+                      'location.city': 'City',
+                      'location.pincode': 'Pincode',
+                      'deadline': 'Job Deadline',
+                      'scheduledDate': 'Scheduled Date',
+                      'urgency': 'Urgency Level',
+                      'attachments': 'Photos/Videos'
+                    };
+
+                    const displayName = fieldNames[field] || field.replace(/\./g, ' ').replace(/([A-Z])/g, ' $1');
+
+                    return (
+                      <li key={field}>
+                        <strong>{displayName}:</strong> {message}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Navigation buttons */}
       <div className="flex justify-between mt-8">
@@ -1070,6 +1765,120 @@ function PostJobContent() {
               Upgrade to Pro
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Draft Selection Modal */}
+      {showDraftModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-fixly-card rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-fixly-text">Load Draft</h2>
+              <button
+                onClick={() => setShowDraftModal(false)}
+                className="p-2 hover:bg-fixly-surface rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-fixly-text-muted" />
+              </button>
+            </div>
+
+            {loadingDrafts ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader className="h-6 w-6 animate-spin text-fixly-accent" />
+                <span className="ml-3 text-fixly-text-muted">Loading drafts...</span>
+              </div>
+            ) : availableDrafts.length === 0 ? (
+              <div className="text-center py-8">
+                <Archive className="h-12 w-12 text-fixly-text-muted mx-auto mb-4" />
+                <p className="text-fixly-text-muted">No drafts found</p>
+                <p className="text-sm text-fixly-text-muted mt-1">
+                  Start filling out the form to auto-save your progress
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {availableDrafts.map((draft) => (
+                  <div
+                    key={draft._id}
+                    className="border border-fixly-border rounded-lg p-4 hover:border-fixly-accent transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="font-medium text-fixly-text mb-1">
+                          {draft.title || 'Untitled Job'}
+                        </h3>
+                        <div className="flex items-center gap-4 text-sm text-fixly-text-muted mb-2">
+                          <span>Step {draft.currentStep}/4</span>
+                          <span>{draft.completionPercentage}% complete</span>
+                          <span>{draft.ageInHours}h ago</span>
+                          {draft.photoCount > 0 && (
+                            <span className="flex items-center gap-1">
+                              <ImageIcon className="h-3 w-3" />
+                              {draft.photoCount}
+                            </span>
+                          )}
+                          {draft.videoCount > 0 && (
+                            <span className="flex items-center gap-1">
+                              <FileText className="h-3 w-3" />
+                              {draft.videoCount}
+                            </span>
+                          )}
+                        </div>
+                        {draft.description && (
+                          <p className="text-sm text-fixly-text-muted line-clamp-2">
+                            {draft.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="h-2 bg-fixly-border rounded-full flex-1">
+                            <div
+                              className="h-full bg-fixly-accent rounded-full transition-all"
+                              style={{ width: `${draft.completionPercentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 ml-4">
+                        <button
+                          onClick={() => loadDraft(draft._id)}
+                          className="btn-primary text-sm"
+                        >
+                          Load
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('Are you sure you want to delete this draft?')) {
+                              deleteDraft(draft._id);
+                            }
+                          }}
+                          className="p-2 hover:bg-red-50 hover:text-red-600 rounded transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-between items-center mt-6 pt-4 border-t border-fixly-border">
+              <p className="text-sm text-fixly-text-muted">
+                Drafts are automatically deleted after 14 days
+              </p>
+              <button
+                onClick={() => setShowDraftModal(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

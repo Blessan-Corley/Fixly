@@ -395,7 +395,7 @@
   /* Disabled/readonly input styling - More consistent */
   .input-field:disabled,
   .input-field[readonly] {
-    @apply bg-fixly-bg-secondary dark:bg-gray-800/50 text-fixly-text-muted dark:text-gray-400 cursor-not-allowed border-fixly-border-light;
+    @apply bg-fixly-bg-secondary text-fixly-text-muted cursor-not-allowed border-fixly-border-light;
     opacity: 0.8;
   }
   
