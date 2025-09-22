@@ -353,7 +353,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="h-full flex bg-white rounded-lg border border-fixly-border overflow-hidden">
+    <div className="h-full flex bg-fixly-card rounded-lg border border-fixly-border overflow-hidden">
       {/* Conversations List */}
       <AnimatePresence>
         {(showConversationsList || !isMobile) && (
@@ -361,7 +361,7 @@ export default function MessagesPage() {
             initial={{ x: -300, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -300, opacity: 0 }}
-            className={`${isMobile ? 'absolute inset-0 z-10 bg-white' : 'w-1/3 min-w-80'} border-r border-fixly-border flex flex-col`}
+            className={`${isMobile ? 'absolute inset-0 z-10 bg-fixly-card' : 'w-1/3 min-w-80'} border-r border-fixly-border flex flex-col`}
           >
             {/* Header */}
             <div className="p-4 border-b border-fixly-border">
@@ -431,7 +431,7 @@ export default function MessagesPage() {
                               )}
                             </div>
                             {conversation.participant?.isOnline && (
-                              <div className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-white"></div>
+                              <div className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-fixly-card"></div>
                             )}
                           </div>
                           
@@ -480,7 +480,7 @@ export default function MessagesPage() {
         {selectedConversation ? (
           <>
             {/* Chat Header */}
-            <div className="p-4 border-b border-fixly-border bg-white">
+            <div className="p-4 border-b border-fixly-border bg-fixly-card">
               {/* Subtle background refresh indicator */}
               {backgroundRefreshing && (
                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-fixly-accent opacity-70">
@@ -511,7 +511,7 @@ export default function MessagesPage() {
                       )}
                     </div>
                     {selectedConversation.participants?.find(p => p._id !== session.user.id)?.isOnline && (
-                      <div className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-white"></div>
+                      <div className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-fixly-card"></div>
                     )}
                   </div>
                   
@@ -573,7 +573,7 @@ export default function MessagesPage() {
                     <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                       isOwn 
                         ? 'bg-fixly-accent text-white' 
-                        : 'bg-white text-fixly-text border border-fixly-border'
+                        : 'bg-fixly-card text-fixly-text border border-fixly-border'
                     }`}>
                       <p className="text-sm">{message.content}</p>
                       <div className={`flex items-center justify-between mt-1 text-xs ${
@@ -595,7 +595,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Message Input */}
-            <div className="p-4 border-t border-fixly-border bg-white">
+            <div className="p-4 border-t border-fixly-border bg-fixly-card">
               <div className="flex items-end space-x-2">
                 <button 
                   onClick={() => fileInputRef.current?.click()}
@@ -611,7 +611,7 @@ export default function MessagesPage() {
                     onKeyPress={handleKeyPress}
                     placeholder="Type a message..."
                     rows={1}
-                    className="w-full px-4 py-2 border border-fixly-border rounded-lg focus:outline-none focus:ring-2 focus:ring-fixly-accent focus:border-transparent resize-none"
+                    className="w-full px-4 py-2 bg-fixly-card border border-fixly-border rounded-lg focus:outline-none focus:ring-2 focus:ring-fixly-accent focus:border-transparent resize-none text-fixly-text"
                     style={{ minHeight: '40px', maxHeight: '120px' }}
                   />
                 </div>
@@ -664,7 +664,7 @@ export default function MessagesPage() {
           initial={{ x: 300, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 300, opacity: 0 }}
-          className="w-80 border-l border-fixly-border bg-white p-4"
+          className="w-80 border-l border-fixly-border bg-fixly-card p-4"
         >
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-fixly-text">Conversation Info</h3>

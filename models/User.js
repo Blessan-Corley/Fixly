@@ -362,18 +362,40 @@ const userSchema = new mongoose.Schema({
   
   // Profile
   profilePhoto: {
-    type: String,
-    default: null, // Don't set default, let it be null initially
-    validate: {
-      validator: function(url) {
-        if (!url) return true; // Allow null/empty values
-        // Allow relative paths for default avatars
-        if (url.startsWith('/')) return true;
-        // Validate full URLs
-        const urlRegex = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i;
-        return urlRegex.test(url);
-      },
-      message: 'Please provide a valid image URL'
+    url: {
+      type: String,
+      default: null,
+      validate: {
+        validator: function(url) {
+          if (!url) return true; // Allow null/empty values
+          // Allow relative paths for default avatars
+          if (url.startsWith('/')) return true;
+          // Validate full URLs
+          const urlRegex = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i;
+          return urlRegex.test(url);
+        },
+        message: 'Please provide a valid image URL'
+      }
+    },
+    cloudinaryPublicId: {
+      type: String,
+      default: null
+    },
+    lastUpdated: {
+      type: Date,
+      default: null
+    },
+    originalName: {
+      type: String,
+      default: null
+    },
+    fileSize: {
+      type: Number,
+      default: null
+    },
+    dimensions: {
+      width: { type: Number, default: null },
+      height: { type: Number, default: null }
     }
   },
   picture: {

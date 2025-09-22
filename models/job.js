@@ -7,7 +7,7 @@ const jobSchema = new mongoose.Schema({
     required: [true, 'Job title is required'],
     trim: true,
     minlength: [10, 'Job title must be at least 10 characters'],
-    maxlength: [100, 'Job title cannot exceed 100 characters']
+    maxlength: [30, 'Job title cannot exceed 30 characters']
   },
   description: {
     type: String,
@@ -17,15 +17,7 @@ const jobSchema = new mongoose.Schema({
     maxlength: [2000, 'Job description cannot exceed 2000 characters']
   },
   
-  // Job Type & Urgency
-  type: {
-    type: String,
-    enum: {
-      values: ['one-time', 'recurring'],
-      message: 'Invalid job type'
-    },
-    default: 'one-time'
-  },
+  // Urgency (removed job type and recurring options)
   urgency: {
     type: String,
     enum: {
@@ -66,35 +58,48 @@ const jobSchema = new mongoose.Schema({
     default: 'intermediate'
   },
   
-  // Media & Attachments
+  // Media & Attachments (Cloudinary-based)
   attachments: [{
+    id: {
+      type: String,
+      required: [true, 'Attachment ID is required']
+    },
     url: {
       type: String,
-      required: [true, 'Attachment URL is required'],
-      validate: {
-        validator: function(url) {
-          const urlRegex = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp|pdf|doc|docx)$/i;
-          return urlRegex.test(url);
-        },
-        message: 'Please provide a valid file URL'
-      }
+      required: [true, 'Attachment URL is required']
+    },
+    publicId: {
+      type: String,
+      required: [true, 'Cloudinary public ID is required']
     },
     filename: {
       type: String,
       required: [true, 'Filename is required'],
       maxlength: [100, 'Filename cannot exceed 100 characters']
     },
-    fileType: {
+    type: {
       type: String,
-      enum: {
-        values: ['image', 'video', 'document'],
-        message: 'Invalid file type'
-      }
+      required: [true, 'File type is required']
     },
     size: {
       type: Number,
-      min: [0, 'File size cannot be negative'],
-      max: [10 * 1024 * 1024, 'File size cannot exceed 10MB'] // 10MB limit
+      required: [true, 'File size is required'],
+      min: [0, 'File size cannot be negative']
+    },
+    isImage: {
+      type: Boolean,
+      required: [true, 'Image flag is required']
+    },
+    isVideo: {
+      type: Boolean,
+      required: [true, 'Video flag is required']
+    },
+    width: Number,
+    height: Number,
+    duration: Number, // For videos
+    createdAt: {
+      type: Date,
+      default: Date.now
     }
   }],
   
@@ -183,21 +188,7 @@ const jobSchema = new mongoose.Schema({
       message: 'Deadline must be in the future'
     }
   },
-  estimatedDuration: {
-    value: {
-      type: Number,
-      min: [1, 'Duration must be at least 1'],
-      max: [365, 'Duration cannot exceed 365']
-    },
-    unit: {
-      type: String,
-      enum: {
-        values: ['hours', 'days', 'weeks'],
-        message: 'Invalid duration unit'
-      },
-      default: 'hours'
-    }
-  },
+  // Note: estimatedDuration removed as per new requirements
   
   // Job Lifecycle
   status: {

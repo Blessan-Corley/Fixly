@@ -53,6 +53,28 @@ function SettingsContent() {
   const [animationsEnabled, setAnimationsEnabled] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
+  // Email change states
+  const [newEmail, setNewEmail] = useState('');
+  const [showEmailChange, setShowEmailChange] = useState(false);
+  const [emailChangeStep, setEmailChangeStep] = useState('input'); // 'input', 'verify', 'success'
+
+  // OTP states
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpType, setOtpType] = useState(''); // 'username' or 'email'
+  const [otp, setOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  // Verification states
+  const [verificationData, setVerificationData] = useState({
+    documentType: '',
+    documentFiles: [],
+    additionalInfo: ''
+  });
+  const [uploadingVerification, setUploadingVerification] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+
   // Load preferences from cookies on mount
   useEffect(() => {
     const savedBadgeStyle = document.cookie
@@ -99,8 +121,8 @@ function SettingsContent() {
     });
   };
 
-  // Handle username change
-  const handleUsernameChange = async () => {
+  // Handle username change - now requires email OTP
+  const handleUsernameChange = () => {
     if (!newUsername || newUsername.length < 3) {
       toast.error('Username too short', {
         description: 'Username must be at least 3 characters long'
@@ -108,31 +130,303 @@ function SettingsContent() {
       return;
     }
 
+    // Check username availability first
+    checkUsernameAvailability();
+  };
+
+  // Check username availability
+  const checkUsernameAvailability = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/user/update-username', {
-        method: 'PUT',
+      const response = await fetch('/api/user/check-username', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: newUsername })
       });
 
       const data = await response.json();
 
-      if (data.success) {
-        toastMessages.profile.usernameChanged(data.user.username);
-        setShowUsernameChange(false);
-        setNewUsername('');
-        // Update user context would go here
+      if (data.available) {
+        // Username is available, proceed with email OTP
+        setOtpType('username');
+        setShowOtpModal(true);
+        sendOtpForUsernameChange();
       } else {
-        toast.error('Username change failed', {
+        toast.error('Username not available', {
           description: data.message || 'Please try a different username'
         });
       }
     } catch (error) {
-      toastMessages.error.network();
+      toast.error('Failed to check username availability');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Send OTP for username change
+  const sendOtpForUsernameChange = async () => {
+    setOtpLoading(true);
+    try {
+      const response = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user?.email,
+          type: 'username_change',
+          username: newUsername
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setOtpSent(true);
+        startCountdown();
+        toast.success('OTP sent to your email');
+      } else {
+        toast.error(data.message || 'Failed to send OTP');
+        setShowOtpModal(false);
+      }
+    } catch (error) {
+      toast.error('Failed to send OTP');
+      setShowOtpModal(false);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // Handle email change
+  const handleEmailChange = () => {
+    if (!newEmail || !isValidEmail(newEmail)) {
+      toast.error('Invalid email address');
+      return;
+    }
+
+    if (newEmail === user?.email) {
+      toast.error('New email cannot be the same as current email');
+      return;
+    }
+
+    // Check email availability first
+    checkEmailAvailability();
+  };
+
+  // Check email availability
+  const checkEmailAvailability = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/user/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail })
+      });
+
+      const data = await response.json();
+
+      if (data.available) {
+        // Email is available, proceed with OTP
+        setOtpType('email');
+        setShowOtpModal(true);
+        sendOtpForEmailChange();
+      } else {
+        toast.error('Email already in use', {
+          description: 'Please use a different email address'
+        });
+      }
+    } catch (error) {
+      toast.error('Failed to check email availability');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Send OTP for email change
+  const sendOtpForEmailChange = async () => {
+    setOtpLoading(true);
+    try {
+      const response = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newEmail,
+          type: 'email_change',
+          currentEmail: user?.email
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setOtpSent(true);
+        startCountdown();
+        toast.success(`OTP sent to ${newEmail}`);
+      } else {
+        toast.error(data.message || 'Failed to send OTP');
+        setShowOtpModal(false);
+      }
+    } catch (error) {
+      toast.error('Failed to send OTP');
+      setShowOtpModal(false);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // Verify OTP and complete change
+  const verifyOtpAndUpdate = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const endpoint = otpType === 'username' ? '/api/user/update-username' : '/api/user/update-email';
+      const requestBody = otpType === 'username'
+        ? { username: newUsername, otp, email: user?.email }
+        : { email: newEmail, otp, currentEmail: user?.email };
+
+      const response = await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (otpType === 'username') {
+          toast.success('Username updated successfully!');
+          setShowUsernameChange(false);
+          setNewUsername('');
+        } else {
+          toast.success('Email updated successfully!');
+          setShowEmailChange(false);
+          setNewEmail('');
+        }
+
+        setShowOtpModal(false);
+        setOtp('');
+        setOtpSent(false);
+        // Refresh user data
+        window.location.reload();
+      } else {
+        toast.error(data.message || 'Verification failed');
+      }
+    } catch (error) {
+      toast.error('Verification failed');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // Utility functions
+  const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const startCountdown = () => {
+    setCountdown(60);
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const resendOtp = () => {
+    if (otpType === 'username') {
+      sendOtpForUsernameChange();
+    } else {
+      sendOtpForEmailChange();
+    }
+  };
+
+  // Verification functions
+  const handleVerificationSubmit = async () => {
+    if (!verificationData.documentType || verificationData.documentFiles.length === 0) {
+      toast.error('Please select document type and upload at least one document');
+      return;
+    }
+
+    // Check if user can apply (once every 7 days)
+    const lastApplication = user?.verification?.lastApplicationDate;
+    if (lastApplication) {
+      const daysSinceLastApplication = Math.floor((Date.now() - new Date(lastApplication).getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSinceLastApplication < 7) {
+        toast.error(`You can only apply for verification once every 7 days. Please wait ${7 - daysSinceLastApplication} more days.`);
+        return;
+      }
+    }
+
+    setUploadingVerification(true);
+    try {
+      const formData = new FormData();
+      verificationData.documentFiles.forEach((file, index) => {
+        formData.append(`documents`, file);
+      });
+      formData.append('documentType', verificationData.documentType);
+      formData.append('additionalInfo', verificationData.additionalInfo);
+
+      const response = await fetch('/api/user/verification/apply', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Verification documents submitted successfully! We will review them within 3-5 business days.');
+        setShowVerificationModal(false);
+        setVerificationData({ documentType: '', documentFiles: [], additionalInfo: '' });
+        // Refresh user data
+        window.location.reload();
+      } else {
+        toast.error(data.message || 'Failed to submit verification');
+      }
+    } catch (error) {
+      toast.error('Failed to submit verification documents');
+    } finally {
+      setUploadingVerification(false);
+    }
+  };
+
+  const handleDocumentUpload = (files) => {
+    const validFiles = Array.from(files).filter(file => {
+      const isValidType = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'].includes(file.type);
+      const isValidSize = file.size <= 5 * 1024 * 1024; // 5MB
+
+      if (!isValidType) {
+        toast.error(`${file.name}: Only JPG, PNG, and PDF files are allowed`);
+        return false;
+      }
+      if (!isValidSize) {
+        toast.error(`${file.name}: File size must be less than 5MB`);
+        return false;
+      }
+      return true;
+    });
+
+    if (verificationData.documentFiles.length + validFiles.length > 3) {
+      toast.error('Maximum 3 documents allowed');
+      return;
+    }
+
+    setVerificationData(prev => ({
+      ...prev,
+      documentFiles: [...prev.documentFiles, ...validFiles]
+    }));
+  };
+
+  const removeDocument = (index) => {
+    setVerificationData(prev => ({
+      ...prev,
+      documentFiles: prev.documentFiles.filter((_, i) => i !== index)
+    }));
   };
 
   // Handle animations toggle
@@ -168,22 +462,16 @@ function SettingsContent() {
       description: 'Manage your personal information'
     },
     {
+      id: 'verification',
+      title: 'Account Verification',
+      icon: Shield,
+      description: 'Verify your identity for trust and safety'
+    },
+    {
       id: 'notifications',
       title: 'Notifications',
       icon: Bell,
       description: 'Control your notification preferences'
-    },
-    {
-      id: 'privacy',
-      title: 'Privacy & Security',
-      icon: Shield,
-      description: 'Manage your privacy settings'
-    },
-    {
-      id: 'password',
-      title: 'Password',
-      icon: Lock,
-      description: 'Change your password'
     },
     {
       id: 'appearance',
@@ -229,12 +517,58 @@ function SettingsContent() {
               <label className="block text-sm font-medium text-fixly-text mb-2">
                 Email
               </label>
-              <input
-                type="email"
-                defaultValue={user?.email || ''}
-                className="input-field"
-                disabled
-              />
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    value={user?.email || ''}
+                    className="input-field"
+                    disabled
+                  />
+                  <button
+                    onClick={() => setShowEmailChange(true)}
+                    className="btn-secondary text-sm whitespace-nowrap"
+                  >
+                    Change
+                  </button>
+                </div>
+
+                {showEmailChange && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="font-medium text-fixly-text mb-2">Change Email Address</h4>
+                    <div className="space-y-3">
+                      <input
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value.toLowerCase().trim())}
+                        placeholder="Enter new email address"
+                        className="input-field text-sm"
+                      />
+                      <p className="text-xs text-fixly-text-muted">
+                        An OTP will be sent to the new email address for verification
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleEmailChange}
+                          disabled={loading || !newEmail || !isValidEmail(newEmail)}
+                          className="btn-primary text-sm"
+                        >
+                          {loading ? 'Checking...' : 'Send OTP'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowEmailChange(false);
+                            setNewEmail('');
+                          }}
+                          className="btn-secondary text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-fixly-text mb-2">
@@ -333,6 +667,157 @@ function SettingsContent() {
               Save Changes
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderVerificationSettings = () => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-fixly-text mb-4">Account Verification</h3>
+        <div className="card">
+          {/* Current Status */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between p-4 bg-fixly-bg-secondary rounded-lg">
+              <div className="flex items-center">
+                <div className={`w-3 h-3 rounded-full mr-3 ${
+                  user?.isVerified
+                    ? 'bg-green-500'
+                    : user?.verification?.status === 'pending'
+                    ? 'bg-yellow-500'
+                    : user?.verification?.status === 'rejected'
+                    ? 'bg-red-500'
+                    : 'bg-gray-400'
+                }`}></div>
+                <div>
+                  <h4 className="font-medium text-fixly-text">Verification Status</h4>
+                  <p className="text-sm text-fixly-text-muted">
+                    {user?.isVerified
+                      ? 'Your account is verified'
+                      : user?.verification?.status === 'pending'
+                      ? 'Verification pending review'
+                      : user?.verification?.status === 'rejected'
+                      ? 'Verification rejected'
+                      : 'Not verified'
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  user?.isVerified
+                    ? 'bg-green-100 text-green-800'
+                    : user?.verification?.status === 'pending'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : user?.verification?.status === 'rejected'
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {user?.isVerified
+                    ? 'Verified'
+                    : user?.verification?.status === 'pending'
+                    ? 'Pending'
+                    : user?.verification?.status === 'rejected'
+                    ? 'Rejected'
+                    : 'Unverified'
+                  }
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Verification Benefits */}
+          <div className="mb-6">
+            <h4 className="font-medium text-fixly-text mb-3">Why verify your account?</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Shield className="h-4 w-4 text-blue-600 mr-2" />
+                  <span className="font-medium text-blue-800">Increased Trust</span>
+                </div>
+                <p className="text-sm text-blue-700">Build confidence with customers through verified identity</p>
+              </div>
+              <div className="p-3 bg-green-50 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
+                  <span className="font-medium text-green-800">Higher Visibility</span>
+                </div>
+                <p className="text-sm text-green-700">Verified profiles appear higher in search results</p>
+              </div>
+              <div className="p-3 bg-purple-50 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Star className="h-4 w-4 text-purple-600 mr-2" />
+                  <span className="font-medium text-purple-800">Premium Features</span>
+                </div>
+                <p className="text-sm text-purple-700">Access to exclusive features and opportunities</p>
+              </div>
+              <div className="p-3 bg-orange-50 rounded-lg">
+                <div className="flex items-center mb-2">
+                  <Loader className="h-4 w-4 text-orange-600 mr-2" />
+                  <span className="font-medium text-orange-800">Faster Support</span>
+                </div>
+                <p className="text-sm text-orange-700">Priority customer support for verified users</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Last Application Info */}
+          {user?.verification?.lastApplicationDate && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <h4 className="font-medium text-yellow-800 mb-2">Application History</h4>
+              <p className="text-sm text-yellow-700">
+                Last application: {new Date(user.verification.lastApplicationDate).toLocaleDateString()}
+              </p>
+              {user?.verification?.rejectionReason && (
+                <p className="text-sm text-red-600 mt-1">
+                  <strong>Rejection reason:</strong> {user.verification.rejectionReason}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Apply for Verification */}
+          {!user?.isVerified && user?.verification?.status !== 'pending' && (
+            <div className="text-center">
+              <button
+                onClick={() => setShowVerificationModal(true)}
+                className="btn-primary"
+                disabled={(() => {
+                  const lastApplication = user?.verification?.lastApplicationDate;
+                  if (!lastApplication) return false;
+                  const daysSinceLastApplication = Math.floor((Date.now() - new Date(lastApplication).getTime()) / (1000 * 60 * 60 * 24));
+                  return daysSinceLastApplication < 7;
+                })()}
+              >
+                <Shield className="h-4 w-4 mr-2" />
+                Apply for Verification
+              </button>
+              {(() => {
+                const lastApplication = user?.verification?.lastApplicationDate;
+                if (lastApplication) {
+                  const daysSinceLastApplication = Math.floor((Date.now() - new Date(lastApplication).getTime()) / (1000 * 60 * 60 * 24));
+                  if (daysSinceLastApplication < 7) {
+                    return (
+                      <p className="text-sm text-fixly-text-muted mt-2">
+                        You can apply again in {7 - daysSinceLastApplication} days
+                      </p>
+                    );
+                  }
+                }
+                return null;
+              })()}
+            </div>
+          )}
+
+          {user?.verification?.status === 'pending' && (
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <p className="text-blue-800 font-medium">Verification documents submitted!</p>
+              <p className="text-sm text-blue-600 mt-1">
+                We'll review your documents within 3-5 business days and notify you of the result.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -455,20 +940,10 @@ function SettingsContent() {
     switch (activeSection) {
       case 'profile':
         return renderProfileSettings();
+      case 'verification':
+        return renderVerificationSettings();
       case 'notifications':
         return renderNotificationSettings();
-      case 'privacy':
-        return (
-          <div className="card">
-            <p className="text-fixly-text-muted">Privacy settings coming soon...</p>
-          </div>
-        );
-      case 'password':
-        return (
-          <div className="card">
-            <p className="text-fixly-text-muted">Password change coming soon...</p>
-          </div>
-        );
       case 'appearance':
         return (
           <div className="space-y-6">
@@ -869,6 +1344,271 @@ function SettingsContent() {
           </p>
         </div>
       </div>
+
+      {/* Verification Modal */}
+      {showVerificationModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-fixly-card rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-fixly-text">Apply for Verification</h2>
+                <p className="text-sm text-fixly-text-muted">Upload your government ID for account verification</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowVerificationModal(false);
+                  setVerificationData({ documentType: '', documentFiles: [], additionalInfo: '' });
+                }}
+                className="text-fixly-text-muted hover:text-fixly-text"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              {/* Document Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-3">
+                  Document Type *
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    { value: 'aadhaar', label: 'Aadhaar Card', icon: '🆔' },
+                    { value: 'pan', label: 'PAN Card', icon: '💳' },
+                    { value: 'driving_license', label: 'Driving License', icon: '🚗' },
+                    { value: 'voter_id', label: 'Voter ID', icon: '🗳️' },
+                    { value: 'passport', label: 'Passport', icon: '📘' },
+                    { value: 'other', label: 'Other Government ID', icon: '📋' }
+                  ].map((doc) => (
+                    <label
+                      key={doc.value}
+                      className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                        verificationData.documentType === doc.value
+                          ? 'border-fixly-accent bg-fixly-accent/5'
+                          : 'border-fixly-border hover:border-fixly-accent/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="documentType"
+                        value={doc.value}
+                        checked={verificationData.documentType === doc.value}
+                        onChange={(e) => setVerificationData(prev => ({ ...prev, documentType: e.target.value }))}
+                        className="sr-only"
+                      />
+                      <span className="text-2xl mr-3">{doc.icon}</span>
+                      <span className="font-medium text-fixly-text">{doc.label}</span>
+                      {verificationData.documentType === doc.value && (
+                        <Check className="h-4 w-4 text-fixly-accent ml-auto" />
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* File Upload */}
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-3">
+                  Upload Documents * (Max 3 files, 5MB each)
+                </label>
+                <div className="border-2 border-dashed border-fixly-border rounded-lg p-6 text-center">
+                  <input
+                    type="file"
+                    multiple
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    onChange={(e) => handleDocumentUpload(e.target.files)}
+                    className="hidden"
+                    id="verification-upload"
+                  />
+                  <label htmlFor="verification-upload" className="cursor-pointer">
+                    <div className="flex flex-col items-center">
+                      <Plus className="h-8 w-8 text-fixly-accent mb-2" />
+                      <p className="text-fixly-text font-medium">Click to upload documents</p>
+                      <p className="text-sm text-fixly-text-muted">JPG, PNG, or PDF files</p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Uploaded Files */}
+                {verificationData.documentFiles.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {verificationData.documentFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-fixly-bg-secondary rounded-lg">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-fixly-accent/10 rounded flex items-center justify-center mr-3">
+                            <span className="text-xs text-fixly-accent">
+                              {file.type.includes('pdf') ? 'PDF' : 'IMG'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-fixly-text">{file.name}</p>
+                            <p className="text-xs text-fixly-text-muted">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeDocument(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Additional Information */}
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-2">
+                  Additional Information (Optional)
+                </label>
+                <textarea
+                  value={verificationData.additionalInfo}
+                  onChange={(e) => setVerificationData(prev => ({ ...prev, additionalInfo: e.target.value }))}
+                  placeholder="Any additional information that might help with verification..."
+                  className="textarea-field h-20"
+                  maxLength={500}
+                />
+                <p className="text-xs text-fixly-text-muted mt-1">
+                  {verificationData.additionalInfo.length}/500 characters
+                </p>
+              </div>
+
+              {/* Important Notes */}
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <h4 className="font-medium text-yellow-800 mb-2">Important Notes:</h4>
+                <ul className="text-sm text-yellow-700 space-y-1">
+                  <li>• All documents must be clear and readable</li>
+                  <li>• Personal information will be kept confidential</li>
+                  <li>• Review typically takes 3-5 business days</li>
+                  <li>• You can only apply once every 7 days</li>
+                </ul>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setShowVerificationModal(false);
+                    setVerificationData({ documentType: '', documentFiles: [], additionalInfo: '' });
+                  }}
+                  className="btn-ghost flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleVerificationSubmit}
+                  disabled={uploadingVerification || !verificationData.documentType || verificationData.documentFiles.length === 0}
+                  className="btn-primary flex-1"
+                >
+                  {uploadingVerification ? (
+                    <Loader className="animate-spin h-4 w-4 mr-2" />
+                  ) : (
+                    <Shield className="h-4 w-4 mr-2" />
+                  )}
+                  {uploadingVerification ? 'Submitting...' : 'Submit for Verification'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* OTP Verification Modal */}
+      {showOtpModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-fixly-card rounded-xl max-w-md w-full p-6"
+          >
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-fixly-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Mail className="h-8 w-8 text-fixly-accent" />
+              </div>
+              <h2 className="text-xl font-bold text-fixly-text mb-2">
+                Verify {otpType === 'username' ? 'Username Change' : 'Email Change'}
+              </h2>
+              <p className="text-sm text-fixly-text-muted">
+                {otpType === 'username'
+                  ? `Enter the OTP sent to ${user?.email} to change your username to "${newUsername}"`
+                  : `Enter the OTP sent to ${newEmail} to verify your new email address`
+                }
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-2">
+                  6-Digit OTP
+                </label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Enter OTP"
+                  className="input-field text-center text-lg tracking-wider"
+                  maxLength={6}
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowOtpModal(false);
+                    setOtp('');
+                    setOtpSent(false);
+                    if (otpType === 'username') {
+                      setShowUsernameChange(false);
+                      setNewUsername('');
+                    } else {
+                      setShowEmailChange(false);
+                      setNewEmail('');
+                    }
+                  }}
+                  className="btn-ghost flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={verifyOtpAndUpdate}
+                  disabled={otpLoading || otp.length !== 6}
+                  className="btn-primary flex-1"
+                >
+                  {otpLoading ? (
+                    <Loader className="animate-spin h-4 w-4 mr-2" />
+                  ) : null}
+                  Verify & Update
+                </button>
+              </div>
+
+              {/* Resend OTP */}
+              <div className="text-center">
+                {countdown > 0 ? (
+                  <p className="text-sm text-fixly-text-muted">
+                    Resend OTP in {countdown} seconds
+                  </p>
+                ) : (
+                  <button
+                    onClick={resendOtp}
+                    disabled={otpLoading}
+                    className="text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
+                  >
+                    Resend OTP
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

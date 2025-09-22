@@ -18,7 +18,11 @@ import {
   X,
   Plus,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Lock,
+  Eye,
+  EyeOff,
+  Target
 } from 'lucide-react';
 import { useApp } from '../../providers';
 import { toast } from 'sonner';
@@ -27,6 +31,7 @@ import { GlobalLoading } from '../../../components/ui/GlobalLoading';
 import { searchCities } from '../../../data/cities';
 import SkillSelector from '../../../components/SkillSelector/SkillSelector';
 import { ProfileVerificationStatus } from '../../../components/dashboard/VerificationPrompt';
+import EnhancedLocationSelector from '../../../components/LocationPicker/EnhancedLocationSelector';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
@@ -61,8 +66,33 @@ export default function ProfilePage() {
   const [cityResults, setCityResults] = useState([]);
   const [showCityDropdown, setShowCityDropdown] = useState(false);
 
+  // Location picker states
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  // Password change states
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  // Initialize form data only once when user data is available
+  const [initialized, setInitialized] = useState(false);
+
   useEffect(() => {
-    if (user && !editing) {
+    if (user && !initialized) {
       setFormData({
         name: user.name || '',
         bio: user.bio || '',
@@ -77,8 +107,9 @@ export default function ProfilePage() {
           marketingEmails: user.preferences?.marketingEmails ?? false
         }
       });
+      setInitialized(true);
     }
-  }, [user, editing]);
+  }, [user, initialized]);
 
   // City search
   useEffect(() => {
@@ -115,11 +146,153 @@ export default function ProfilePage() {
     setShowCityDropdown(false);
   }, [handleInputChange]);
 
+  // Password change functions
+  const validatePassword = (password) => {
+    const minLength = password.length >= 8;
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+    return {
+      isValid: minLength && hasLetter && hasNumber && hasSpecial,
+      requirements: {
+        minLength,
+        hasLetter,
+        hasNumber,
+        hasSpecial
+      }
+    };
+  };
+
+  const handlePasswordChange = async () => {
+    // Validate current password
+    if (!passwordData.currentPassword) {
+      toast.error('Current password is required');
+      return;
+    }
+
+    // Validate new password
+    const validation = validatePassword(passwordData.newPassword);
+    if (!validation.isValid) {
+      toast.error('New password does not meet requirements');
+      return;
+    }
+
+    // Check passwords match
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    // Check if new password is different from current
+    if (passwordData.currentPassword === passwordData.newPassword) {
+      toast.error('New password must be different from current password');
+      return;
+    }
+
+    // Send OTP for verification
+    setPasswordLoading(true);
+    try {
+      const response = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user?.email,
+          type: 'password_reset'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setShowOtpModal(true);
+        setOtpSent(true);
+        startCountdown();
+        toast.success('OTP sent to your email for verification');
+      } else {
+        toast.error(data.message || 'Failed to send OTP');
+      }
+    } catch (error) {
+      toast.error('Failed to send OTP');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const verifyOtpAndChangePassword = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const response = await fetch('/api/user/change-password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword,
+          otp: otp,
+          email: user?.email
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Password changed successfully!');
+        setShowPasswordChange(false);
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setShowOtpModal(false);
+        setOtp('');
+        setOtpSent(false);
+      } else {
+        toast.error(data.message || 'Failed to change password');
+      }
+    } catch (error) {
+      toast.error('Failed to change password');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const startCountdown = () => {
+    setCountdown(60);
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const resendPasswordOtp = () => {
+    handlePasswordChange();
+  };
+
+  // Location picker functions
+  const handleLocationSelect = (location) => {
+    handleInputChange('location', location);
+    setShowLocationPicker(false);
+    toast.success('Location updated successfully');
+  };
 
   const handlePhotoUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only JPEG, PNG, and WebP images are allowed');
+      return;
+    }
+
+    // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
       toast.error('File size must be less than 5MB');
       return;
@@ -129,9 +302,8 @@ export default function ProfilePage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('type', 'profile');
 
-      const response = await fetch('/api/upload', {
+      const response = await fetch('/api/user/profile-photo', {
         method: 'POST',
         body: formData
       });
@@ -140,10 +312,19 @@ export default function ProfilePage() {
 
       if (response.ok) {
         // Update user photo immediately
-        updateUser({ photoURL: data.url });
-        toast.success('Profile photo updated');
+        updateUser({
+          profilePhoto: data.profilePhoto.url,
+          photoURL: data.profilePhoto.url
+        });
+        toast.success(`Profile photo updated successfully! Next update available on ${new Date(data.profilePhoto.nextUpdateDate).toLocaleDateString()}`);
       } else {
-        toast.error(data.message || 'Upload failed');
+        if (response.status === 429) {
+          // Rate limited
+          const daysRemaining = data.daysRemaining || 7;
+          toast.error(`${data.message} (${daysRemaining} days remaining)`);
+        } else {
+          toast.error(data.message || 'Upload failed');
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -168,6 +349,7 @@ export default function ProfilePage() {
       if (response.ok) {
         updateUser(data.user);
         setEditing(false);
+        setInitialized(false); // Allow re-initialization with updated data
         toast.success('Profile updated successfully');
       } else {
         toast.error(data.message || 'Failed to update profile');
@@ -197,7 +379,45 @@ export default function ProfilePage() {
       </div>
       {children}
     </div>
-  ));
+  ), [editing]);
+
+  // Memoize form inputs to prevent unnecessary re-renders
+  const NameInput = memo(() => (
+    <div>
+      <label className="block text-sm font-medium text-fixly-text mb-2">
+        Full Name
+      </label>
+      <input
+        key="name-input"
+        type="text"
+        value={formData.name || ''}
+        onChange={(e) => handleInputChange('name', e.target.value)}
+        className="input-field"
+        autoComplete="name"
+        autoFocus={false}
+      />
+    </div>
+  ), [formData.name, handleInputChange]);
+
+  const BioInput = memo(() => (
+    <div>
+      <label className="block text-sm font-medium text-fixly-text mb-2">
+        Bio
+      </label>
+      <textarea
+        key="bio-input"
+        value={formData.bio || ''}
+        onChange={(e) => handleInputChange('bio', e.target.value)}
+        placeholder="Tell others about yourself..."
+        className="textarea-field h-24"
+        maxLength={500}
+        autoComplete="off"
+      />
+      <p className="text-xs text-fixly-text-muted mt-1">
+        {(formData.bio || '').length}/500 characters
+      </p>
+    </div>
+  ), [formData.bio, handleInputChange]);
 
   if (!user) {
     return (
@@ -251,9 +471,18 @@ export default function ProfilePage() {
                   className="hidden"
                 />
               </div>
-              <p className="text-sm text-fixly-text-muted mt-2">
-                Click camera to change photo
-              </p>
+              <div className="mt-2 text-center">
+                <p className="text-sm text-fixly-text-muted">
+                  Click camera to change photo
+                </p>
+                {user.profilePhoto?.lastUpdated && (
+                  <p className="text-xs text-fixly-text-muted mt-1">
+                    Last updated: {new Date(user.profilePhoto.lastUpdated).toLocaleDateString()}
+                    <br />
+                    Next update: {new Date(new Date(user.profilePhoto.lastUpdated).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
             </div>
           </ProfileSection>
 
@@ -265,13 +494,13 @@ export default function ProfilePage() {
                 <div className="flex items-center">
                   {user.isVerified ? (
                     <>
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-1" />
-                      <span className="text-green-600 text-sm">Verified</span>
+                      <CheckCircle className="h-4 w-4 text-fixly-success mr-1" />
+                      <span className="text-fixly-success text-sm">Verified</span>
                     </>
                   ) : (
                     <>
-                      <AlertCircle className="h-4 w-4 text-orange-500 mr-1" />
-                      <span className="text-orange-600 text-sm">Pending</span>
+                      <AlertCircle className="h-4 w-4 text-fixly-warning mr-1" />
+                      <span className="text-fixly-warning text-sm">Pending</span>
                     </>
                   )}
                 </div>
@@ -289,7 +518,7 @@ export default function ProfilePage() {
                   <div className="flex items-center justify-between">
                     <span className="text-fixly-text-muted">Rating</span>
                     <div className="flex items-center">
-                      <Star className="h-4 w-4 text-yellow-500 mr-1" />
+                      <Star className="h-4 w-4 text-fixly-warning mr-1" />
                       <span className="text-sm text-fixly-text">
                         {user.rating?.average?.toFixed(1) || '0.0'} ({user.rating?.count || 0})
                       </span>
@@ -331,36 +560,8 @@ export default function ProfilePage() {
           <ProfileSection title="Basic Information" editable={true}>
             {editing ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name || ''}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
-                    className="input-field"
-                    autoComplete="name"
-                    autoFocus={false}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-fixly-text mb-2">
-                    Bio
-                  </label>
-                  <textarea
-                    value={formData.bio || ''}
-                    onChange={(e) => handleInputChange('bio', e.target.value)}
-                    placeholder="Tell others about yourself..."
-                    className="textarea-field h-24"
-                    maxLength={500}
-                    autoComplete="off"
-                  />
-                  <p className="text-xs text-fixly-text-muted mt-1">
-                    {(formData.bio || '').length}/500 characters
-                  </p>
-                </div>
+                <NameInput />
+                <BioInput />
               </div>
             ) : (
               <div className="space-y-4">
@@ -374,7 +575,15 @@ export default function ProfilePage() {
 
                 <div className="flex items-center">
                   <Mail className="h-4 w-4 text-fixly-accent mr-3" />
-                  <span className="text-fixly-text">{user.email}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-fixly-text">{user.email}</span>
+                    {user.emailVerified && (
+                      <div className="flex items-center">
+                        <CheckCircle className="h-4 w-4 text-fixly-success mr-1" />
+                        <span className="text-xs text-fixly-success font-medium">Verified</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center">
@@ -396,56 +605,60 @@ export default function ProfilePage() {
             {editing ? (
               <div>
                 <label className="block text-sm font-medium text-fixly-text mb-2">
-                  City
+                  Location
                 </label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
-                  <input
-                    type="text"
-                    value={formData.location ? formData.location.name : citySearch}
-                    onChange={(e) => {
-                      setCitySearch(e.target.value);
-                      if (formData.location) {
-                        handleInputChange('location', null);
-                      }
-                    }}
-                    placeholder="Search for your city"
-                    className="input-field pl-10"
-                  />
-                  {formData.location && (
-                    <button
-                      onClick={() => {
-                        handleInputChange('location', null);
-                        setCitySearch('');
-                      }}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                    >
-                      <X className="h-4 w-4 text-fixly-text-muted" />
-                    </button>
-                  )}
-                </div>
-                
-                {showCityDropdown && (
-                  <div className="mt-1 bg-fixly-card border border-fixly-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {cityResults.map((city, index) => (
+                <div className="space-y-3">
+                  {formData.location ? (
+                    <div className="flex items-center justify-between p-3 bg-fixly-bg-secondary rounded-lg">
+                      <div className="flex items-center">
+                        <MapPin className="h-4 w-4 text-fixly-accent mr-2" />
+                        <div>
+                          <div className="font-medium text-fixly-text">
+                            {formData.location.name || formData.location.city}
+                          </div>
+                          {formData.location.state && (
+                            <div className="text-sm text-fixly-text-muted">
+                              {formData.location.state}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <button
-                        key={index}
-                        onClick={() => selectCity(city)}
-                        className="w-full px-4 py-2 text-left hover:bg-fixly-accent/10"
+                        onClick={() => handleInputChange('location', null)}
+                        className="text-fixly-text-muted hover:text-fixly-error"
                       >
-                        <div className="font-medium text-fixly-text">{city.name}</div>
-                        <div className="text-sm text-fixly-text-light">{city.state}</div>
+                        <X className="h-4 w-4" />
                       </button>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 border-2 border-dashed border-fixly-border rounded-lg">
+                      <MapPin className="h-8 w-8 text-fixly-text-muted mx-auto mb-2" />
+                      <p className="text-fixly-text-muted mb-3">No location selected</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setShowLocationPicker(true)}
+                    className="w-full btn-primary"
+                  >
+                    <Target className="h-4 w-4 mr-2" />
+                    {formData.location ? 'Change Location' : 'Select Location'}
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center">
-                <MapPin className="h-4 w-4 text-fixly-accent mr-3" />
-                <span className="text-fixly-text">
-                  {user.location ? `${user.location.name || user.location.city}, ${user.location.state}` : 'Not specified'}
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <MapPin className="h-4 w-4 text-fixly-accent mr-3" />
+                  <span className="text-fixly-text">
+                    {user.location ? `${user.location.name || user.location.city}, ${user.location.state}` : 'Not specified'}
+                  </span>
+                </div>
+                {user.location && (
+                  <span className="text-xs text-fixly-text-muted">
+                    Accurate to {user.location.accuracy ? `${Math.round(user.location.accuracy)}m` : '~1km'}
+                  </span>
+                )}
               </div>
             )}
           </ProfileSection>
@@ -481,7 +694,7 @@ export default function ProfilePage() {
                           onChange={(e) => handleInputChange('availableNow', e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+                        <div className="w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
                       </label>
                     </div>
 
@@ -529,11 +742,11 @@ export default function ProfilePage() {
                     <div className="flex items-center">
                       {user.availableNow ? (
                         <>
-                          <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                          <span className="text-green-600 text-sm">Available Now</span>
+                          <div className="w-2 h-2 bg-fixly-success rounded-full mr-2 animate-pulse"></div>
+                          <span className="text-fixly-success text-sm">Available Now</span>
                         </>
                       ) : (
-                        <span className="text-gray-500 text-sm">Not Available</span>
+                        <span className="text-fixly-text-muted text-sm">Not Available</span>
                       )}
                     </div>
                   </div>
@@ -541,6 +754,158 @@ export default function ProfilePage() {
               )}
             </ProfileSection>
           )}
+
+          {/* Password Change Section */}
+          <ProfileSection title="Password & Security">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium text-fixly-text">Password</h4>
+                  <p className="text-sm text-fixly-text-muted">Change your account password</p>
+                </div>
+                <button
+                  onClick={() => setShowPasswordChange(true)}
+                  className="btn-secondary text-sm"
+                >
+                  <Lock className="h-4 w-4 mr-2" />
+                  Change Password
+                </button>
+              </div>
+
+              {showPasswordChange && (
+                <div className="p-4 bg-fixly-info-bg border border-fixly-info-bg rounded-lg space-y-4">
+                  <h4 className="font-medium text-fixly-text">Change Password</h4>
+
+                  {/* Current Password */}
+                  <div>
+                    <label className="block text-sm font-medium text-fixly-text mb-2">
+                      Current Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords.current ? 'text' : 'password'}
+                        value={passwordData.currentPassword}
+                        onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                        placeholder="Enter current password"
+                        className="input-field pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted hover:text-fixly-text"
+                      >
+                        {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* New Password */}
+                  <div>
+                    <label className="block text-sm font-medium text-fixly-text mb-2">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords.new ? 'text' : 'password'}
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                        placeholder="Enter new password"
+                        className="input-field pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted hover:text-fixly-text"
+                      >
+                        {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+
+                    {/* Password Requirements */}
+                    {passwordData.newPassword && (
+                      <div className="mt-2 space-y-1">
+                        {Object.entries({
+                          minLength: 'At least 8 characters',
+                          hasLetter: 'Contains letters',
+                          hasNumber: 'Contains numbers',
+                          hasSpecial: 'Contains special characters'
+                        }).map(([key, label]) => {
+                          const validation = validatePassword(passwordData.newPassword);
+                          const isValid = validation.requirements[key];
+                          return (
+                            <div key={key} className={`flex items-center text-xs ${isValid ? 'text-fixly-success' : 'text-fixly-error'}`}>
+                              <div className={`w-1 h-1 rounded-full mr-2 ${isValid ? 'bg-fixly-success' : 'bg-fixly-error'}`}></div>
+                              {label}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div>
+                    <label className="block text-sm font-medium text-fixly-text mb-2">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPasswords.confirm ? 'text' : 'password'}
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                        placeholder="Confirm new password"
+                        className="input-field pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-fixly-text-muted hover:text-fixly-text"
+                      >
+                        {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+
+                    {/* Password Match Indicator */}
+                    {passwordData.confirmPassword && (
+                      <div className={`mt-1 text-xs ${
+                        passwordData.newPassword === passwordData.confirmPassword
+                          ? 'text-fixly-success'
+                          : 'text-fixly-error'
+                      }`}>
+                        {passwordData.newPassword === passwordData.confirmPassword
+                          ? '✓ Passwords match'
+                          : '✗ Passwords do not match'
+                        }
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handlePasswordChange}
+                      disabled={passwordLoading || !passwordData.currentPassword || !passwordData.newPassword ||
+                               !passwordData.confirmPassword || passwordData.newPassword !== passwordData.confirmPassword ||
+                               !validatePassword(passwordData.newPassword).isValid}
+                      className="btn-primary text-sm"
+                    >
+                      {passwordLoading ? <Loader className="animate-spin h-4 w-4 mr-2" /> : null}
+                      {passwordLoading ? 'Sending OTP...' : 'Change Password'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowPasswordChange(false);
+                        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                        setShowPasswords({ current: false, new: false, confirm: false });
+                      }}
+                      className="btn-secondary text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ProfileSection>
 
           {/* Preferences */}
           <ProfileSection title="Notification Preferences" editable={true}>
@@ -569,7 +934,7 @@ export default function ProfilePage() {
                         onChange={(e) => handleInputChange(`preferences.${key}`, e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+                      <div className="w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
                     </label>
                   </div>
                 ))}
@@ -585,7 +950,7 @@ export default function ProfilePage() {
                   <div key={key} className="flex items-center justify-between">
                     <span className="text-fixly-text">{label}</span>
                     <span className={`text-sm ${
-                      user.preferences?.[key] ? 'text-green-600' : 'text-gray-500'
+                      user.preferences?.[key] ? 'text-fixly-success' : 'text-fixly-text-muted'
                     }`}>
                       {user.preferences?.[key] ? 'Enabled' : 'Disabled'}
                     </span>
@@ -613,21 +978,8 @@ export default function ProfilePage() {
               <button
                 onClick={() => {
                   setEditing(false);
-                  // Reset form data
-                  setFormData({
-                    name: user.name || '',
-                    bio: user.bio || '',
-                    location: user.location || null,
-                    skills: user.skills || [],
-                    availableNow: user.availableNow ?? true,
-                    serviceRadius: user.serviceRadius || 10,
-                    preferences: {
-                      emailNotifications: user.preferences?.emailNotifications ?? true,
-                      smsNotifications: user.preferences?.smsNotifications ?? true,
-                      jobAlerts: user.preferences?.jobAlerts ?? true,
-                      marketingEmails: user.preferences?.marketingEmails ?? false
-                    }
-                  });
+                  setInitialized(false); // Reset initialization flag
+                  // Reset form data will happen via useEffect when initialized becomes false
                 }}
                 className="btn-ghost"
               >
@@ -637,6 +989,133 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+
+      {/* OTP Verification Modal for Password Change */}
+      {showOtpModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-fixly-card rounded-xl max-w-md w-full p-6"
+          >
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-fixly-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Lock className="h-8 w-8 text-fixly-accent" />
+              </div>
+              <h2 className="text-xl font-bold text-fixly-text mb-2">
+                Verify Password Change
+              </h2>
+              <p className="text-sm text-fixly-text-muted">
+                Enter the OTP sent to {user?.email} to confirm your password change
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-2">
+                  6-Digit OTP
+                </label>
+                <input
+                  type="text"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Enter OTP"
+                  className="input-field text-center text-lg tracking-wider"
+                  maxLength={6}
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowOtpModal(false);
+                    setOtp('');
+                    setOtpSent(false);
+                    setShowPasswordChange(false);
+                    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                  }}
+                  className="btn-ghost flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={verifyOtpAndChangePassword}
+                  disabled={otpLoading || otp.length !== 6}
+                  className="btn-primary flex-1"
+                >
+                  {otpLoading ? (
+                    <Loader className="animate-spin h-4 w-4 mr-2" />
+                  ) : null}
+                  Change Password
+                </button>
+              </div>
+
+              {/* Resend OTP */}
+              <div className="text-center">
+                {countdown > 0 ? (
+                  <p className="text-sm text-fixly-text-muted">
+                    Resend OTP in {countdown} seconds
+                  </p>
+                ) : (
+                  <button
+                    onClick={resendPasswordOtp}
+                    disabled={passwordLoading}
+                    className="text-sm text-fixly-accent hover:text-fixly-accent-dark transition-colors"
+                  >
+                    Resend OTP
+                  </button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Enhanced Location Picker Modal */}
+      {showLocationPicker && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-fixly-card rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-fixly-text">Select Your Location</h2>
+                <p className="text-sm text-fixly-text-muted">
+                  Choose your location using GPS or search for an address
+                </p>
+              </div>
+              <button
+                onClick={() => setShowLocationPicker(false)}
+                className="text-fixly-text-muted hover:text-fixly-text"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <EnhancedLocationSelector
+                onLocationSelect={handleLocationSelect}
+                initialLocation={formData.location}
+                showLabel={false}
+                required={false}
+                className="w-full"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-fixly-border">
+              <button
+                onClick={() => setShowLocationPicker(false)}
+                className="btn-ghost flex-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,23 +1,32 @@
 // app/api/jobs/post/route.js - Enhanced with all improvements
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
+import { authOptions } from '../../../../lib/auth';
+import { redisRateLimit } from '../../../../lib/redis';
 import connectDB from '../../../../lib/db';
 import Job from '../../../../models/Job';
+import JobDraft from '../../../../models/JobDraft';
 import User from '../../../../models/User';
-import { rateLimit } from '../../../../utils/rateLimiting';
-// Removed complex validation and error handling imports for simplicity
+import { ContentValidator } from '../../../../lib/validations/content-validator';
 
 export const dynamic = 'force-dynamic';
 
 // Simplified job posting for reliability
 export async function POST(request) {
   try {
-    // Basic rate limiting
-    const rateLimitResult = await rateLimit(request, 'job_posting', 10, 60 * 60 * 1000);
+    // Get client IP for rate limiting
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
+
+    // Redis-based rate limiting - 10 job posts per hour per IP
+    const rateLimitResult = await redisRateLimit(`job_posting:${ip}`, 10, 3600);
     if (!rateLimitResult.success) {
       return NextResponse.json(
-        { message: 'Too many requests. Please try again later.' },
+        {
+          success: false,
+          message: 'Too many job posting requests. Please try again later.',
+          resetTime: new Date(rateLimitResult.resetTime).toISOString()
+        },
         { status: 429 }
       );
     }
@@ -77,7 +86,15 @@ export async function POST(request) {
     }
 
     // Parse request body
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (jsonError) {
+      return NextResponse.json({
+        success: false,
+        message: 'Invalid request body'
+      }, { status: 400 });
+    }
 
     const {
       title,
@@ -87,17 +104,81 @@ export async function POST(request) {
       location,
       deadline,
       urgency,
-      type,
       attachments,
       scheduledDate,
-      estimatedDuration,
-      featured
+      featured,
+      draftId // If converting from draft
     } = body;
 
-    // Basic validation
-    if (!title || !description || !deadline || !location) {
+    // Enhanced validation with content filtering
+    if (!title || !description || !deadline || !location || !attachments) {
       return NextResponse.json(
-        { message: 'Missing required fields' },
+        {
+          success: false,
+          message: 'Missing required fields: title, description, deadline, location, and at least 1 photo are required'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate title length (30 characters max)
+    if (title.length > 30) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Job title cannot exceed 30 characters'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate attachments - at least 1 photo required
+    const photos = attachments.filter(att => att.isImage);
+    const videos = attachments.filter(att => att.isVideo);
+
+    if (photos.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'At least 1 photo is required'
+        },
+        { status: 400 }
+      );
+    }
+
+    if (photos.length > 5 || videos.length > 1) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Maximum 5 photos and 1 video allowed'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Content validation for title and description
+    const titleValidation = await ContentValidator.validateContent(title, 'job_posting', session.user.id);
+    if (!titleValidation.isValid) {
+      const violations = titleValidation.violations.map(v => v.type).join(', ');
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Job title contains inappropriate content: ${violations}`,
+          violations: titleValidation.violations
+        },
+        { status: 400 }
+      );
+    }
+
+    const descValidation = await ContentValidator.validateContent(description, 'job_posting', session.user.id);
+    if (!descValidation.isValid) {
+      const violations = descValidation.violations.map(v => v.type).join(', ');
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Job description contains inappropriate content: ${violations}`,
+          violations: descValidation.violations
+        },
         { status: 400 }
       );
     }
@@ -116,7 +197,7 @@ export async function POST(request) {
       );
     }
 
-    // Create job data
+    // Create job data with enhanced attachment structure
     const jobData = {
       title: title?.trim() || '',
       description: description?.trim() || '',
@@ -137,30 +218,27 @@ export async function POST(request) {
       },
       deadline: new Date(deadline),
       urgency: urgency || 'flexible',
-      type: type || 'one-time',
       createdBy: user._id,
       status: 'open',
-      featured: featured && user.plan?.type === 'pro' ? true : false
+      featured: featured && user.plan?.type === 'pro' ? true : false,
+      attachments: attachments.map(attachment => ({
+        id: attachment.id,
+        url: attachment.url,
+        publicId: attachment.publicId,
+        filename: attachment.filename || attachment.name,
+        type: attachment.type,
+        size: attachment.size,
+        isImage: attachment.isImage,
+        isVideo: attachment.isVideo,
+        width: attachment.width,
+        height: attachment.height,
+        duration: attachment.duration,
+        createdAt: attachment.createdAt || new Date()
+      }))
     };
 
     if (scheduledDate) {
       jobData.scheduledDate = new Date(scheduledDate);
-    }
-
-    if (estimatedDuration) {
-      jobData.estimatedDuration = {
-        value: estimatedDuration.value,
-        unit: estimatedDuration.unit || 'hours'
-      };
-    }
-
-    if (attachments && attachments.length > 0) {
-      jobData.attachments = attachments.map(attachment => ({
-        url: attachment.url,
-        filename: attachment.filename,
-        fileType: attachment.fileType,
-        size: attachment.size
-      }));
     }
 
     // Set featured expiry if featured
@@ -172,19 +250,39 @@ export async function POST(request) {
     const job = new Job(jobData);
     await job.save();
 
+    // Handle draft conversion if draftId provided
+    if (draftId) {
+      try {
+        const draft = await JobDraft.findOne({
+          _id: draftId,
+          createdBy: user._id
+        });
+
+        if (draft) {
+          await draft.convertToJob(job._id);
+          console.log(`📋➡️📝 Draft ${draftId} converted to job ${job._id}`);
+        }
+      } catch (draftError) {
+        console.error('❌ Draft conversion error:', draftError);
+        // Continue even if draft conversion fails
+      }
+    }
+
     // Update user's job posting stats and add notification
     try {
       user.lastJobPostedAt = new Date();
       user.jobsPosted = (user.jobsPosted || 0) + 1;
       user.lastActivityAt = new Date();
-      
-      // Add notification to user
-      user.addNotification(
-        'job_posted',
-        'Job Posted Successfully',
-        `Your job "${job.title}" has been posted and is now visible to fixers.`
-      );
-      
+
+      // Add notification to user (if user model has this method)
+      if (typeof user.addNotification === 'function') {
+        user.addNotification(
+          'job_posted',
+          'Job Posted Successfully',
+          `Your job "${job.title}" has been posted and is now visible to fixers.`
+        );
+      }
+
       await user.save();
     } catch (userUpdateError) {
       console.error('User update error:', userUpdateError);
@@ -235,11 +333,19 @@ export async function POST(request) {
 // GET endpoint for user's jobs
 export async function GET(request) {
   try {
-    // Basic rate limiting
-    const rateLimitResult = await rateLimit(request, 'api_requests', 100, 15 * 60 * 1000);
+    // Get client IP for rate limiting
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
+
+    // Redis-based rate limiting - 100 requests per 15 minutes per IP
+    const rateLimitResult = await redisRateLimit(`api_requests:${ip}`, 100, 900);
     if (!rateLimitResult.success) {
       return NextResponse.json(
-        { message: 'Too many requests. Please try again later.' },
+        {
+          success: false,
+          message: 'Too many requests. Please try again later.',
+          resetTime: new Date(rateLimitResult.resetTime).toISOString()
+        },
         { status: 429 }
       );
     }

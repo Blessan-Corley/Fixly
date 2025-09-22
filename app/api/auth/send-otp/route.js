@@ -26,12 +26,13 @@ export async function POST(request) {
       );
     }
 
-    const { email, purpose, name } = await request.json();
+    const { email, purpose, name, type, username, currentEmail } = await request.json();
+    const otpPurpose = purpose || type; // Support both 'purpose' and 'type' for backward compatibility
 
     // Validate input
-    if (!email || !purpose) {
+    if (!email || !otpPurpose) {
       return NextResponse.json(
-        { message: 'Email and purpose are required' },
+        { message: 'Email and purpose/type are required' },
         { status: 400 }
       );
     }
@@ -46,18 +47,18 @@ export async function POST(request) {
     }
 
     // Validate purpose
-    if (!['signup', 'password_reset'].includes(purpose)) {
+    if (!['signup', 'password_reset', 'username_change', 'email_change'].includes(otpPurpose)) {
       return NextResponse.json(
         { message: 'Invalid purpose specified' },
         { status: 400 }
       );
     }
 
-    console.log(`📧 OTP request - Email: ${email}, Purpose: ${purpose}`);
+    console.log(`📧 OTP request - Email: ${email}, Purpose: ${otpPurpose}`);
 
     await connectDB();
 
-    if (purpose === 'signup') {
+    if (otpPurpose === 'signup') {
       // For signup, check if email is already registered
       const existingUser = await User.findOne({ email: email.toLowerCase() });
       if (existingUser) {
@@ -96,7 +97,7 @@ export async function POST(request) {
         );
       }
 
-    } else if (purpose === 'password_reset') {
+    } else if (otpPurpose === 'password_reset') {
       // For password reset, check if email exists
       const user = await User.findOne({ email: email.toLowerCase() });
       if (!user) {
@@ -119,6 +120,118 @@ export async function POST(request) {
       } else {
         return NextResponse.json(
           { message: result.message },
+          { status: 500 }
+        );
+      }
+    } else if (otpPurpose === 'username_change') {
+      // For username change, verify current user email and send OTP
+      const { getServerSession } = await import('next-auth/next');
+      const { authOptions } = await import('../../../../lib/auth');
+      const session = await getServerSession(authOptions);
+
+      if (!session) {
+        return NextResponse.json(
+          { message: 'Authentication required' },
+          { status: 401 }
+        );
+      }
+
+      const user = await User.findById(session.user.id);
+      if (!user || user.email !== email) {
+        return NextResponse.json(
+          { message: 'Invalid email' },
+          { status: 400 }
+        );
+      }
+
+      // Generate and store OTP
+      const { generateOTP, storeOTP } = await import('../../../../lib/otpService');
+      const otp = generateOTP();
+      const storeResult = await storeOTP(email, otp, 'username_change');
+
+      if (!storeResult.success) {
+        return NextResponse.json(
+          { message: 'Failed to generate verification code' },
+          { status: 500 }
+        );
+      }
+
+      // Send email
+      const { sendEmail } = await import('../../../../utils/emailService');
+      const emailResult = await sendEmail(
+        email,
+        'Username Change Verification',
+        `Your verification code to change username to "${username}" is: ${otp}. This code expires in 5 minutes.`
+      );
+
+      if (emailResult.success) {
+        return NextResponse.json({
+          success: true,
+          message: 'Verification code sent to your email',
+          expiresIn: 300
+        });
+      } else {
+        return NextResponse.json(
+          { message: 'Failed to send verification email' },
+          { status: 500 }
+        );
+      }
+
+    } else if (otpPurpose === 'email_change') {
+      // For email change, send OTP to new email
+      const { getServerSession } = await import('next-auth/next');
+      const { authOptions } = await import('../../../../lib/auth');
+      const session = await getServerSession(authOptions);
+
+      if (!session) {
+        return NextResponse.json(
+          { message: 'Authentication required' },
+          { status: 401 }
+        );
+      }
+
+      // Check if new email is already taken
+      const existingUser = await User.findOne({
+        email: email.toLowerCase(),
+        _id: { $ne: session.user.id }
+      });
+
+      if (existingUser) {
+        return NextResponse.json(
+          { message: 'Email is already registered' },
+          { status: 400 }
+        );
+      }
+
+      // Generate and store OTP
+      const { generateOTP, storeOTP } = await import('../../../../lib/otpService');
+      const otp = generateOTP();
+      const storeResult = await storeOTP(email, otp, 'email_change');
+
+      if (!storeResult.success) {
+        return NextResponse.json(
+          { message: 'Failed to generate verification code' },
+          { status: 500 }
+        );
+      }
+
+      // Send email to new email address
+      const { sendEmail } = await import('../../../../utils/emailService');
+      const emailResult = await sendEmail(
+        email,
+        'Email Change Verification',
+        `Your verification code to change your email address is: ${otp}. This code expires in 5 minutes.`
+      );
+
+      if (emailResult.success) {
+        return NextResponse.json({
+          success: true,
+          message: `Verification code sent to ${email}`,
+          expiresIn: 300
+        });
+      } else {
+        return NextResponse.json(
+          { message: 'Failed to send verification email' },
           { status: 500 }
         );
       }
