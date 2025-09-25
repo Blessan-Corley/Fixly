@@ -329,7 +329,7 @@ function JobApplyContent() {
                   <h2 className="text-lg font-semibold text-fixly-text">{job.title}</h2>
                   <div className="flex items-center text-sm text-fixly-text-light mt-1">
                     <MapPin className="h-4 w-4 mr-1" />
-                    {job.location.city}, {job.location.state}
+                    <span className="text-fixly-accent">Location will be shared after application approval</span>
                   </div>
                 </div>
                 <div className="text-right">

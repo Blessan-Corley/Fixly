@@ -13,10 +13,10 @@ export default function CookieConsent() {
     // Check if user has already given consent
     const hasConsent = localStorage.getItem('fixly-cookie-consent');
     if (!hasConsent) {
-      // Simple delay: Wait for page to load + 2 seconds for better UX
+      // Simple delay: Wait for page to load + 10 seconds for better UX
       const timer = setTimeout(() => {
         setShowConsent(true);
-      }, 2000); // Show popup 2 seconds after component mounts
+      }, 10000); // Show popup 10 seconds after component mounts
 
       return () => clearTimeout(timer);
     }

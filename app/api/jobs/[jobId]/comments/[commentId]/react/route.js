@@ -6,7 +6,8 @@ import connectDB from '@/lib/db';
 import Job from '@/models/Job';
 import User from '@/models/User';
 import { rateLimit } from '@/utils/rateLimiting';
-import { emitToJob } from '@/lib/socket';
+import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
+import { sendTemplatedNotification, NOTIFICATION_TEMPLATES } from '@/lib/services/notificationService';
 
 export async function POST(request, { params }) {
   try {
@@ -128,36 +129,41 @@ export async function POST(request, { params }) {
 
     // Send notification only for new reactions (not removals) and not to self
     if (result.reacted && targetAuthor.toString() !== user._id.toString()) {
-      const targetUser = await User.findById(targetAuthor);
-      if (targetUser) {
-        await targetUser.addNotification(
-          replyId ? 'reply_reacted' : 'comment_reacted',
-          replyId ? 'Reply Reaction' : 'Comment Reaction',
-          notificationMessage,
-          {
-            jobId: job._id,
-            commentId,
-            replyId,
-            reactionType: result.reactionType,
-            fromUser: user._id
-          }
-        );
-      }
+      await sendTemplatedNotification(
+        'COMMENT_LIKE',
+        targetAuthor.toString(),
+        {
+          likerName: user.name,
+          jobId: job._id.toString(),
+          commentId: commentId
+        },
+        {
+          senderId: user._id.toString(),
+          priority: 'low'
+        }
+      );
     }
 
-    // Emit real-time event for reaction
-    emitToJob(jobId, 'comment:reaction_toggled', {
-      commentId,
-      replyId,
-      jobId,
-      userId: user._id,
-      userName: user.name,
-      reacted: result.reacted,
-      reactionType: result.reactionType,
-      reactionCount: result.count,
-      type: replyId ? 'reply' : 'comment',
-      timestamp: new Date()
-    });
+    // Emit real-time event for reaction via Ably
+    try {
+      const ably = getServerAbly();
+      const channel = ably.channels.get(CHANNELS.jobComments(jobId));
+
+      await channel.publish(EVENTS.COMMENT_REACTED, {
+        commentId,
+        replyId,
+        jobId,
+        userId: user._id,
+        userName: user.name,
+        reacted: result.reacted,
+        reactionType: result.reactionType,
+        reactionCount: result.count,
+        type: replyId ? 'reply' : 'comment',
+        timestamp: new Date().toISOString()
+      });
+    } catch (ablyError) {
+      console.error('Failed to publish reaction event:', ablyError);
+    }
 
     return NextResponse.json({
       success: true,

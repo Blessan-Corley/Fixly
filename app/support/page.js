@@ -52,7 +52,7 @@ export default function SupportPage() {
       description: 'Send us a detailed message about your issue',
       availability: 'Response within 24 hours',
       icon: Mail,
-      color: 'bg-purple-500',
+      color: 'bg-fixly-primary',
       action: 'Send Email',
       email: 'blessancorley@gmail.com'
     }

@@ -198,6 +198,113 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  banDetails: {
+    reason: {
+      type: String,
+      enum: [
+        'spam_behavior',
+        'inappropriate_content',
+        'harassment',
+        'fraud_scam',
+        'fake_profile',
+        'multiple_accounts',
+        'poor_service_quality',
+        'payment_issues',
+        'violation_terms',
+        'safety_concerns',
+        'legal_issues',
+        'other'
+      ]
+    },
+    description: {
+      type: String,
+      maxlength: [1000, 'Ban description cannot exceed 1000 characters']
+    },
+    type: {
+      type: String,
+      enum: ['temporary', 'permanent'],
+      default: 'temporary'
+    },
+    duration: {
+      type: Number, // days for temporary bans
+      min: [1, 'Ban duration must be at least 1 day'],
+      max: [365, 'Ban duration cannot exceed 1 year']
+    },
+    bannedAt: {
+      type: Date,
+      default: Date.now
+    },
+    expiresAt: {
+      type: Date
+    },
+    bannedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: function() { return this.banned; }
+    },
+    bannedByRole: {
+      type: String,
+      enum: ['admin', 'moderator', 'system'],
+      default: 'admin'
+    },
+    appeal: {
+      submitted: {
+        type: Boolean,
+        default: false
+      },
+      submittedAt: Date,
+      message: {
+        type: String,
+        maxlength: [2000, 'Appeal message cannot exceed 2000 characters']
+      },
+      evidence: [{
+        type: String, // URLs to evidence
+        description: String
+      }],
+      status: {
+        type: String,
+        enum: ['pending', 'under_review', 'approved', 'rejected'],
+        default: 'pending'
+      },
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      reviewedAt: Date,
+      response: {
+        type: String,
+        maxlength: [1000, 'Appeal response cannot exceed 1000 characters']
+      }
+    },
+    warnings: [{
+      reason: String,
+      description: String,
+      issuedAt: {
+        type: Date,
+        default: Date.now
+      },
+      issuedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      acknowledged: {
+        type: Boolean,
+        default: false
+      },
+      acknowledgedAt: Date
+    }],
+    previousBans: [{
+      reason: String,
+      duration: Number,
+      bannedAt: Date,
+      unbannedAt: Date,
+      bannedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    }]
+  },
+  // Keep legacy fields for backward compatibility
   bannedReason: {
     type: String,
     maxlength: [500, 'Ban reason cannot exceed 500 characters']
@@ -208,8 +315,60 @@ const userSchema = new mongoose.Schema({
     ref: 'User'
   },
   
-  // Enhanced Location Storage
+  // Enhanced Location Storage with Comprehensive Tracking
   location: {
+    // Current/Real-time Location (used by location tracking service)
+    coordinates: {
+      latitude: {
+        type: Number,
+        validate: {
+          validator: function(lat) {
+            if (lat == null || lat === undefined) return true;
+            return lat >= 6.4 && lat <= 37.6; // India bounds
+          },
+          message: 'Latitude must be within India bounds (6.4 to 37.6)'
+        }
+      },
+      longitude: {
+        type: Number,
+        validate: {
+          validator: function(lng) {
+            if (lng == null || lng === undefined) return true;
+            return lng >= 68.7 && lng <= 97.25; // India bounds
+          },
+          message: 'Longitude must be within India bounds (68.7 to 97.25)'
+        }
+      }
+    },
+    address: {
+      type: String,
+      trim: true,
+      maxlength: [300, 'Address cannot exceed 300 characters']
+    },
+    city: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'City name cannot exceed 50 characters']
+    },
+    state: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'State name cannot exceed 50 characters']
+    },
+    accuracy: {
+      type: Number,
+      min: [0, 'Accuracy cannot be negative']
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    },
+    source: {
+      type: String,
+      enum: ['gps', 'manual', 'home', 'network'],
+      default: 'gps'
+    },
+
     // Home/Primary Address
     homeAddress: {
       doorNo: {
@@ -237,8 +396,8 @@ const userSchema = new mongoose.Schema({
         trim: true,
         validate: {
           validator: function(code) {
-            if (!code) return true; // Allow empty for optional
-            return /^[1-9][0-9]{5}$/.test(code); // Indian postal code format
+            if (!code) return true;
+            return /^[1-9][0-9]{5}$/.test(code);
           },
           message: 'Please provide a valid Indian postal code'
         }
@@ -249,115 +408,156 @@ const userSchema = new mongoose.Schema({
         maxlength: [300, 'Formatted address cannot exceed 300 characters']
       },
       coordinates: {
-        lat: {
+        latitude: {
           type: Number,
           validate: {
             validator: function(lat) {
-              // Allow null/undefined for optional coordinates
               if (lat == null || lat === undefined) return true;
-              // For actual coordinates, validate India bounds
-              if (lat !== 0) {
-                return lat >= 6.4 && lat <= 37.6;
-              }
-              // Allow exactly 0 as a valid value (no location set)
-              return true;
+              return lat >= 6.4 && lat <= 37.6;
             },
             message: 'Latitude must be within India bounds (6.4 to 37.6)'
           }
         },
-        lng: {
+        longitude: {
           type: Number,
           validate: {
             validator: function(lng) {
-              // Allow null/undefined for optional coordinates
               if (lng == null || lng === undefined) return true;
-              // For actual coordinates, validate India bounds
-              if (lng !== 0) {
-                return lng >= 68.7 && lng <= 97.25;
-              }
-              // Allow exactly 0 as a valid value (no location set)
-              return true;
+              return lng >= 68.7 && lng <= 97.25;
             },
             message: 'Longitude must be within India bounds (68.7 to 97.25)'
           }
-        },
-        accuracy: Number // GPS accuracy in meters
+        }
       },
       setAt: {
         type: Date,
         default: Date.now
       }
-    },
+    }
+  },
 
-    // Current/Last Known Location
-    currentLocation: {
-      lat: {
+  // Location History with Comprehensive Metadata
+  locationHistory: [{
+    coordinates: {
+      latitude: {
         type: Number,
+        required: true,
         validate: {
           validator: function(lat) {
-            // Allow null/undefined for optional coordinates
-            if (lat == null || lat === undefined) return true;
-            // For actual coordinates, validate India bounds
-            if (lat !== 0) {
-              return lat >= 6.4 && lat <= 37.6;
-            }
-            // Allow exactly 0 as a valid value (no location set)
-            return true;
+            return lat >= 6.4 && lat <= 37.6;
           },
-          message: 'Latitude must be within India bounds (6.4 to 37.6)'
+          message: 'Latitude must be within India bounds'
         }
       },
-      lng: {
+      longitude: {
         type: Number,
+        required: true,
         validate: {
           validator: function(lng) {
-            // Allow null/undefined for optional coordinates
-            if (lng == null || lng === undefined) return true;
-            // For actual coordinates, validate India bounds
-            if (lng !== 0) {
-              return lng >= 68.7 && lng <= 97.25;
-            }
-            // Allow exactly 0 as a valid value (no location set)
-            return true;
+            return lng >= 68.7 && lng <= 97.25;
           },
-          message: 'Longitude must be within India bounds (68.7 to 97.25)'
+          message: 'Longitude must be within India bounds'
         }
-      },
-      accuracy: Number,
-      lastUpdated: {
-        type: Date,
-        default: Date.now
-      },
-      source: {
-        type: String,
-        enum: ['gps', 'manual', 'home'],
-        default: 'gps'
       }
     },
-
-    // Backwards compatibility
+    address: {
+      type: String,
+      trim: true,
+      maxlength: [300, 'Address cannot exceed 300 characters']
+    },
     city: {
       type: String,
-      required: false,
       trim: true,
       maxlength: [50, 'City name cannot exceed 50 characters']
     },
     state: {
       type: String,
-      required: false,
       trim: true,
       maxlength: [50, 'State name cannot exceed 50 characters']
     },
-    lat: {
+    accuracy: {
       type: Number,
-      min: [-90, 'Invalid latitude'],
-      max: [90, 'Invalid latitude']
+      min: [0, 'Accuracy cannot be negative'],
+      max: [10000, 'Accuracy seems unrealistic']
     },
-    lng: {
-      type: Number,
-      min: [-180, 'Invalid longitude'],
-      max: [180, 'Invalid longitude']
+    timestamp: {
+      type: Date,
+      required: true,
+      default: Date.now
+    },
+    source: {
+      type: String,
+      enum: ['gps', 'manual', 'home', 'network', 'auto_update'],
+      default: 'gps'
+    },
+    metadata: {
+      deviceInfo: {
+        userAgent: String,
+        platform: String,
+        battery: Number,
+        networkType: String
+      },
+      sessionId: String,
+      requestId: String,
+      updateReason: {
+        type: String,
+        enum: ['manual', 'periodic', 'job_search', 'application', 'emergency'],
+        default: 'periodic'
+      },
+      processingTime: Number // ms
     }
+  }],
+
+  // Location Tracking Settings & Status
+  locationTracking: {
+    isEnabled: {
+      type: Boolean,
+      default: false
+    },
+    enabledAt: Date,
+    disabledAt: Date,
+    lastUpdateRequested: Date,
+    updateInterval: {
+      type: Number,
+      default: 30, // minutes
+      min: [5, 'Update interval cannot be less than 5 minutes'],
+      max: [120, 'Update interval cannot exceed 2 hours']
+    },
+    permissions: {
+      precise: {
+        type: Boolean,
+        default: false
+      },
+      background: {
+        type: Boolean,
+        default: false
+      },
+      grantedAt: Date,
+      revokedAt: Date
+    },
+    preferences: {
+      onlyWhenActive: {
+        type: Boolean,
+        default: true
+      },
+      lowPowerMode: {
+        type: Boolean,
+        default: false
+      },
+      autoDisableAfterInactivity: {
+        type: Boolean,
+        default: true
+      },
+      inactivityThreshold: {
+        type: Number,
+        default: 7 // days
+      }
+    }
+  },
+
+  // Timestamp for last location update
+  lastLocationUpdate: {
+    type: Date
   },
   
   // Profile
@@ -760,6 +960,27 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: 0,
       min: [0, 'Rating count cannot be negative']
+    },
+    distribution: {
+      5: { type: Number, default: 0 },
+      4: { type: Number, default: 0 },
+      3: { type: Number, default: 0 },
+      2: { type: Number, default: 0 },
+      1: { type: Number, default: 0 }
+    },
+    // Detailed ratings for fixers
+    fixerRatings: {
+      communication: { type: Number, default: 0 },
+      quality: { type: Number, default: 0 },
+      timeliness: { type: Number, default: 0 },
+      professionalism: { type: Number, default: 0 }
+    },
+    // Detailed ratings for hirers
+    hirerRatings: {
+      clarity: { type: Number, default: 0 },
+      responsiveness: { type: Number, default: 0 },
+      paymentTimeliness: { type: Number, default: 0 },
+      professionalism: { type: Number, default: 0 }
     }
   },
   
@@ -904,7 +1125,15 @@ userSchema.methods.getNextJobPostTime = function() {
 };
 
 // Method to check if fixer can apply to jobs
+// NOTE: Fixers can apply to unlimited jobs. Credits are only deducted when application is ACCEPTED.
 userSchema.methods.canApplyToJob = function() {
+  if (this.role !== 'fixer') return false;
+  if (this.banned) return false;
+  return true; // All fixers can apply to jobs. Credits deducted only on job assignment.
+};
+
+// Method to check if fixer can be assigned more jobs (credit check for acceptance)
+userSchema.methods.canBeAssignedJob = function() {
   if (this.role !== 'fixer') return false;
   if (this.banned) return false;
   if (this.plan && this.plan.type === 'pro' && this.plan.status === 'active') return true;
@@ -921,12 +1150,185 @@ userSchema.methods.addNotification = function(type, title, message, data = {}) {
     data,
     createdAt: new Date()
   });
-  
+
   // Keep only last 50 notifications
   if (this.notifications.length > 50) {
     this.notifications = this.notifications.slice(0, 50);
   }
-  
+};
+
+// Method to ban user
+userSchema.methods.banUser = function(adminId, reason, description, type = 'temporary', duration = 7) {
+  // Store previous ban if exists
+  if (this.banned) {
+    if (!this.banDetails.previousBans) {
+      this.banDetails.previousBans = [];
+    }
+    this.banDetails.previousBans.push({
+      reason: this.banDetails.reason,
+      duration: this.banDetails.duration,
+      bannedAt: this.banDetails.bannedAt,
+      unbannedAt: new Date(),
+      bannedBy: this.banDetails.bannedBy
+    });
+  }
+
+  this.banned = true;
+  this.banDetails = {
+    reason,
+    description,
+    type,
+    duration: type === 'temporary' ? duration : undefined,
+    bannedAt: new Date(),
+    expiresAt: type === 'temporary' ? new Date(Date.now() + duration * 24 * 60 * 60 * 1000) : undefined,
+    bannedBy: adminId,
+    bannedByRole: 'admin',
+    appeal: {
+      submitted: false,
+      status: 'pending'
+    },
+    warnings: this.banDetails?.warnings || [],
+    previousBans: this.banDetails?.previousBans || []
+  };
+
+  // Update legacy fields for compatibility
+  this.bannedReason = description;
+  this.bannedAt = new Date();
+  this.bannedBy = adminId;
+
+  // Add notification
+  this.addNotification(
+    'account_banned',
+    'Account Banned',
+    `Your account has been ${type === 'permanent' ? 'permanently' : 'temporarily'} banned. Reason: ${reason}`,
+    { banType: type, duration, reason, description }
+  );
+
+  return this.save();
+};
+
+// Method to unban user
+userSchema.methods.unbanUser = function(adminId, reason = 'Appeal approved') {
+  if (!this.banned) {
+    throw new Error('User is not banned');
+  }
+
+  // Store in previous bans
+  if (!this.banDetails.previousBans) {
+    this.banDetails.previousBans = [];
+  }
+  this.banDetails.previousBans.push({
+    reason: this.banDetails.reason,
+    duration: this.banDetails.duration,
+    bannedAt: this.banDetails.bannedAt,
+    unbannedAt: new Date(),
+    bannedBy: this.banDetails.bannedBy
+  });
+
+  this.banned = false;
+  this.banDetails = undefined;
+  this.bannedReason = undefined;
+  this.bannedAt = undefined;
+  this.bannedBy = undefined;
+
+  // Add notification
+  this.addNotification(
+    'account_unbanned',
+    'Account Unbanned',
+    `Your account has been unbanned. Reason: ${reason}`,
+    { unbanReason: reason, unbannedBy: adminId }
+  );
+
+  return this.save();
+};
+
+// Method to check if ban has expired
+userSchema.methods.isBanExpired = function() {
+  if (!this.banned || !this.banDetails) return false;
+  if (this.banDetails.type === 'permanent') return false;
+  if (!this.banDetails.expiresAt) return false;
+
+  return new Date() > this.banDetails.expiresAt;
+};
+
+// Method to get remaining ban time
+userSchema.methods.getBanTimeRemaining = function() {
+  if (!this.banned || !this.banDetails) return null;
+  if (this.banDetails.type === 'permanent') return 'permanent';
+  if (!this.banDetails.expiresAt) return null;
+
+  const now = new Date();
+  const expires = this.banDetails.expiresAt;
+
+  if (now >= expires) return null; // Ban has expired
+
+  const diffMs = expires - now;
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.ceil(diffMs / (1000 * 60 * 60));
+
+  if (diffDays > 1) {
+    return `${diffDays} days`;
+  } else if (diffHours > 1) {
+    return `${diffHours} hours`;
+  } else {
+    return 'Less than 1 hour';
+  }
+};
+
+// Method to issue warning
+userSchema.methods.issueWarning = function(adminId, reason, description) {
+  if (!this.banDetails) {
+    this.banDetails = { warnings: [] };
+  }
+  if (!this.banDetails.warnings) {
+    this.banDetails.warnings = [];
+  }
+
+  this.banDetails.warnings.push({
+    reason,
+    description,
+    issuedAt: new Date(),
+    issuedBy: adminId,
+    acknowledged: false
+  });
+
+  // Add notification
+  this.addNotification(
+    'warning_issued',
+    'Warning Issued',
+    `You have received a warning: ${reason}`,
+    { reason, description, warningId: this.banDetails.warnings.length - 1 }
+  );
+
+  return this.save();
+};
+
+// Method to submit ban appeal
+userSchema.methods.submitBanAppeal = function(message, evidence = []) {
+  if (!this.banned || !this.banDetails) {
+    throw new Error('User is not banned');
+  }
+
+  if (this.banDetails.appeal && this.banDetails.appeal.submitted) {
+    throw new Error('Appeal already submitted');
+  }
+
+  this.banDetails.appeal = {
+    submitted: true,
+    submittedAt: new Date(),
+    message,
+    evidence,
+    status: 'pending'
+  };
+
+  // Add notification
+  this.addNotification(
+    'appeal_submitted',
+    'Ban Appeal Submitted',
+    'Your ban appeal has been submitted and is under review.',
+    { appealMessage: message }
+  );
+
   return this.save();
 };
 

@@ -8,7 +8,8 @@ import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
 import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
 import { analytics } from '@/lib/cache';
-import notificationService from '@/lib/realtime/NotificationService';
+import { sendTemplatedNotification, NOTIFICATION_TEMPLATES } from '@/lib/services/notificationService';
+import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
 import nodemailer from 'nodemailer';
 
 // Email transporter
@@ -66,16 +67,8 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Check if user can apply (credits or pro subscription)
-    if (!user.canApplyToJob()) {
-      return NextResponse.json(
-        { 
-          message: 'You have used all 3 free job applications. Upgrade to Pro for unlimited access.',
-          needsUpgrade: true
-        },
-        { status: 403 }
-      );
-    }
+    // Note: Fixer can apply to unlimited jobs. Credits are only deducted when application is ACCEPTED by hirer.
+    // The credit check and deduction happens in /applications/route.js when hirer accepts the application.
 
     const job = await Job.findById(jobId).populate('createdBy', 'name email preferences');
     if (!job) {
@@ -250,34 +243,63 @@ export async function POST(request, { params }) {
     // Get the newly created application
     const newApplication = job.applications[job.applications.length - 1];
 
-    // Emit real-time event for new application
-    emitToJob(jobId, 'application:new', {
-      jobId: job._id,
-      applicationId: newApplication._id,
-      fixer: {
-        _id: user._id,
-        name: user.name,
-        username: user.username,
-        photoURL: user.photoURL,
-        rating: user.rating
-      },
-      proposedAmount: newApplication.proposedAmount,
-      priceVariance: newApplication.priceVariance,
-      priceVariancePercentage: newApplication.priceVariancePercentage,
-      timeEstimate: newApplication.timeEstimate,
-      timestamp: new Date()
-    });
+    // Send real-time events via Ably
+    try {
+      const ably = getServerAbly();
 
-    // Emit to job owner specifically
-    emitToUser(job.createdBy._id.toString(), 'notification:new', {
-      type: 'job_applied',
-      jobId: job._id,
-      fromUser: user._id,
-      message: `${user.name} has applied to your job "${job.title}"`,
-      timestamp: new Date()
-    });
+      // Broadcast to job applications channel
+      const jobApplicationsChannel = ably.channels.get(CHANNELS.jobApplications(jobId));
+      await jobApplicationsChannel.publish(EVENTS.APPLICATION_SUBMITTED, {
+        jobId: job._id,
+        applicationId: newApplication._id,
+        fixer: {
+          _id: user._id,
+          name: user.name,
+          username: user.username,
+          photoURL: user.photoURL,
+          rating: user.rating
+        },
+        proposedAmount: newApplication.proposedAmount,
+        priceVariance: newApplication.priceVariance,
+        priceVariancePercentage: newApplication.priceVariancePercentage,
+        timeEstimate: newApplication.timeEstimate,
+        timestamp: new Date().toISOString()
+      });
 
-    // Add notification to hirer
+      // Send notification to job owner
+      const userNotificationChannel = ably.channels.get(CHANNELS.userNotifications(job.createdBy._id.toString()));
+      await userNotificationChannel.publish(EVENTS.NOTIFICATION_SENT, {
+        type: 'job_applied',
+        jobId: job._id,
+        fromUser: user._id,
+        message: `${user.name} has applied to your job "${job.title}"`,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (ablyError) {
+      console.error('Failed to send real-time notifications via Ably:', ablyError);
+    }
+
+    // Send templated notification using notification service
+    try {
+      await sendTemplatedNotification(
+        'JOB_APPLICATION',
+        job.createdBy._id.toString(),
+        {
+          applicantName: user.name,
+          jobId: job._id.toString(),
+          jobTitle: job.title
+        },
+        {
+          senderId: user._id.toString(),
+          priority: 'high'
+        }
+      );
+    } catch (notificationError) {
+      console.error('Failed to send templated notification:', notificationError);
+    }
+
+    // Add notification to hirer (fallback)
     const hirer = job.createdBy;
     await hirer.addNotification(
       'job_applied',
@@ -330,7 +352,8 @@ export async function POST(request, { params }) {
         percentageDifference: application.priceVariancePercentage,
         budgetType: job.budget.type
       } : null,
-      creditsRemaining: user.plan?.type === 'pro' ? 'unlimited' : Math.max(0, 3 - (user.plan?.creditsUsed || 0))
+      creditsRemaining: user.plan?.type === 'pro' ? 'unlimited' : Math.max(0, 3 - (user.plan?.creditsUsed || 0)),
+      creditNote: 'Credits are only deducted when your application is accepted by the hirer'
     }, { status: 201 });
 
   } catch (error) {

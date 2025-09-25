@@ -43,7 +43,7 @@ const NOTIFICATION_CONFIG = {
   },
   message: {
     icon: MessageSquare,
-    color: 'text-purple-600 bg-purple-100 dark:bg-purple-900/20 dark:text-purple-400',
+    color: 'text-fixly-primary bg-fixly-accent/20 dark:bg-fixly-accent/10 dark:text-fixly-primary',
     priority: 'high'
   },
   payment_received: {

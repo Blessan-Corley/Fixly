@@ -510,10 +510,69 @@ export default function SignupPage() {
     }
   }, [citySearch]);
 
+  // OPTIMIZED: Enhanced input handling with debouncing
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+
+    // Clear existing error immediately for better UX
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+
+    // Debounced validation for username and email
+    if (field === 'username' || field === 'email') {
+      clearTimeout(window.validationTimeout);
+      window.validationTimeout = setTimeout(async () => {
+        await performLiveValidation(field, value);
+      }, 500); // 500ms debounce
+    }
+  };
+
+  // Live validation for better user experience
+  const performLiveValidation = async (field, value) => {
+    if (!value) return;
+
+    try {
+      if (field === 'username') {
+        // Use existing ValidationRules from your utilities
+        const validation = window.ValidationRules?.validateUsername(value);
+        if (!validation?.valid) {
+          setErrors(prev => ({ ...prev, username: validation.error }));
+          return;
+        }
+
+        // Check availability
+        const response = await fetch('/api/auth/check-username', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: value, type: 'username' })
+        });
+
+        const result = await response.json();
+        if (!result.available) {
+          setErrors(prev => ({ ...prev, username: result.message }));
+        }
+      } else if (field === 'email') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value)) {
+          setErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+          return;
+        }
+
+        // Check if email is available
+        const response = await fetch('/api/auth/check-username', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: value, type: 'email' })
+        });
+
+        const result = await response.json();
+        if (!result.available) {
+          setErrors(prev => ({ ...prev, email: result.message }));
+        }
+      }
+    } catch (error) {
+      console.error('Live validation error:', error);
     }
   };
 

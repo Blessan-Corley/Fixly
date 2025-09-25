@@ -147,7 +147,7 @@ export default function LocationPermission({
     if (!internalShowBanner || locationState === 'granted') return null;
 
     const wasRejected = isLocationRejected();
-    const bannerColor = wasRejected ? 'from-amber-50 to-orange-50' : 'from-blue-50 to-indigo-50';
+    const bannerColor = wasRejected ? 'from-amber-50 to-orange-50' : 'from-fixly-accent/10 to-fixly-secondary/10';
     const borderColor = wasRejected ? 'border-amber-200' : 'border-blue-200';
     const iconBg = wasRejected ? 'bg-amber-100' : 'bg-blue-100';
     const iconColor = wasRejected ? 'text-amber-600' : 'text-blue-600';

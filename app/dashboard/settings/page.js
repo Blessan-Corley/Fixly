@@ -30,7 +30,7 @@ import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 import { toastMessages } from '../../../utils/toast';
 import { useTheme } from '../../../contexts/ThemeContext';
-import PWAInstallButton from '../../../components/ui/PWAInstallButton';
+import PWAInstallPrompt from '../../../components/ui/PWAInstallPrompt';
 import PushNotificationManager from '../../../components/ui/PushNotificationManager';
 
 export default function SettingsPage() {
@@ -745,12 +745,12 @@ function SettingsContent() {
                 </div>
                 <p className="text-sm text-green-700">Verified profiles appear higher in search results</p>
               </div>
-              <div className="p-3 bg-purple-50 rounded-lg">
+              <div className="p-3 bg-fixly-accent/10 rounded-lg">
                 <div className="flex items-center mb-2">
-                  <Star className="h-4 w-4 text-purple-600 mr-2" />
-                  <span className="font-medium text-purple-800">Premium Features</span>
+                  <Star className="h-4 w-4 text-fixly-primary mr-2" />
+                  <span className="font-medium text-fixly-primary">Premium Features</span>
                 </div>
-                <p className="text-sm text-purple-700">Access to exclusive features and opportunities</p>
+                <p className="text-sm text-fixly-primary">Access to exclusive features and opportunities</p>
               </div>
               <div className="p-3 bg-orange-50 rounded-lg">
                 <div className="flex items-center mb-2">
@@ -1300,7 +1300,7 @@ function SettingsContent() {
               
               {/* PWA Install Option */}
               <div className="pt-2 border-t border-fixly-border mt-4">
-                <PWAInstallButton variant="link" className="w-full" />
+                <PWAInstallPrompt variant="link" className="w-full" />
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ import { authOptions } from '../../../../../lib/auth';
 import connectDB from '../../../../../lib/mongodb';
 import Job from '../../../../../models/Job';
 import { analytics } from '../../../../../lib/cache';
+import { getServerAbly, CHANNELS, EVENTS } from '../../../../../lib/ably';
 
 export async function POST(request, { params }) {
   try {
@@ -57,6 +58,28 @@ export async function POST(request, { params }) {
         userAgent: userAgent,
         ipAddress: ipAddress
       }, session.user.id);
+
+      // Broadcast real-time view count update
+      try {
+        const ably = getServerAbly();
+        const channel = ably.channels.get(CHANNELS.jobUpdates(jobId));
+
+        await channel.publish(EVENTS.JOB_UPDATED, {
+          jobId: job._id,
+          type: 'view_count',
+          viewCount: job.views?.count || 0,
+          timestamp: new Date().toISOString(),
+          viewer: {
+            id: session.user.id,
+            name: session.user.name
+          }
+        });
+
+        console.log(`📊 Real-time view count broadcast: ${job.views?.count || 0} views for job ${jobId}`);
+      } catch (ablyError) {
+        console.error('❌ Failed to broadcast view count update:', ablyError);
+        // Don't fail the request if real-time fails
+      }
     }
 
     return NextResponse.json({

@@ -24,7 +24,7 @@ import {
   Mail
 } from 'lucide-react';
 import ThemeToggle from '../components/ui/ThemeToggle';
-import PWAInstallButton from '../components/ui/PWAInstallButton';
+import PWAInstallPrompt from '../components/ui/PWAInstallPrompt';
 
 export default function HomePage() {
   const [selectedRole, setSelectedRole] = useState('');
@@ -498,7 +498,7 @@ export default function HomePage() {
           <div className="border-t border-fixly-bg/20 mt-8 pt-8">
             {/* PWA Install Section */}
             <div className="flex justify-center mb-6">
-              <PWAInstallButton className="bg-fixly-accent hover:bg-fixly-accent/80 text-fixly-text" />
+              <PWAInstallPrompt className="bg-fixly-accent hover:bg-fixly-accent/80 text-fixly-text" />
             </div>
             
             <div className="text-center text-fixly-bg/60">

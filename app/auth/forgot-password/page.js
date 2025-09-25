@@ -257,7 +257,7 @@ export default function ForgotPasswordPage() {
                     setError('');
                   }}
                   placeholder="Enter your email address"
-                  className="w-full px-4 py-3 pl-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 pl-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-fixly-primary focus:border-transparent transition-all"
                   disabled={loading}
                 />
               </div>
@@ -272,7 +272,7 @@ export default function ForgotPasswordPage() {
             <button
               onClick={sendOTP}
               disabled={loading || !email}
-              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center"
+              className="w-full bg-fixly-primary hover:bg-fixly-primary-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center"
             >
               {loading ? (
                 <Loader className="animate-spin h-5 w-5 mr-2" />
@@ -406,7 +406,7 @@ export default function ForgotPasswordPage() {
                     setError('');
                   }}
                   placeholder="Create a new password"
-                  className="w-full px-4 py-3 pl-10 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 pl-10 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-fixly-primary focus:border-transparent transition-all"
                   disabled={loading}
                 />
                 <button
@@ -482,7 +482,7 @@ export default function ForgotPasswordPage() {
                     setError('');
                   }}
                   placeholder="Confirm your new password"
-                  className="w-full px-4 py-3 pl-10 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 pl-10 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-fixly-primary focus:border-transparent transition-all"
                   disabled={loading}
                 />
                 <button
@@ -525,7 +525,7 @@ export default function ForgotPasswordPage() {
             <button
               onClick={resetPassword}
               disabled={loading || !newPassword || !confirmPassword || newPassword !== confirmPassword}
-              className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center"
+              className="w-full bg-fixly-primary hover:bg-fixly-primary-dark disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center"
             >
               {loading ? (
                 <Loader className="animate-spin h-5 w-5 mr-2" />
@@ -543,7 +543,7 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-fixly-accent/10 via-white to-fixly-secondary/10 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
@@ -568,7 +568,7 @@ export default function ForgotPasswordPage() {
                 key={stepNum}
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                   step >= stepNum
-                    ? 'bg-purple-600 text-white'
+                    ? 'bg-fixly-primary text-white'
                     : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                 }`}
               >
@@ -578,7 +578,7 @@ export default function ForgotPasswordPage() {
           </div>
           <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full">
             <div
-              className="h-full bg-purple-600 rounded-full transition-all duration-300"
+              className="h-full bg-fixly-primary rounded-full transition-all duration-300"
               style={{ width: `${(step / 3) * 100}%` }}
             />
           </div>

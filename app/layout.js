@@ -2,7 +2,6 @@
 import { Manrope, PT_Mono } from 'next/font/google';
 import { Providers } from './providers';
 import CookieConsent from '../components/CookieConsent';
-import { DarkModeEnhancer } from '../components/ui/DarkModeFixups';
 import PWAInstallPrompt from '../components/ui/PWAInstallPrompt';
 import './globals.css';
 
@@ -107,7 +106,6 @@ export default function RootLayout({ children }) {
     <html lang="en" className={`${manrope.variable} ${ptMono.variable}`}>
       <body className="font-manrope antialiased">
         <Providers>
-          <DarkModeEnhancer />
           {children}
           <PWAInstallPrompt />
           <CookieConsent />

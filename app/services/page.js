@@ -63,7 +63,7 @@ export default function ServicesPage() {
       icon: Brush,
       description: 'Interior and exterior painting services',
       services: ['Interior Painting', 'Exterior Painting', 'Wall Prep', 'Touch-up Repairs', 'Color Consultation'],
-      color: 'bg-purple-500'
+      color: 'bg-fixly-primary'
     },
     {
       id: 'technology',

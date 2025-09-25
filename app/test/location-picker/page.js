@@ -262,9 +262,9 @@ export default function LocationPickerTestPage() {
                 )}
 
                 {selectedLocation.address && (
-                  <div className="p-3 bg-purple-50 rounded-lg">
+                  <div className="p-3 bg-fixly-accent/10 rounded-lg">
                     <div className="text-sm font-medium text-purple-900">Address</div>
-                    <div className="text-purple-700 text-sm">{selectedLocation.address}</div>
+                    <div className="text-fixly-primary text-sm">{selectedLocation.address}</div>
                   </div>
                 )}
 

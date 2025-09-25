@@ -174,7 +174,7 @@ export function CompanyLogo({
 
   if (error || !src) {
     return (
-      <div className={`${sizeClass} bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-lg flex items-center justify-center ${className}`}>
+      <div className={`${sizeClass} bg-gradient-to-br from-fixly-secondary/20 to-fixly-primary/20 rounded-lg flex items-center justify-center ${className}`}>
         {fallbackText ? (
           <span className="text-blue-600 dark:text-blue-400 font-bold text-xs">
             {fallbackText.slice(0, 2).toUpperCase()}

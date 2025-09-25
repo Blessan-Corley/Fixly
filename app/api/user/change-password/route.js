@@ -20,11 +20,11 @@ export async function PUT(request) {
 
     await connectDB();
 
-    const { currentPassword, newPassword, otp, email } = await request.json();
+    const { newPassword, otp, email } = await request.json();
 
-    if (!currentPassword || !newPassword || !otp || !email) {
+    if (!newPassword || !otp || !email) {
       return NextResponse.json(
-        { message: 'Current password, new password, OTP, and email are required' },
+        { message: 'New password, OTP, and email are required' },
         { status: 400 }
       );
     }
@@ -65,14 +65,7 @@ export async function PUT(request) {
       );
     }
 
-    // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isCurrentPasswordValid) {
-      return NextResponse.json(
-        { message: 'Current password is incorrect' },
-        { status: 400 }
-      );
-    }
+    // OTP verification already ensures the user is authorized to change password
 
     // Validate new password strength
     const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{8,}$/;
@@ -83,14 +76,8 @@ export async function PUT(request) {
       );
     }
 
-    // Check if new password is different from current
-    const isSamePassword = await bcrypt.compare(newPassword, user.password);
-    if (isSamePassword) {
-      return NextResponse.json(
-        { message: 'New password must be different from current password' },
-        { status: 400 }
-      );
-    }
+    // Note: Since we're using OTP verification instead of current password,
+    // we'll allow users to set the same password (they have verified via email)
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 12);

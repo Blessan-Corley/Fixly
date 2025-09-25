@@ -205,7 +205,7 @@ function FindFixersContent() {
           <h1 className="text-2xl font-bold text-fixly-text">
             Find Pro Fixers
           </h1>
-          <span className="flex items-center text-sm bg-purple-100 text-purple-800 px-3 py-1 rounded-full">
+          <span className="flex items-center text-sm bg-fixly-accent/20 text-fixly-primary px-3 py-1 rounded-full">
             <Award className="h-4 w-4 mr-1" />
             Pro Only
           </span>
@@ -688,7 +688,7 @@ function MessageModal({ fixer, onClose }) {
 
     setSending(true);
     try {
-      const response = await fetch('/api/realtime/messages/send', {
+      const response = await fetch('/api/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

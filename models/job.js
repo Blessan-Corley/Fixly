@@ -748,6 +748,29 @@ const jobSchema = new mongoose.Schema({
         ref: 'User'
       },
       ratedAt: Date
+    },
+
+    // Review Status Tracking
+    reviewStatus: {
+      type: String,
+      enum: {
+        values: ['pending', 'partial', 'completed', 'expired'],
+        message: 'Invalid review status'
+      },
+      default: 'pending'
+    },
+
+    // Messaging Closure
+    messagingClosed: {
+      type: Boolean,
+      default: false
+    },
+    messagingClosedAt: Date,
+
+    // Automated Review Messages Sent
+    reviewMessagesSent: {
+      type: Boolean,
+      default: false
     }
   },
   
@@ -1290,6 +1313,128 @@ jobSchema.methods.editReply = function(commentId, replyId, userId, newMessage, m
   reply.edited.editedAt = new Date();
   
   return { success: true, message: 'Reply updated successfully', reply };
+};
+
+// Method to submit review (hirer to fixer or fixer to hirer)
+jobSchema.methods.submitReview = function(reviewerId, reviewData) {
+  const isHirer = this.createdBy.toString() === reviewerId.toString();
+  const isFixer = this.assignedTo && this.assignedTo.toString() === reviewerId.toString();
+
+  if (!isHirer && !isFixer) {
+    throw new Error('Only job participants can submit reviews');
+  }
+
+  if (this.status !== 'completed') {
+    throw new Error('Job must be completed before reviews can be submitted');
+  }
+
+  const now = new Date();
+
+  if (isHirer) {
+    // Hirer reviewing fixer
+    this.completion.fixerRating = {
+      rating: reviewData.overall,
+      review: reviewData.comment,
+      categories: {
+        communication: reviewData.communication,
+        quality: reviewData.quality,
+        timeliness: reviewData.timeliness,
+        professionalism: reviewData.professionalism
+      },
+      ratedBy: reviewerId,
+      ratedAt: now
+    };
+  } else {
+    // Fixer reviewing hirer
+    this.completion.hirerRating = {
+      rating: reviewData.overall,
+      review: reviewData.comment,
+      categories: {
+        communication: reviewData.communication,
+        quality: reviewData.quality,
+        timeliness: reviewData.timeliness,
+        professionalism: reviewData.professionalism
+      },
+      ratedBy: reviewerId,
+      ratedAt: now
+    };
+  }
+
+  // Update review status
+  this.updateReviewStatus();
+
+  return this.save();
+};
+
+// Method to update review status based on completed reviews
+jobSchema.methods.updateReviewStatus = function() {
+  const fixerReviewExists = this.completion.fixerRating && this.completion.fixerRating.ratedAt;
+  const hirerReviewExists = this.completion.hirerRating && this.completion.hirerRating.ratedAt;
+
+  if (fixerReviewExists && hirerReviewExists) {
+    this.completion.reviewStatus = 'completed';
+
+    // Close messaging after both reviews are submitted
+    if (!this.completion.messagingClosed) {
+      this.closeMessaging();
+    }
+  } else if (fixerReviewExists || hirerReviewExists) {
+    this.completion.reviewStatus = 'partial';
+  } else {
+    this.completion.reviewStatus = 'pending';
+  }
+};
+
+// Method to close messaging after job completion and reviews
+jobSchema.methods.closeMessaging = function() {
+  this.completion.messagingClosed = true;
+  this.completion.messagingClosedAt = new Date();
+
+  return this.save();
+};
+
+// Method to check if messaging is allowed
+jobSchema.methods.isMessagingAllowed = function() {
+  return !this.completion.messagingClosed;
+};
+
+// Method to get review status for messaging UI
+jobSchema.methods.getReviewStatusForUI = function(userId) {
+  const isHirer = this.createdBy.toString() === userId.toString();
+  const isFixer = this.assignedTo && this.assignedTo.toString() === userId.toString();
+
+  if (!isHirer && !isFixer) {
+    return { canReview: false, hasReviewed: false };
+  }
+
+  let hasReviewed = false;
+  let otherPartyReviewed = false;
+
+  if (isHirer) {
+    hasReviewed = !!(this.completion.fixerRating && this.completion.fixerRating.ratedAt);
+    otherPartyReviewed = !!(this.completion.hirerRating && this.completion.hirerRating.ratedAt);
+  } else {
+    hasReviewed = !!(this.completion.hirerRating && this.completion.hirerRating.ratedAt);
+    otherPartyReviewed = !!(this.completion.fixerRating && this.completion.fixerRating.ratedAt);
+  }
+
+  return {
+    canReview: this.status === 'completed' && !hasReviewed,
+    hasReviewed,
+    otherPartyReviewed,
+    bothReviewsComplete: hasReviewed && otherPartyReviewed,
+    messagingClosed: this.completion.messagingClosed
+  };
+};
+
+// Method to get job participants for review system
+jobSchema.methods.getJobParticipants = function() {
+  return {
+    hirer: this.createdBy,
+    fixer: this.assignedTo,
+    isCompleted: this.status === 'completed',
+    completedAt: this.completion.confirmedAt
+  };
 };
 
 // Static method to find jobs by filters

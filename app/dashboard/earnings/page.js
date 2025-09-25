@@ -258,8 +258,8 @@ function EarningsContent() {
           className="card"
         >
           <div className="flex items-center justify-between mb-2">
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <Briefcase className="h-6 w-6 text-purple-600" />
+            <div className="p-3 bg-fixly-accent/20 rounded-lg">
+              <Briefcase className="h-6 w-6 text-fixly-primary" />
             </div>
           </div>
           <div className="text-2xl font-bold text-fixly-text">
@@ -371,7 +371,7 @@ function EarningsContent() {
               
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
-                  <Award className="h-4 w-4 text-purple-500 mr-2" />
+                  <Award className="h-4 w-4 text-fixly-primary mr-2" />
                   <span className="text-fixly-text-muted">Success Rate</span>
                 </div>
                 <span className="font-medium text-fixly-text">

@@ -694,7 +694,7 @@ export default function ProfilePage() {
                           onChange={(e) => handleInputChange('availableNow', e.target.checked)}
                           className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+                        <div className={`w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent`}></div>
                       </label>
                     </div>
 
@@ -934,7 +934,7 @@ export default function ProfilePage() {
                         onChange={(e) => handleInputChange(`preferences.${key}`, e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent"></div>
+                      <div className={`w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent`}></div>
                     </label>
                   </div>
                 ))}

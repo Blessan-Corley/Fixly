@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   MapPin,
@@ -17,16 +17,123 @@ import { toast } from 'sonner';
 import { toastMessages } from '../utils/toast';
 import InstagramCommentsRealtime from './InstagramCommentsRealtime';
 import { formatDistance } from '../utils/locationUtils';
+import { getClientAbly, CHANNELS, EVENTS } from '../lib/ably';
 
-export default function JobCardRectangular({ job, user, onApply, isApplying = false }) {
+export default function JobCardRectangular({
+  job,
+  user,
+  onApply,
+  isApplying = false,
+  userLocation = null,
+  showDistance = true
+}) {
   const router = useRouter();
   const [showComments, setShowComments] = useState(false);
-  const [viewCount, setViewCount] = useState(job.viewCount || 0);
-  
+  const [viewCount, setViewCount] = useState(job.viewCount || job.views?.count || 0);
+  const [timeAgo, setTimeAgo] = useState('');
+  const [distance, setDistance] = useState(null);
+
   // Check if current user has applied to this job
-  const hasApplied = user && job.applications?.some(app => 
+  const hasApplied = user && job.applications?.some(app =>
     app.fixer === user.id || app.fixer?._id === user.id || app.fixer?.toString() === user.id
   );
+
+  // Real-time view count updates
+  useEffect(() => {
+    if (!job._id) return;
+
+    let ably = null;
+    let channel = null;
+
+    const setupRealtimeViewCount = async () => {
+      try {
+        ably = getClientAbly();
+        if (!ably) return;
+
+        channel = ably.channels.get(CHANNELS.jobUpdates(job._id));
+
+        await channel.subscribe(EVENTS.JOB_UPDATED, (message) => {
+          const { type, viewCount: newViewCount } = message.data;
+
+          if (type === 'view_count' && typeof newViewCount === 'number') {
+            setViewCount(newViewCount);
+          }
+        });
+
+        console.log(`👀 Subscribed to view count updates for job ${job._id}`);
+      } catch (error) {
+        console.error('❌ Real-time view count setup error:', error);
+      }
+    };
+
+    setupRealtimeViewCount();
+
+    return () => {
+      if (channel) {
+        channel.unsubscribe();
+      }
+      if (ably) {
+        ably.close();
+      }
+    };
+  }, [job._id]);
+
+  // Real-time time updates
+  useEffect(() => {
+    const updateTimeAgo = () => {
+      if (job.createdAt) {
+        const now = new Date();
+        const created = new Date(job.createdAt);
+        const diffInSeconds = Math.floor((now - created) / 1000);
+
+        if (diffInSeconds < 60) {
+          setTimeAgo(`${diffInSeconds}s ago`);
+        } else if (diffInSeconds < 3600) {
+          setTimeAgo(`${Math.floor(diffInSeconds / 60)}m ago`);
+        } else if (diffInSeconds < 86400) {
+          setTimeAgo(`${Math.floor(diffInSeconds / 3600)}h ago`);
+        } else if (diffInSeconds < 604800) {
+          setTimeAgo(`${Math.floor(diffInSeconds / 86400)}d ago`);
+        } else {
+          setTimeAgo(`${Math.floor(diffInSeconds / 604800)}w ago`);
+        }
+      }
+    };
+
+    // Update immediately
+    updateTimeAgo();
+
+    // Update every 30 seconds for real-time freshness
+    const interval = setInterval(updateTimeAgo, 30000);
+
+    return () => clearInterval(interval);
+  }, [job.createdAt]);
+
+  // Calculate distance if user location is available
+  useEffect(() => {
+    if (userLocation && job.location?.lat && job.location?.lng && showDistance) {
+      const calculateDistance = (lat1, lng1, lat2, lng2) => {
+        const R = 6371; // Earth's radius in kilometers
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+      };
+
+      const dist = calculateDistance(
+        userLocation.lat,
+        userLocation.lng,
+        job.location.lat,
+        job.location.lng
+      );
+
+      setDistance(dist);
+    }
+  }, [userLocation, job.location, showDistance]);
 
   // Handle view count increment only on "View Details" click
   const handleViewDetails = async () => {
@@ -52,15 +159,36 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
     }
   };
 
-  const formatTimeAgo = (date) => {
-    const now = new Date();
-    const diffInSeconds = Math.floor((now - new Date(date)) / 1000);
-    
-    if (diffInSeconds < 60) return `${diffInSeconds}s ago`;
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-    return `${Math.floor(diffInSeconds / 604800)}w ago`;
+  // Sensitive content filtering for job display
+  const sanitizeText = (text) => {
+    if (!text) return '';
+
+    // Remove phone numbers
+    let sanitized = text.replace(/\b\d{10}\b/g, '***CONTACT***');
+    sanitized = sanitized.replace(/\+91[-.\s]?\d{10}\b/g, '***CONTACT***');
+
+    // Remove email addresses
+    sanitized = sanitized.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/gi, '***EMAIL***');
+
+    // Remove social media mentions
+    sanitized = sanitized.replace(/\b(whatsapp|telegram|instagram|facebook|twitter)\b/gi, '***SOCIAL***');
+
+    // Remove URLs
+    sanitized = sanitized.replace(/https?:\/\/[^\s]+/gi, '***LINK***');
+
+    return sanitized;
+  };
+
+  const formatDistance = (distanceKm) => {
+    if (!distanceKm || distanceKm < 0) return null;
+
+    if (distanceKm < 1) {
+      return `${Math.round(distanceKm * 1000)}m away`;
+    } else if (distanceKm < 10) {
+      return `${distanceKm.toFixed(1)} km away`;
+    } else {
+      return `${Math.round(distanceKm)} km away`;
+    }
   };
 
   const getDeadlineInfo = (deadline) => {
@@ -161,32 +289,28 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
             
             <div className="flex items-center gap-4 text-sm text-fixly-text-muted mb-2">
               <div className="flex items-center gap-1">
-                <MapPin className="h-4 w-4" />
-                <span>
-                  {job.location?.city && job.location?.state 
-                    ? `${job.location.city}, ${job.location.state}`
-                    : job.location?.address || 'Location not specified'
-                  }
-                </span>
-                {job.distance && (
-                  <span className="ml-2 px-2 py-1 bg-fixly-accent/10 text-fixly-accent text-xs font-medium rounded-full">
-                    {formatDistance(job.distance)} away
-                  </span>
-                )}
-                {!job.distance && job.location?.lat && job.location?.lng && (
-                  <span className="ml-2 px-2 py-1 bg-gray-100 text-gray-600 text-xs font-medium rounded-full">
-                    Distance unavailable
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                <span>{formatTimeAgo(job.createdAt)}</span>
+                <span className="text-fixly-accent font-medium">{timeAgo || formatTimeAgo(job.createdAt)}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Eye className="h-4 w-4" />
-                <span>{viewCount} views</span>
+                <span className="text-green-600 font-medium">{viewCount} views</span>
               </div>
+              {/* Real-time distance calculation */}
+              {distance !== null && showDistance && (
+                <div className="flex items-center gap-1 text-fixly-accent">
+                  <MapPin className="h-4 w-4" />
+                  <span className="text-xs font-semibold px-2 py-1 bg-fixly-accent/10 text-fixly-accent rounded-full">
+                    📍 {formatDistance(distance)}
+                  </span>
+                </div>
+              )}
+              {!distance && showDistance && userLocation && (
+                <div className="flex items-center gap-1 text-fixly-text-muted">
+                  <MapPin className="h-4 w-4" />
+                  <span className="text-xs">Near {job.location?.city}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -196,9 +320,9 @@ export default function JobCardRectangular({ job, user, onApply, isApplying = fa
           </span>
         </div>
 
-        {/* Description */}
+        {/* Description with sensitive content protection */}
         <p className="text-fixly-text-light text-sm mb-3 line-clamp-2">
-          {job.description}
+          {sanitizeText(job.description)}
         </p>
 
         {/* Skills */}

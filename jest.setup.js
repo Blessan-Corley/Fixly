@@ -21,8 +21,8 @@ jest.mock('next/navigation', () => ({
 jest.mock('next/image', () => ({
   __esModule: true,
   default: (props) => {
-    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
-    return <img {...props} />;
+    const React = require('react');
+    return React.createElement('img', props);
   }
 }));
 
@@ -45,16 +45,29 @@ jest.mock('next-auth/react', () => ({
   signOut: jest.fn()
 }));
 
-// Mock Socket.io
-jest.mock('socket.io-client', () => ({
-  io: jest.fn(() => ({
-    on: jest.fn(),
-    off: jest.fn(),
-    emit: jest.fn(),
-    connect: jest.fn(),
-    disconnect: jest.fn(),
-    connected: true,
-    id: 'test-socket-id'
+// Mock Ably Real-time
+jest.mock('ably', () => ({
+  Realtime: jest.fn(() => ({
+    channels: {
+      get: jest.fn(() => ({
+        publish: jest.fn(() => Promise.resolve()),
+        subscribe: jest.fn(),
+        unsubscribe: jest.fn(),
+        presence: {
+          enter: jest.fn(() => Promise.resolve()),
+          leave: jest.fn(() => Promise.resolve()),
+          update: jest.fn(() => Promise.resolve()),
+          get: jest.fn(() => Promise.resolve([]))
+        },
+        detach: jest.fn()
+      }))
+    },
+    connection: {
+      state: 'connected',
+      on: jest.fn(),
+      off: jest.fn()
+    },
+    close: jest.fn()
   }))
 }));
 
@@ -146,16 +159,18 @@ jest.mock('./lib/firebase-client', () => ({
 }));
 
 // Mock Framer Motion
-jest.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }) => <div {...props}>{children}</div>,
-    span: ({ children, ...props }) => <span {...props}>{children}</span>,
-    button: ({ children, ...props }) => <button {...props}>{children}</button>,
-    img: ({ children, ...props }) => <img {...props} />,
-    form: ({ children, ...props }) => <form {...props}>{children}</form>
-  },
-  AnimatePresence: ({ children }) => children,
-  useAnimation: () => ({
+jest.mock('framer-motion', () => {
+  const React = require('react');
+  return {
+    motion: {
+      div: ({ children, ...props }) => React.createElement('div', props, children),
+      span: ({ children, ...props }) => React.createElement('span', props, children),
+      button: ({ children, ...props }) => React.createElement('button', props, children),
+      img: ({ children, ...props }) => React.createElement('img', props),
+      form: ({ children, ...props }) => React.createElement('form', props, children)
+    },
+    AnimatePresence: ({ children }) => children,
+    useAnimation: () => ({
     start: jest.fn(),
     stop: jest.fn(),
     set: jest.fn()
@@ -167,7 +182,8 @@ jest.mock('framer-motion', () => ({
   useDragControls: () => ({
     start: jest.fn()
   })
-}));
+  };
+});
 
 // Mock React Query
 jest.mock('@tanstack/react-query', () => ({
@@ -231,7 +247,8 @@ jest.mock('react-dropzone', () => ({
 
 // Mock Lucide React icons
 jest.mock('lucide-react', () => {
-  const MockIcon = (props) => <div data-testid="lucide-icon" {...props} />;
+  const React = require('react');
+  const MockIcon = (props) => React.createElement('div', { 'data-testid': 'lucide-icon', ...props });
   return new Proxy({}, {
     get: () => MockIcon
   });
