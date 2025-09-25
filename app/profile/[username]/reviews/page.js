@@ -468,7 +468,7 @@ export default function UserReviewsPage() {
                             <span className={`px-2 py-1 rounded-full text-xs ${
                               review.reviewType === 'client_to_fixer'
                                 ? 'bg-blue-100 text-blue-800'
-                                : 'bg-purple-100 text-purple-800'
+                                : 'bg-fixly-accent/20 text-fixly-primary'
                             }`}>
                               {review.reviewType === 'client_to_fixer' ? 'Client Review' : 'Service Provider Review'}
                             </span>

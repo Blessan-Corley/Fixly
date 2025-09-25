@@ -14,7 +14,7 @@ import {
 import { useApp } from '../../../../providers';
 import { toast } from 'sonner';
 import { toastMessages } from '../../../../../utils/toast';
-import { useRealtime } from '../../../../../hooks/useRealtime';
+import { useMessaging } from '../../../../../hooks/useMessaging';
 
 export default function MessagesPage({ params }) {
   const { jobId } = params;
@@ -33,30 +33,35 @@ export default function MessagesPage({ params }) {
   const messagesEndRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
-  // Real-time messages
-  const { 
-    data: realTimeData, 
-    loading: realTimeLoading,
-    refresh: refreshMessages 
-  } = useRealtime(user?.id); // Using general realtime hook
+  // Real-time messages using Ably
+  const {
+    messages: realTimeMessages,
+    isLoading: realTimeLoading,
+    sendMessage: sendRealTimeMessage,
+    isTyping,
+    otherUserTyping,
+    startTyping,
+    stopTyping,
+    error: messagingError
+  } = useMessaging(jobId, otherUser?.id);
 
   // Update messages when real-time data changes with smooth animations
   useEffect(() => {
-    if (realTimeData?.messages) {
-      const newMessages = realTimeData.messages;
+    if (realTimeMessages && Array.isArray(realTimeMessages)) {
+      const newMessages = realTimeMessages;
       const currentMessages = messages;
-      
+
       // Check if there are new messages
       if (newMessages.length > currentMessages.length) {
         setMessages(newMessages);
-        
+
         // Smooth scroll to bottom for new messages
         setTimeout(() => {
           const container = messagesEndRef.current?.parentElement;
           if (container) {
             const { scrollTop, scrollHeight, clientHeight } = container;
             const isNearBottom = scrollTop + clientHeight >= scrollHeight - 150;
-            
+
             if (isNearBottom) {
               messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             }

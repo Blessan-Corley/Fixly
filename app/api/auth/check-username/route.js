@@ -85,42 +85,73 @@ export async function POST(request) {
 
         const validatedUsername = usernameValidation.value;
 
-        // 2. Use ContentValidator for content filtering
-        const contentValidation = await ContentValidator.validateContent(
-          validatedUsername,
-          'profile',
-          currentUserId
-        );
+        // 2. ENHANCED: Use ContentValidator for comprehensive content filtering
+        try {
+          const contentValidation = await ContentValidator.validateContent(
+            validatedUsername,
+            'profile',
+            currentUserId
+          );
 
-        if (!contentValidation.isValid) {
-          const primaryViolation = contentValidation.violations[0];
-          let message = 'Please choose a more appropriate username';
+          if (!contentValidation.isValid) {
+            const primaryViolation = contentValidation.violations[0];
+            let message = 'Invalid username';
+            let code = 'CONTENT_VIOLATION';
 
-          if (primaryViolation) {
-            switch (primaryViolation.type) {
-              case 'profanity':
-              case 'abuse':
-                message = 'Invalid username';
-                break;
-              case 'phone_number':
-                message = 'Invalid username';
-                break;
-              case 'email_address':
-                message = 'Invalid username';
-                break;
-              case 'promotional':
-                message = 'Invalid username';
-                break;
-              default:
-                message = 'Invalid username';
+            // Log the violation for monitoring (but don't expose details to user)
+            console.log(`🚨 Username violation detected:`, {
+              username: validatedUsername,
+              violations: contentValidation.violations.map(v => ({ type: v.type, severity: v.severity })),
+              score: contentValidation.score,
+              userId: currentUserId
+            });
+
+            // Categorize violations for different responses
+            if (primaryViolation) {
+              switch (primaryViolation.type) {
+                case 'profanity':
+                case 'abuse':
+                  message = 'Invalid username';
+                  code = 'PROFANITY_DETECTED';
+                  break;
+                case 'phone_number':
+                  message = 'Invalid username';
+                  code = 'PHONE_NUMBER_DETECTED';
+                  break;
+                case 'email_address':
+                  message = 'Invalid username';
+                  code = 'EMAIL_DETECTED';
+                  break;
+                case 'social_media':
+                  message = 'Invalid username';
+                  code = 'SOCIAL_MEDIA_DETECTED';
+                  break;
+                case 'promotional':
+                case 'spam':
+                  message = 'Invalid username';
+                  code = 'PROMOTIONAL_CONTENT';
+                  break;
+                case 'repetitive':
+                  message = 'Invalid username';
+                  code = 'REPETITIVE_PATTERN';
+                  break;
+                default:
+                  message = 'Invalid username';
+                  code = 'CONTENT_VIOLATION';
+              }
             }
-          }
 
-          return NextResponse.json({
-            available: false,
-            message,
-            suggestions: contentValidation.suggestions
-          });
+            return NextResponse.json({
+              available: false,
+              message,
+              code,
+              // Only provide suggestions if it's a mild violation
+              suggestions: primaryViolation?.severity <= 2 ? contentValidation.suggestions : undefined
+            });
+          }
+        } catch (contentError) {
+          console.warn('⚠️ Content validation failed, proceeding with basic validation:', contentError.message);
+          // Don't block username if content validator fails - fallback gracefully
         }
 
         cacheKey = `username_available:${validatedUsername}`;

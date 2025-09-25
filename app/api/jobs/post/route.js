@@ -1,13 +1,15 @@
 // app/api/jobs/post/route.js - Enhanced with all improvements
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../../../lib/auth';
-import { redisRateLimit } from '../../../../lib/redis';
-import connectDB from '../../../../lib/db';
-import Job from '../../../../models/Job';
-import JobDraft from '../../../../models/JobDraft';
-import User from '../../../../models/User';
-import { ContentValidator } from '../../../../lib/validations/content-validator';
+import { authOptions } from '../../auth/[...nextauth]/route';
+import rateLimitMiddleware from '@/lib/rateLimit';
+import cacheMiddleware, { invalidateUserCache } from '@/lib/redisCache';
+import { contentValidationMiddleware, FieldValidators } from '@/lib/contentValidation';
+import inputSanitizationMiddleware, { CustomSanitizers, schemaSanitize } from '@/lib/inputSanitization';
+import connectDB from '@/lib/db';
+import Job from '@/models/Job';
+import User from '@/models/User';
+import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
 
 export const dynamic = 'force-dynamic';
 
@@ -291,6 +293,61 @@ export async function POST(request) {
 
     // Populate the created job for response
     await job.populate('createdBy', 'name username photoURL rating location');
+
+    // Broadcast new job to real-time subscribers
+    try {
+      const ably = getServerAbly();
+      if (ably) {
+        // Broadcast to general new jobs channel
+        await ably.channels.get(CHANNELS.newJobs).publish(EVENTS.JOB_POSTED, {
+          jobId: job._id,
+          title: job.title,
+          skillsRequired: job.skillsRequired,
+          location: job.location,
+          budget: job.budget,
+          urgency: job.urgency,
+          createdBy: {
+            id: job.createdBy._id,
+            name: job.createdBy.name,
+            rating: job.createdBy.rating
+          },
+          timestamp: new Date().toISOString()
+        });
+
+        // Broadcast to skill-specific channels
+        if (job.skillsRequired && job.skillsRequired.length > 0) {
+          for (const skill of job.skillsRequired) {
+            await ably.channels.get(CHANNELS.skillJobs(skill)).publish(EVENTS.JOB_POSTED, {
+              jobId: job._id,
+              title: job.title,
+              skillsRequired: job.skillsRequired,
+              location: job.location,
+              budget: job.budget,
+              urgency: job.urgency,
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+
+        // Broadcast to location-based channel
+        if (job.location?.city && job.location?.state) {
+          await ably.channels.get(CHANNELS.locationJobs(job.location.city, job.location.state)).publish(EVENTS.JOB_POSTED, {
+            jobId: job._id,
+            title: job.title,
+            skillsRequired: job.skillsRequired,
+            location: job.location,
+            budget: job.budget,
+            urgency: job.urgency,
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        console.log(`📡 Real-time job broadcast sent for job ${job._id}`);
+      }
+    } catch (realtimeError) {
+      console.error('❌ Real-time broadcast error:', realtimeError);
+      // Continue execution even if real-time fails
+    }
 
     // Return success response with enhanced data
     return NextResponse.json({

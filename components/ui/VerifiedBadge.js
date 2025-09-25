@@ -42,7 +42,7 @@ export default function VerifiedBadge({
   if (isVerified) {
     // Fully verified
     badgeStyle = variant === 'premium' 
-      ? 'text-purple-600 bg-purple-100 border-purple-200'
+      ? 'text-fixly-primary bg-fixly-accent/20 border-fixly-accent/30'
       : 'text-green-600 bg-green-100 border-green-200';
     icon = variant === 'premium' ? Shield : CheckCircle;
     text = variant === 'premium' ? 'Premium Verified' : 'Verified';
@@ -127,7 +127,7 @@ export function VerificationStatus({ user, className = '' }) {
       type: 'account',
       label: 'Account fully verified',
       icon: Shield,
-      color: 'text-purple-600'
+      color: 'text-fixly-primary'
     });
   }
 

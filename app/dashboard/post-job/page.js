@@ -113,9 +113,8 @@ function PostJobContent() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  // Real-time validation states (like signup form)
+  // Real-time validation states (like signup form) - Background validation without loading indicators
   const [validationMessages, setValidationMessages] = useState({});
-  const [validationLoading, setValidationLoading] = useState({});
   const [fieldValidations, setFieldValidations] = useState({});
   const [locationDetected, setLocationDetected] = useState(false);
 
@@ -331,8 +330,7 @@ function PostJobContent() {
         return;
       }
 
-      setValidationLoading(prev => ({ ...prev, title: true }));
-
+      // Silent background validation - no loading indicators
       try {
         const contentValidation = await fetch('/api/validate-content', {
           method: 'POST',
@@ -373,8 +371,7 @@ function PostJobContent() {
         }
       } catch (error) {
         console.error('Title validation error:', error);
-      } finally {
-        setValidationLoading(prev => ({ ...prev, title: false }));
+        // Silent error handling - don't show loading state errors
       }
     };
 
@@ -397,8 +394,7 @@ function PostJobContent() {
         return;
       }
 
-      setValidationLoading(prev => ({ ...prev, description: true }));
-
+      // Silent background validation - no loading indicators
       try {
         const contentValidation = await fetch('/api/validate-content', {
           method: 'POST',
@@ -439,8 +435,7 @@ function PostJobContent() {
         }
       } catch (error) {
         console.error('Description validation error:', error);
-      } finally {
-        setValidationLoading(prev => ({ ...prev, description: false }));
+        // Silent error handling - don't show loading state errors
       }
     };
 
@@ -980,7 +975,6 @@ function PostJobContent() {
           onChange={(e) => handleInputChange('title', e.target.value)}
           placeholder="e.g., Fix kitchen sink leak"
           className={`input-field ${
-            validationLoading.title ? 'border-yellow-400 focus:border-yellow-400' :
             fieldValidations.title === false ? 'border-red-500 focus:border-red-500' :
             fieldValidations.title === true ? 'border-green-500 focus:border-green-500' :
             errors.title ? 'border-red-500 focus:border-red-500' : ''
@@ -989,13 +983,7 @@ function PostJobContent() {
         />
         <div className="flex justify-between mt-1">
           <div className="flex-1">
-            {validationLoading.title && (
-              <p className="text-yellow-600 text-sm flex items-center">
-                <Loader className="h-3 w-3 animate-spin mr-1" />
-                Checking title...
-              </p>
-            )}
-            {validationMessages.title && !validationLoading.title && (
+            {validationMessages.title && (
               <p className={`text-sm ${fieldValidations.title ? 'text-green-600' : 'text-red-500'}`}>
                 {validationMessages.title}
               </p>
@@ -1019,7 +1007,6 @@ function PostJobContent() {
           onChange={(e) => handleInputChange('description', e.target.value)}
           placeholder="Describe the work in detail. Include what needs to be done, any specific requirements, and what materials are needed..."
           className={`textarea-field h-32 ${
-            validationLoading.description ? 'border-yellow-400 focus:border-yellow-400' :
             fieldValidations.description === false ? 'border-red-500 focus:border-red-500' :
             fieldValidations.description === true ? 'border-green-500 focus:border-green-500' :
             errors.description ? 'border-red-500 focus:border-red-500' : ''
@@ -1028,13 +1015,7 @@ function PostJobContent() {
         />
         <div className="flex justify-between mt-1">
           <div className="flex-1">
-            {validationLoading.description && (
-              <p className="text-yellow-600 text-sm flex items-center">
-                <Loader className="h-3 w-3 animate-spin mr-1" />
-                Checking description...
-              </p>
-            )}
-            {validationMessages.description && !validationLoading.description && (
+            {validationMessages.description && (
               <p className={`text-sm ${fieldValidations.description ? 'text-green-600' : 'text-red-500'}`}>
                 {validationMessages.description}
               </p>

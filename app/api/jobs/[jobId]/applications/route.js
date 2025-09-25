@@ -6,6 +6,8 @@ import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
+import { MessageService } from '../../../../../lib/services/messageService';
+import { getServerAbly, CHANNELS, EVENTS } from '../../../../../lib/ably';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,8 +126,16 @@ export async function PUT(request, { params }) {
       job.status = 'in_progress';
       job.acceptedApplication = applicationId;
       
-      // Deduct credit for the accepted fixer (only when application is accepted)
+      // Check if fixer can be assigned (credit check) and deduct credit
       const acceptedFixer = await User.findById(application.fixer);
+      if (!acceptedFixer.canBeAssignedJob()) {
+        return NextResponse.json(
+          { message: 'Selected fixer has reached their job limit. Please select another applicant.' },
+          { status: 400 }
+        );
+      }
+
+      // Deduct credit for the accepted fixer (only when application is accepted)
       if (acceptedFixer && acceptedFixer.plan?.type !== 'pro') {
         if (!acceptedFixer.plan) {
           acceptedFixer.plan = { type: 'free', creditsUsed: 0, status: 'active' };
@@ -145,6 +155,50 @@ export async function PUT(request, { params }) {
     }
 
     await job.save();
+
+    // If application accepted, create private conversation with automated message
+    if (status === 'accepted') {
+      try {
+        await MessageService.createJobConversation(
+          jobId,
+          session.user.id, // hirer
+          application.fixer.toString() // fixer
+        );
+        console.log(`✅ Private conversation created for job ${jobId}`);
+      } catch (conversationError) {
+        console.error('Failed to create private conversation:', conversationError);
+        // Don't fail the application acceptance if conversation creation fails
+      }
+
+      // Real-time broadcast job assignment via Ably
+      try {
+        const ably = getServerAbly();
+        if (ably) {
+          // Broadcast to job-specific channel
+          const jobChannel = ably.channels.get(CHANNELS.jobUpdates(jobId));
+          await jobChannel.publish(EVENTS.JOB_ASSIGNED, {
+            jobId,
+            fixerId: application.fixer.toString(),
+            hirerId: session.user.id,
+            status: 'assigned',
+            timestamp: new Date().toISOString()
+          });
+
+          // Broadcast to fixer's notifications
+          const fixerChannel = ably.channels.get(CHANNELS.userNotifications(application.fixer.toString()));
+          await fixerChannel.publish(EVENTS.JOB_ASSIGNED, {
+            jobId,
+            jobTitle: job.title,
+            hirerName: session.user.name,
+            message: 'Congratulations! You\'ve been assigned to this job.',
+            actionUrl: `/dashboard/messages?job=${jobId}`,
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (ablyError) {
+        console.error('Failed to broadcast job assignment:', ablyError);
+      }
+    }
 
     // Create notifications
     try {

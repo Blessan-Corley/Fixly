@@ -7,7 +7,8 @@ import Job from '@/models/Job';
 import User from '@/models/User';
 import { rateLimit } from '@/utils/rateLimiting';
 import { moderateContent } from '@/utils/sensitiveContentFilter';
-import { emitToJob } from '@/lib/socket';
+import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
+import { sendTemplatedNotification, NOTIFICATION_TEMPLATES } from '@/lib/services/notificationService';
 
 export async function PUT(request, { params }) {
   try {
@@ -157,46 +158,50 @@ export async function PUT(request, { params }) {
       console.error('❌ Failed to populate edited content:', populateError);
     }
 
-    // Send notifications to mentioned users
+    // Send notifications to mentioned users via new notification service
     if (mentions && mentions.length > 0) {
       try {
-        const mentionedUsers = await User.find({
-          _id: { $in: mentions.map(m => m.user) }
-        });
-
-        for (const mentionedUser of mentionedUsers) {
-          if (mentionedUser._id.toString() !== user._id.toString()) {
-            await mentionedUser.addNotification(
-              'mention',
-              'You were mentioned',
-              `${user.name} mentioned you in ${replyId ? 'a reply' : 'a comment'} on "${job.title}"`,
+        for (const mention of mentions) {
+          if (mention.user !== user._id.toString()) {
+            await sendTemplatedNotification(
+              'COMMENT_REPLY',
+              mention.user,
               {
-                jobId: job._id,
-                commentId: commentId,
-                replyId: replyId,
-                fromUser: user._id
+                replierName: user.name,
+                jobId: job._id.toString(),
+                commentId: commentId
+              },
+              {
+                senderId: user._id.toString(),
+                priority: 'medium'
               }
             );
           }
         }
       } catch (mentionError) {
         console.error('❌ Failed to send mention notifications:', mentionError);
-        // Don't fail the edit if mention notifications fail
       }
     }
 
-    // Emit real-time event for edit
-    emitToJob(jobId, 'comment:edited', {
-      commentId,
-      replyId,
-      jobId,
-      userId: user._id,
-      userName: user.name,
-      editedContent: moderationResult.content,
-      mentions: mentions,
-      type: replyId ? 'reply' : 'comment',
-      timestamp: new Date()
-    });
+    // Emit real-time event for edit via Ably
+    try {
+      const ably = getServerAbly();
+      const channel = ably.channels.get(CHANNELS.jobComments(jobId));
+
+      await channel.publish(EVENTS.COMMENT_EDITED, {
+        commentId,
+        replyId,
+        jobId,
+        userId: user._id,
+        userName: user.name,
+        editedContent: moderationResult.content,
+        mentions: mentions,
+        type: replyId ? 'reply' : 'comment',
+        timestamp: new Date().toISOString()
+      });
+    } catch (ablyError) {
+      console.error('Failed to publish edit event:', ablyError);
+    }
 
     return NextResponse.json({
       success: true,

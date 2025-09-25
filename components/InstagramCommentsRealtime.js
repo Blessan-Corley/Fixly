@@ -15,7 +15,7 @@ import { useApp } from '../app/providers';
 import { toast } from 'sonner';
 import { toastMessages } from '../utils/toast';
 import ConfirmModal from './ui/ConfirmModal';
-import { useRealtime } from '../hooks/useRealtime';
+import { useJobComments } from '../hooks/useRealTimeNotifications';
 
 export default function InstagramCommentsRealtime({ 
   jobId, 
@@ -34,31 +34,32 @@ export default function InstagramCommentsRealtime({
   const [showDropdown, setShowDropdown] = useState(null);
   const [isUpdating, setIsUpdating] = useState(false);
   
-  // Real-time comments using custom hook
-  const { 
-    data: realTimeComments, 
-    loading: realTimeLoading, 
-    refresh: refreshComments 
-  } = useRealtime(isOpen ? jobId : null);
+  // Real-time comments using Ably
+  const {
+    comments: realTimeComments,
+    isLoading: realTimeLoading,
+    postComment,
+    likeComment
+  } = useJobComments(isOpen ? jobId : null);
 
   // Update comments when real-time data changes with smooth animations
   useEffect(() => {
-    if (realTimeComments?.comments) {
-      const newComments = realTimeComments.comments;
+    if (realTimeComments && Array.isArray(realTimeComments)) {
+      const newComments = realTimeComments;
       const currentComments = comments;
-      
+
       // Check if there are new comments to animate in
       if (newComments.length > currentComments.length) {
         // Add new comments with entrance animation
         setComments(newComments);
-        
+
         // Smooth scroll to new content if user is near bottom
         setTimeout(() => {
           const container = document.querySelector('.comments-container');
           if (container) {
             const { scrollTop, scrollHeight, clientHeight } = container;
             const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
-            
+
             if (isNearBottom) {
               container.scrollTo({
                 top: scrollHeight,

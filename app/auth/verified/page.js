@@ -50,8 +50,8 @@ export default function VerifiedPage() {
           icon: Shield,
           title: 'Account Fully Verified!',
           description: 'Your account is now completely verified and secure.',
-          color: 'text-purple-600',
-          bgColor: 'bg-purple-100'
+          color: 'text-fixly-primary',
+          bgColor: 'bg-fixly-accent/20'
         };
       default:
         return {

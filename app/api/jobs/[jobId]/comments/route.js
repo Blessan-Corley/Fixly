@@ -7,7 +7,8 @@ import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
 import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
-// import { emitToJob, emitToUser } from '../../../../lib/socket';
+import { getServerAbly, CHANNELS, EVENTS } from '../../../../../lib/ably';
+import { sendTemplatedNotification, NOTIFICATION_TEMPLATES } from '../../../../../lib/services/notificationService';
 
 export async function POST(request, { params }) {
   try {
@@ -162,20 +163,26 @@ export async function POST(request, { params }) {
       }
     }
 
-    // Emit real-time event to all users viewing this job
-    // TODO: Fix socket import and re-enable real-time events
-    // emitToJob(jobId, 'comment:new', {
-    //   comment: newComment,
-    //   jobId: jobId,
-    //   author: {
-    //     _id: user._id,
-    //     name: user.name,
-    //     username: user.username,
-    //     photoURL: user.photoURL,
-    //     role: user.role
-    //   },
-    //   timestamp: new Date()
-    // });
+    // Send real-time event via Ably for new comment
+    try {
+      const ably = getServerAbly();
+      const channel = ably.channels.get(CHANNELS.jobComments(jobId));
+
+      await channel.publish(EVENTS.COMMENT_POSTED, {
+        comment: newComment,
+        jobId: jobId,
+        author: {
+          _id: user._id,
+          name: user.name,
+          username: user.username,
+          photoURL: user.photoURL,
+          role: user.role
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (ablyError) {
+      console.error('Failed to publish comment event via Ably:', ablyError);
+    }
 
     return NextResponse.json({
       success: true,
@@ -425,21 +432,27 @@ export async function PUT(request, { params }) {
       }
     }
 
-    // Emit real-time event for new reply
-    // TODO: Fix socket import and re-enable real-time events
-    // emitToJob(jobId, 'comment:reply', {
-    //   commentId: commentId,
-    //   reply: updatedComment.replies[updatedComment.replies.length - 1],
-    //   jobId: jobId,
-    //   author: {
-    //     _id: user._id,
-    //     name: user.name,
-    //     username: user.username,
-    //     photoURL: user.photoURL,
-    //     role: user.role
-    //   },
-    //   timestamp: new Date()
-    // });
+    // Send real-time event via Ably for new reply
+    try {
+      const ably = getServerAbly();
+      const channel = ably.channels.get(CHANNELS.jobComments(jobId));
+
+      await channel.publish(EVENTS.COMMENT_REPLIED, {
+        commentId: commentId,
+        reply: updatedComment.replies[updatedComment.replies.length - 1],
+        jobId: jobId,
+        author: {
+          _id: user._id,
+          name: user.name,
+          username: user.username,
+          photoURL: user.photoURL,
+          role: user.role
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (ablyError) {
+      console.error('Failed to publish reply event via Ably:', ablyError);
+    }
 
     return NextResponse.json({
       success: true,
@@ -544,16 +557,22 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Emit real-time event for comment/reply deletion
-    // TODO: Fix socket import and re-enable real-time events
-    // emitToJob(jobId, 'comment:deleted', {
-    //   commentId: commentId,
-    //   replyId: replyId,
-    //   jobId: jobId,
-    //   deletedBy: user._id,
-    //   type: replyId ? 'reply' : 'comment',
-    //   timestamp: new Date()
-    // });
+    // Send real-time event via Ably for comment/reply deletion
+    try {
+      const ably = getServerAbly();
+      const channel = ably.channels.get(CHANNELS.jobComments(jobId));
+
+      await channel.publish(EVENTS.COMMENT_DELETED, {
+        commentId: commentId,
+        replyId: replyId,
+        jobId: jobId,
+        deletedBy: user._id,
+        type: replyId ? 'reply' : 'comment',
+        timestamp: new Date().toISOString()
+      });
+    } catch (ablyError) {
+      console.error('Failed to publish deletion event via Ably:', ablyError);
+    }
 
     return NextResponse.json({
       success: true,

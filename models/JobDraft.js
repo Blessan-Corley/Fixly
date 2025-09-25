@@ -298,8 +298,7 @@ const jobDraftSchema = new mongoose.Schema({
     default: function() {
       // Auto-delete after 14 days if not converted
       return new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
-    },
-    index: { expireAfterSeconds: 0 } // MongoDB TTL index
+    }
   }
 
 }, {
@@ -311,7 +310,7 @@ const jobDraftSchema = new mongoose.Schema({
 // Indexes for performance
 jobDraftSchema.index({ createdBy: 1, draftStatus: 1 });
 jobDraftSchema.index({ lastActivity: -1 });
-jobDraftSchema.index({ expiresAt: 1 }); // TTL index
+jobDraftSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index
 jobDraftSchema.index({ convertedToJob: 1 });
 jobDraftSchema.index({ createdBy: 1, createdAt: -1 });
 jobDraftSchema.index({ draftStatus: 1, lastActivity: -1 });

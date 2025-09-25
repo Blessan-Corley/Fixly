@@ -18,7 +18,7 @@ import {
   Signal
 } from 'lucide-react';
 import { useApp } from '../../app/providers';
-import { useRealtime } from '../../hooks/useRealtime';
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 
 // Enhanced mobile navigation with native app-like behavior
 export default function MobileNav({ 
@@ -30,7 +30,7 @@ export default function MobileNav({
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useApp();
-  const { unreadNotifications: unreadCount } = useRealtime(user?.id);
+  const { unreadCount } = useRealTimeNotifications();
   const [networkStatus, setNetworkStatus] = useState(true);
   const [batteryLevel, setBatteryLevel] = useState(null);
   const [connectionType, setConnectionType] = useState('wifi');
@@ -257,7 +257,7 @@ export function MobileBottomNav({
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useApp();
-  const { unreadNotifications: unreadCount } = useRealtime(user?.id);
+  const { unreadCount } = useRealTimeNotifications();
 
   // Filter to show only most important items in bottom nav
   const bottomNavItems = navigationItems.slice(0, 5);

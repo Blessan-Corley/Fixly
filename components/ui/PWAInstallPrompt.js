@@ -320,7 +320,7 @@ export default function PWAInstallPrompt({
       {
         icon: Download,
         text: 'Faster loading',
-        color: 'purple',
+        color: 'teal',
         available: true
       },
       {

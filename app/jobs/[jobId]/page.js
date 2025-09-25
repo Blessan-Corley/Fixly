@@ -297,7 +297,14 @@ export default function JobDetailsPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div className="flex items-center text-fixly-text-light">
                   <MapPin className="h-4 w-4 mr-2" />
-                  <span className="text-sm">{job.location?.city || 'Location not specified'}</span>
+                  <span className="text-sm">
+                    {hasApplied || (session?.user?.id === job.hirer?._id || session?.user?.id === job.hirer)
+                      ? (job.location?.city || 'Location not specified')
+                      : job.distance
+                        ? `${job.distance.toFixed(1)} km away`
+                        : 'Location shared after application'
+                    }
+                  </span>
                 </div>
                 <div className="flex items-center text-fixly-text-light">
                   <Calendar className="h-4 w-4 mr-2" />

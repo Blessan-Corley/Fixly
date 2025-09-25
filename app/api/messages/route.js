@@ -6,6 +6,8 @@ import connectDB from '../../../lib/db';
 import User from '../../../models/User';
 import Conversation from '../../../models/Conversation';
 import { rateLimit } from '../../../utils/rateLimiting';
+import { MessageService } from '../../../lib/services/messageService';
+import { validateContent } from '../../../lib/validations/content-validator';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,40 +39,13 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get('limit') || '20');
 
     if (conversationId) {
-      // Get messages for a specific conversation
-      const conversation = await Conversation.findById(conversationId)
-        .populate([
-          {
-            path: 'participants',
-            select: 'name username email photoURL role rating isOnline lastSeen'
-          },
-          {
-            path: 'messages.sender',
-            select: 'name username photoURL'
-          },
-          {
-            path: 'relatedJob',
-            select: 'title status budget location'
-          }
-        ])
-        .lean();
+      // Use MessageService for enhanced caching and real-time features
+      const conversation = await MessageService.getConversation(conversationId, session.user.id);
 
       if (!conversation) {
         return NextResponse.json(
           { message: 'Conversation not found' },
           { status: 404 }
-        );
-      }
-
-      // Check if user is participant
-      const isParticipant = conversation.participants.some(
-        p => p._id.toString() === session.user.id
-      );
-
-      if (!isParticipant) {
-        return NextResponse.json(
-          { message: 'Access denied' },
-          { status: 403 }
         );
       }
 
@@ -82,26 +57,9 @@ export async function GET(request) {
         .slice(startIndex, endIndex)
         .reverse();
 
-      // Mark messages as read
+      // Mark messages as read with real-time updates
       if (page === 1) {
-        await Conversation.updateOne(
-          { _id: conversationId },
-          {
-            $set: {
-              'messages.$[elem].readBy': {
-                ...conversation.messages.reduce((acc, msg) => {
-                  if (msg.sender.toString() !== session.user.id) {
-                    acc[session.user.id] = new Date();
-                  }
-                  return acc;
-                }, conversation.messages[0]?.readBy || {})
-              }
-            }
-          },
-          {
-            arrayFilters: [{ 'elem.sender': { $ne: session.user.id } }]
-          }
-        );
+        await MessageService.markAsRead(conversationId, session.user.id);
       }
 
       return NextResponse.json({
@@ -113,53 +71,12 @@ export async function GET(request) {
         hasMore: endIndex < conversation.messages.length
       });
     } else {
-      // Get all conversations for the user
-      const conversations = await Conversation.find({
-        participants: session.user.id
-      })
-        .populate([
-          {
-            path: 'participants',
-            select: 'name username email photoURL role rating isOnline lastSeen'
-          },
-          {
-            path: 'relatedJob',
-            select: 'title status budget'
-          }
-        ])
-        .sort({ updatedAt: -1 })
-        .limit(50)
-        .lean();
-
-      // Add unread count and last message info
-      const conversationsWithMeta = conversations.map(conv => {
-        const otherParticipant = conv.participants.find(
-          p => p._id.toString() !== session.user.id
-        );
-        
-        const lastMessage = conv.messages[conv.messages.length - 1];
-        const unreadCount = conv.messages.filter(msg => 
-          msg.sender.toString() !== session.user.id &&
-          (!msg.readBy || !msg.readBy[session.user.id])
-        ).length;
-
-        return {
-          _id: conv._id,
-          participant: otherParticipant,
-          relatedJob: conv.relatedJob,
-          lastMessage: lastMessage ? {
-            content: lastMessage.content,
-            timestamp: lastMessage.timestamp,
-            sender: lastMessage.sender.toString() === session.user.id ? 'me' : 'them'
-          } : null,
-          unreadCount,
-          updatedAt: conv.updatedAt
-        };
-      });
+      // Get all conversations for the user using MessageService
+      const conversations = await MessageService.getUserConversations(session.user.id);
 
       return NextResponse.json({
         success: true,
-        conversations: conversationsWithMeta
+        conversations
       });
     }
   } catch (error) {
@@ -191,12 +108,12 @@ export async function POST(request) {
       );
     }
 
-    const { 
-      conversationId, 
-      recipientId, 
-      content, 
+    const {
+      conversationId,
+      recipientId,
+      content,
       messageType = 'text',
-      jobId 
+      jobId
     } = await request.json();
 
     if (!content || content.trim().length === 0) {
@@ -213,132 +130,70 @@ export async function POST(request) {
       );
     }
 
+    // Validate content for private messages (more lenient than public)
+    const validation = await validateContent(content, 'private_message', session.user.id);
+
+    // For private messages, we allow contact details but block abusive language
+    if (validation.violations.some(v => v.type === 'PROFANITY' || v.type === 'ABUSE')) {
+      return NextResponse.json(
+        {
+          message: 'Message contains inappropriate language',
+          violations: validation.violations.filter(v => v.type === 'PROFANITY' || v.type === 'ABUSE')
+        },
+        { status: 400 }
+      );
+    }
+
     await connectDB();
 
-    let conversation;
-
+    // Use MessageService for enhanced real-time messaging
     if (conversationId) {
-      // Find existing conversation
-      conversation = await Conversation.findById(conversationId);
-      
-      if (!conversation) {
+      // Send message to existing conversation
+      const result = await MessageService.sendMessage(
+        conversationId,
+        session.user.id,
+        content.trim(),
+        messageType
+      );
+
+      return NextResponse.json(result);
+
+    } else if (recipientId) {
+      // Create new conversation and send first message
+      await connectDB();
+
+      // Verify recipient exists
+      const recipient = await User.findById(recipientId);
+      if (!recipient) {
         return NextResponse.json(
-          { message: 'Conversation not found' },
+          { message: 'Recipient not found' },
           { status: 404 }
         );
       }
 
-      // Check if user is participant
-      const isParticipant = conversation.participants.some(
-        p => p.toString() === session.user.id
+      // Find or create conversation
+      const conversation = await Conversation.findOrCreateBetween(
+        session.user.id,
+        recipientId,
+        jobId
       );
 
-      if (!isParticipant) {
-        return NextResponse.json(
-          { message: 'Access denied' },
-          { status: 403 }
-        );
-      }
-    } else if (recipientId) {
-      // Create new conversation or find existing one
-      const existingConversation = await Conversation.findOne({
-        participants: { $all: [session.user.id, recipientId] },
-        ...(jobId && { relatedJob: jobId })
-      });
+      // Send message using MessageService
+      const result = await MessageService.sendMessage(
+        conversation._id,
+        session.user.id,
+        content.trim(),
+        messageType
+      );
 
-      if (existingConversation) {
-        conversation = existingConversation;
-      } else {
-        // Verify recipient exists
-        const recipient = await User.findById(recipientId);
-        if (!recipient) {
-          return NextResponse.json(
-            { message: 'Recipient not found' },
-            { status: 404 }
-          );
-        }
+      return NextResponse.json(result);
 
-        // Create new conversation
-        conversation = new Conversation({
-          participants: [session.user.id, recipientId],
-          relatedJob: jobId || null,
-          messages: [],
-          createdAt: new Date(),
-          updatedAt: new Date()
-        });
-      }
     } else {
       return NextResponse.json(
         { message: 'Either conversationId or recipientId is required' },
         { status: 400 }
       );
     }
-
-    // Create new message
-    const newMessage = {
-      sender: session.user.id,
-      content: content.trim(),
-      messageType,
-      timestamp: new Date(),
-      readBy: {
-        [session.user.id]: new Date()
-      },
-      edited: false,
-      editedAt: null
-    };
-
-    // Add message to conversation
-    conversation.messages.push(newMessage);
-    conversation.updatedAt = new Date();
-
-    await conversation.save();
-
-    // Populate the new message for response
-    const populatedConversation = await Conversation.findById(conversation._id)
-      .populate('messages.sender', 'name username photoURL')
-      .lean();
-
-    const savedMessage = populatedConversation.messages[populatedConversation.messages.length - 1];
-
-    // Here you would emit the message via WebSocket to other participants
-    // For now, we'll implement a simple polling-based approach
-    
-    // Create notification for recipient
-    const notificationRecipientId = conversation.participants.find(
-      p => p.toString() !== session.user.id
-    );
-
-    if (notificationRecipientId) {
-      try {
-        await fetch(`${process.env.NEXTAUTH_URL}/api/user/notifications`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: notificationRecipientId,
-            type: 'message',
-            title: 'New Message',
-            message: `${session.user.name} sent you a message`,
-            actionUrl: `/dashboard/messages?conversation=${conversation._id}`,
-            data: {
-              conversationId: conversation._id,
-              senderId: session.user.id,
-              senderName: session.user.name
-            }
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to create notification:', error);
-        // Don't fail the message sending if notification fails
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: savedMessage,
-      conversationId: conversation._id
-    });
 
   } catch (error) {
     console.error('Send message error:', error);
@@ -450,22 +305,8 @@ export async function PATCH(request) {
       );
     }
 
-    await connectDB();
-
-    await Conversation.updateOne(
-      { 
-        _id: conversationId,
-        participants: session.user.id
-      },
-      {
-        $set: {
-          [`messages.$[elem].readBy.${session.user.id}`]: new Date()
-        }
-      },
-      {
-        arrayFilters: [{ 'elem.sender': { $ne: session.user.id } }]
-      }
-    );
+    // Use MessageService for enhanced real-time read receipts
+    const result = await MessageService.markAsRead(conversationId, session.user.id);
 
     return NextResponse.json({
       success: true,

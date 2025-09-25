@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useRealtime } from '../../hooks/useRealtime';
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 import { Bell, BellRing, X, Check, CheckCheck, Settings } from 'lucide-react';
 
 export default function NotificationCenter({ userId, className = '' }) {
@@ -11,11 +11,14 @@ export default function NotificationCenter({ userId, className = '' }) {
   
   const {
     notifications,
-    unreadNotifications,
-    markNotificationAsRead,
-    connected,
-    connecting
-  } = useRealtime(userId);
+    unreadCount: unreadNotifications,
+    markAsRead: markNotificationAsRead,
+    error
+  } = useRealTimeNotifications();
+
+  // For connection status, we'll use Ably context
+  const connected = true; // Ably handles this internally
+  const connecting = false;
   
   // Filter notifications
   const filteredNotifications = notifications.filter(notification => {
@@ -48,13 +51,13 @@ export default function NotificationCenter({ userId, className = '' }) {
     switch (type) {
       case 'job_application':
       case 'job_update':
-        return '=¼';
+        return '=ï¿½';
       case 'message_received':
-        return '=¬';
+        return '=ï¿½';
       case 'comment_added':
-        return '=­';
+        return '=ï¿½';
       case 'payment_received':
-        return '=°';
+        return '=ï¿½';
       default:
         return '=';
     }

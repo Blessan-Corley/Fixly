@@ -130,9 +130,9 @@ export default function EnhancedSignupTestPage() {
                 </div>
 
                 {testMode === 'fixer' && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <div className="p-3 bg-fixly-accent/10 border border-fixly-accent/30 rounded-lg">
                     <h3 className="font-medium text-purple-900 mb-2">Skills System</h3>
-                    <ul className="text-sm text-purple-700 space-y-1">
+                    <ul className="text-sm text-fixly-primary space-y-1">
                       <li>• Categorized skill selection</li>
                       <li>• Search & filter options</li>
                       <li>• Custom skills support</li>

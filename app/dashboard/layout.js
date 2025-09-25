@@ -29,13 +29,279 @@ import {
   Wrench
 } from 'lucide-react';
 import { useApp, ProtectedRoute } from '../providers';
-import { useRealtime } from '../../hooks/useRealtime';
+import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
+import { useAbly } from '../../contexts/AblyContext';
 import { toast } from 'sonner';
 import { toastMessages } from '../../utils/toast';
 import ThemeToggle from '../../components/ui/ThemeToggle';
 import ProBadge from '../../components/ui/ProBadge';
 import MobileNav, { MobileBottomNav, useMobileNav } from '../../components/ui/MobileNav';
-import { useMobileDevice } from '../../components/ui/MobileOptimized';
+import { useMobileDevice } from '../../components/ui/mobile';
+
+// Enhanced Collapsible Sidebar Component
+function CollapsibleSidebar({ user, subscriptionInfo, navigationItems, router, pathname, badgeStyle, onHoverChange }) {
+  const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed by default
+  const [isHovered, setIsHovered] = useState(false);
+
+  const showExpanded = !isCollapsed || isHovered;
+
+  // Notify parent about hover state changes
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    onHoverChange?.(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+    onHoverChange?.(false);
+  };
+
+  return (
+    <motion.aside
+      initial={false}
+      animate={{
+        width: showExpanded ? 256 : 72
+      }}
+      transition={{
+        duration: 0.3,
+        ease: [0.4, 0, 0.2, 1]
+      }}
+      className={`hidden lg:flex lg:flex-col lg:fixed lg:inset-y-0 bg-fixly-card border-r border-fixly-border z-50 overflow-hidden transition-shadow duration-300 ${
+        showExpanded ? 'shadow-2xl shadow-black/20' : 'shadow-lg'
+      }`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="flex flex-col h-full">
+        {/* Logo and toggle */}
+        <div className="flex items-center justify-center p-4 border-b border-fixly-border min-h-[76px]">
+          {showExpanded ? (
+            // Expanded state - show logo and text with pin button
+            <motion.div
+              className="flex items-center justify-between w-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2, delay: 0.1 }}
+            >
+              <div className="flex items-center">
+                <Wrench className="h-8 w-8 text-fixly-accent mr-2 flex-shrink-0" />
+                <motion.span
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.2, delay: 0.15 }}
+                  className="text-xl font-bold text-fixly-text whitespace-nowrap"
+                >
+                  Fixly
+                </motion.span>
+              </div>
+
+              <motion.button
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2, delay: 0.2 }}
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="p-1.5 hover:bg-fixly-accent/10 rounded-lg transition-colors flex-shrink-0"
+                title={isCollapsed ? "Pin sidebar open" : "Collapse sidebar"}
+              >
+                <Menu className="h-4 w-4 text-fixly-text" />
+              </motion.button>
+            </motion.div>
+          ) : (
+            // Collapsed state - show only icon with pin option
+            <div className="flex flex-col items-center">
+              <button
+                onClick={() => setIsCollapsed(false)}
+                className="p-2 hover:bg-fixly-accent/10 rounded-lg transition-colors mb-2"
+                title="Pin sidebar open"
+              >
+                <Wrench className="h-6 w-6 text-fixly-accent" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* User info */}
+        <div className="p-4 border-b border-fixly-border">
+          <div className={`flex items-center ${!showExpanded ? 'justify-center' : ''}`}>
+            <motion.img
+              src={user?.photoURL || '/default-avatar.png'}
+              alt={user?.name}
+              className="h-10 w-10 rounded-full object-cover flex-shrink-0"
+              title={!showExpanded ? `${user?.name} (${user?.role})` : ''}
+            />
+
+            <AnimatePresence>
+              {showExpanded && (
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.2, delay: 0.1 }}
+                  className="ml-3 flex-1 min-w-0"
+                >
+                  <p className="text-sm font-medium text-fixly-text truncate flex items-center">
+                    {user?.name}
+                    <ProBadge isPro={subscriptionInfo?.isPro} size="xs" className="ml-1" />
+                  </p>
+                  <p className="text-xs text-fixly-text-muted truncate">
+                    {user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Plan badge for fixers */}
+          <AnimatePresence>
+            {user?.role === 'fixer' && showExpanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2, delay: 0.1 }}
+                className="mt-3 overflow-hidden"
+              >
+                <div className={`text-xs px-2 py-1 rounded-full inline-block ${
+                  user?.plan?.type === 'pro'
+                    ? 'bg-fixly-accent text-fixly-text'
+                    : 'bg-orange-100 text-orange-800'
+                }`}>
+                  {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (parseInt(user?.plan?.creditsUsed) || 0))} free credits left`}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-2 py-4 space-y-1">
+          {navigationItems.map((item) => (
+            <motion.div key={item.name} className="relative">
+              <button
+                onClick={() => router.push(item.href)}
+                className={`group flex items-center w-full p-3 rounded-xl transition-all duration-200 relative ${
+                  !showExpanded ? 'justify-center' : ''
+                } ${
+                  item.current
+                    ? 'bg-fixly-primary-bg text-fixly-primary border border-fixly-primary/20'
+                    : 'text-fixly-text-secondary hover:bg-fixly-primary-bg hover:text-fixly-primary'
+                } ${item.highlight ? 'ring-2 ring-fixly-accent' : ''}`}
+                title={!showExpanded ? item.name : ''}
+              >
+                <item.icon className="h-5 w-5 flex-shrink-0" />
+
+                <AnimatePresence>
+                  {showExpanded && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2, delay: 0.05 }}
+                      className="ml-3 text-sm font-medium whitespace-nowrap"
+                    >
+                      {item.name}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+
+                {/* Badges */}
+                <AnimatePresence>
+                  {showExpanded && (item.count > 0 || item.badge) && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ duration: 0.2 }}
+                      className="ml-auto flex items-center space-x-1"
+                    >
+                      {item.count > 0 && (
+                        badgeStyle === 'dots' ? (
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        ) : (
+                          <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                            {item.count > 9 ? '9+' : item.count}
+                          </span>
+                        )
+                      )}
+                      {item.badge && (
+                        <span className="text-xs bg-orange-500 text-white px-1.5 py-0.5 rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Notification dot for collapsed state */}
+                {!showExpanded && (item.count > 0) && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-fixly-card"></div>
+                )}
+              </button>
+
+              {/* Tooltip for collapsed state */}
+              {!showExpanded && (
+                <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-fixly-text text-fixly-bg text-xs px-3 py-2 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-lg border border-fixly-border">
+                  {item.name}
+                  {(item.count > 0 || item.badge) && (
+                    <span className="ml-2 text-fixly-accent">
+                      {item.count > 0 && `(${item.count})`}
+                      {item.badge && ` • ${item.badge}`}
+                    </span>
+                  )}
+                  {/* Tooltip arrow */}
+                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-fixly-text"></div>
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </nav>
+
+        {/* Settings & Help */}
+        <div className="p-2 border-t border-fixly-border space-y-1">
+          {[
+            { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+            { name: 'Help & Support', href: '/help', icon: HelpCircle }
+          ].map((item) => (
+            <motion.div key={item.name} className="relative">
+              <button
+                onClick={() => router.push(item.href)}
+                className={`group flex items-center w-full p-3 rounded-xl text-fixly-text-secondary hover:bg-fixly-primary-bg hover:text-fixly-primary transition-all duration-200 ${
+                  !showExpanded ? 'justify-center' : ''
+                }`}
+                title={!showExpanded ? item.name : ''}
+              >
+                <item.icon className="h-5 w-5 flex-shrink-0" />
+
+                <AnimatePresence>
+                  {showExpanded && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2, delay: 0.05 }}
+                      className="ml-3 text-sm font-medium whitespace-nowrap"
+                    >
+                      {item.name}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </button>
+
+              {/* Tooltip for collapsed state */}
+              {!showExpanded && (
+                <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-fixly-text text-fixly-bg text-xs px-3 py-2 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-lg border border-fixly-border">
+                  {item.name}
+                  {/* Tooltip arrow */}
+                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 border-4 border-transparent border-r-fixly-text"></div>
+                </div>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </motion.aside>
+  );
+}
 
 export default function DashboardLayout({ children }) {
   return (
@@ -47,19 +313,18 @@ export default function DashboardLayout({ children }) {
 
 function DashboardContent({ children }) {
   const { user } = useApp();
-  const { 
-    notifications, 
-    unreadNotifications: unreadCount, 
-    markNotificationAsRead: markAsRead,
-    connected: isRealTimeConnected
-  } = useRealtime(user?.id);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead: markAllNotificationsAsRead
+  } = useRealTimeNotifications();
+
+  const { isConnected: isRealTimeConnected } = useAbly();
 
   // Helper functions for notifications
-  const markAllAsRead = async () => {
-    for (const notification of notifications.filter(n => !n.read)) {
-      await markAsRead(notification.id);
-    }
-  };
+  const markAllAsRead = markAllNotificationsAsRead;
 
   const handleNotificationClick = async (notification) => {
     if (!notification.read) {
@@ -308,11 +573,35 @@ function DashboardContent({ children }) {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
-      <aside className={`sidebar fixed top-0 left-0 z-50 w-64 h-full transition-transform duration-300 lg:translate-x-0 ${
+      {/* Desktop sidebar hover backdrop */}
+      <AnimatePresence>
+        {sidebarHovered && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="hidden lg:block fixed inset-0 bg-black/10 z-40 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Collapsible Sidebar */}
+      <CollapsibleSidebar
+        user={user}
+        subscriptionInfo={subscriptionInfo}
+        navigationItems={navigationItems}
+        router={router}
+        pathname={pathname}
+        badgeStyle={badgeStyle}
+        onHoverChange={setSidebarHovered}
+      />
+
+      {/* Mobile Sidebar Overlay */}
+      <aside className={`sidebar fixed top-0 left-0 z-50 w-64 h-full transition-transform duration-300 lg:hidden ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-fixly-card border-r border-fixly-border">
           {/* Logo */}
           <div className="flex items-center justify-between p-6 border-b border-fixly-border">
             <div className="flex items-center">
@@ -321,7 +610,7 @@ function DashboardContent({ children }) {
             </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-1 hover:bg-fixly-accent/10 rounded"
+              className="p-1 hover:bg-fixly-accent/10 rounded"
             >
               <X className="h-5 w-5" />
             </button>
@@ -345,13 +634,13 @@ function DashboardContent({ children }) {
                 </p>
               </div>
             </div>
-            
+
             {/* Plan badge for fixers */}
             {user?.role === 'fixer' && (
               <div className="mt-3">
                 <div className={`text-xs px-2 py-1 rounded-full ${
-                  user?.plan?.type === 'pro' 
-                    ? 'bg-fixly-accent text-fixly-text' 
+                  user?.plan?.type === 'pro'
+                    ? 'bg-fixly-accent text-fixly-text'
                     : 'bg-orange-100 text-orange-800'
                 }`}>
                   {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (parseInt(user?.plan?.creditsUsed) || 0))} free credits left`}
@@ -361,7 +650,7 @@ function DashboardContent({ children }) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto scrollbar-hide">
             {navigationItems.map((item) => (
               <button
                 key={item.name}
@@ -413,10 +702,12 @@ function DashboardContent({ children }) {
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className="lg:ml-64">
+      {/* Main content - Dynamic margin for collapsible sidebar */}
+      <div className={`lg:ml-[72px] transition-all duration-300 ease-&lsqb;cubic-bezier(0.4,0,0.2,1)&rsqb; ${
+        sidebarHovered ? 'lg:blur-sm lg:brightness-75' : ''
+      }`}>
         {/* Top bar */}
-        <header className="navbar px-4 lg:px-6 py-4">
+        <header className="navbar px-4 lg:px-6 py-4 relative z-10">
           <div className="flex items-center justify-between">
             {/* Mobile menu button - enhanced for mobile nav */}
             <button
@@ -537,8 +828,8 @@ function DashboardContent({ children }) {
                                 <div className="flex items-start gap-3">
                                   <div className="flex-shrink-0">
                                     {notification.type === 'message' && (
-                                      <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/20 rounded-full flex items-center justify-center">
-                                        <MessageSquare className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                      <div className="w-8 h-8 bg-fixly-accent/20 dark:bg-fixly-accent/10 rounded-full flex items-center justify-center">
+                                        <MessageSquare className="h-4 w-4 text-fixly-primary dark:text-fixly-primary" />
                                       </div>
                                     )}
                                     {notification.type === 'job_applied' && (

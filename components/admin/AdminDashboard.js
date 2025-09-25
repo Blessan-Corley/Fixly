@@ -25,7 +25,7 @@ import {
   PieChart,
   LineChart
 } from 'lucide-react';
-import { useRealtime } from '../../hooks/useRealtime';
+import { useAbly } from '../../contexts/AblyContext';
 import { cache } from '../../lib/cache';
 import { LoadingSpinner, LoadingSkeleton } from '../ui/LoadingStates';
 import { OptimizedImage } from '../ui/OptimizedImage';
@@ -43,7 +43,7 @@ export default function AdminDashboard() {
     analytics: {}
   });
 
-  const { connected } = useRealtime('admin');
+  const { isConnected: connected } = useAbly();
 
   // Real-time data updates (simplified)
   useEffect(() => {
@@ -144,7 +144,7 @@ export default function AdminDashboard() {
         value={`₹${metrics.totalRevenue.toLocaleString()}`}
         change={15.3}
         icon={DollarSign}
-        color="purple"
+        color="teal"
         loading={loading}
       />
       <MetricCard

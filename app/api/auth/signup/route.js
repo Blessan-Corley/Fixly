@@ -53,17 +53,19 @@ export async function POST(request) {
     const userAgent = request.headers.get('user-agent') || '';
     const deviceInfo = detectDevice(userAgent);
 
-    // Enhanced Redis-based rate limiting - 3 signups per hour per IP
-    // Whitelist for development - bypass rate limiting for local IPs
+    // OPTIMIZED: Redis-based rate limiting with development bypass
     const developmentIPs = ['127.0.0.1', '::1', 'localhost', 'unknown'];
-    const isLocalIP = developmentIPs.includes(ip);
+    const isLocalIP = developmentIPs.includes(ip) || process.env.NODE_ENV === 'development';
 
+    let rateLimitResult;
     if (!isLocalIP) {
-      const rateLimitResult = await redisRateLimit(`signup:${ip}`, 3, 3600);
+      // Production: Strict rate limiting - 3 signups per hour per IP
+      rateLimitResult = await redisRateLimit(`signup:${ip}`, 3, 3600);
       if (!rateLimitResult.success) {
         const resetTime = new Date(rateLimitResult.resetTime || Date.now() + 3600000);
         return NextResponse.json(
           {
+            success: false,
             message: 'Too many registration attempts. Please try again later.',
             resetTime: resetTime.toISOString(),
             remaining: rateLimitResult.remaining
@@ -72,7 +74,13 @@ export async function POST(request) {
         );
       }
     } else {
-      console.log('🔓 Rate limiting bypassed for local development IP:', ip);
+      // Development: Relaxed rate limiting - 10 signups per hour per IP
+      rateLimitResult = await redisRateLimit(`signup_dev:${ip}`, 10, 3600);
+      if (!rateLimitResult.success) {
+        console.log('⚠️ Development rate limit exceeded for IP:', ip);
+      } else {
+        console.log('🔓 Development rate limiting applied (relaxed) for IP:', ip);
+      }
     }
 
     const body = await request.json();
@@ -107,9 +115,33 @@ export async function POST(request) {
         );
       }
 
+      // OPTIMIZED: Use existing validation utilities
+      const googleValidation = validateSignupForm({
+        ...body,
+        authMethod: 'google',
+        email: session.user.email,
+        name: session.user.name
+      });
+
+      if (!googleValidation.valid) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Validation failed',
+            errors: googleValidation.errors
+          },
+          { status: 400 }
+        );
+      }
+
+      // Additional Google-specific validation
       if (!body.role || !['hirer', 'fixer'].includes(body.role)) {
         return NextResponse.json(
-          { message: 'Valid role is required' },
+          {
+            success: false,
+            message: 'Please select your role (Hirer or Fixer)',
+            errors: [{ field: 'role', error: 'Valid role is required' }]
+          },
           { status: 400 }
         );
       }
@@ -313,37 +345,51 @@ export async function POST(request) {
       }, { status: 201 });
     }
 
-    // ✅ FAST VALIDATION: Basic checks only
-    console.log('🧪 TESTING: Using fast validation');
+    // OPTIMIZED: Use comprehensive validation utilities
+    console.log('🔍 Validating email signup with existing utilities');
 
-    // Basic validation only
-    if (!body.email || !body.name || !body.role) {
+    // Use your existing comprehensive validation
+    const emailValidation = validateSignupForm({
+      ...body,
+      authMethod: body.authMethod || 'email'
+    });
+
+    if (!emailValidation.valid) {
+      console.log('❌ Validation failed:', emailValidation.errors);
       return NextResponse.json(
-        { message: 'Missing required fields: email, name, role' },
+        {
+          success: false,
+          message: 'Validation failed',
+          errors: emailValidation.errors
+        },
         { status: 400 }
       );
     }
 
-    if (body.authMethod === 'email' && !body.password) {
-      return NextResponse.json(
-        { message: 'Password is required for email registration' },
-        { status: 400 }
-      );
+    // Enhanced fake account detection
+    const fakeDetection = detectFakeAccount(body);
+    if (fakeDetection.isSuspicious && fakeDetection.riskScore > 50) {
+      console.log('🚨 Suspicious account detected:', {
+        fields: fakeDetection.suspiciousFields,
+        riskScore: fakeDetection.riskScore
+      });
+
+      // In production, you might want to flag for manual review instead of blocking
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Unable to create account. Please try again or contact support.',
+            code: 'ACCOUNT_VALIDATION_FAILED'
+          },
+          { status: 400 }
+        );
+      } else {
+        console.log('⚠️ Fake account detected but allowed in development');
+      }
     }
 
-    // Fast email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(body.email)) {
-      return NextResponse.json(
-        { message: 'Please enter a valid email address' },
-        { status: 400 }
-      );
-    }
-
-    const validatedData = body;
-    
-    // ✅ TEMPORARY: Bypass fake account detection for testing
-    console.log('🧪 TESTING: Bypassing fake account detection temporarily');
+    const validatedData = emailValidation.validatedData;
 
     // Validate auth method specific requirements
     if (body.authMethod === 'email' && !body.password) {
@@ -364,25 +410,39 @@ export async function POST(request) {
 
     await connectDB();
 
-    // ✅ COMPREHENSIVE DUPLICATE CHECK WITH REDIS CACHING
-    const cacheKey = `user_check:${validatedData.email}:${validatedData.username}`;
-    let existingUser = await redisUtils.get(cacheKey);
+    // OPTIMIZED: Efficient duplicate check with selective caching
+    const searchCriteria = [
+      { email: validatedData.email.toLowerCase() }
+    ];
 
-    if (!existingUser) {
-      existingUser = await User.findOne({
-        $or: [
-          { email: validatedData.email },
-          { username: validatedData.username },
-          { phone: validatedData.phone },
-          ...(body.googleId ? [{ googleId: body.googleId }] : [])
-        ]
-      });
-
-      // Cache the result for 5 minutes (short cache to prevent stale data)
-      if (existingUser) {
-        await redisUtils.set(cacheKey, existingUser, 300);
-      }
+    // Only add username check if provided (required field)
+    if (validatedData.username) {
+      searchCriteria.push({ username: validatedData.username.toLowerCase() });
     }
+
+    // Only add phone check if provided (optional field)
+    if (validatedData.phone) {
+      const cleanPhone = validatedData.phone.replace(/[^\d]/g, '');
+      searchCriteria.push(
+        { phone: cleanPhone },
+        { phone: `+91${cleanPhone}` },
+        { phone: `91${cleanPhone}` }
+      );
+    }
+
+    // Add Google ID check if applicable
+    if (body.googleId) {
+      searchCriteria.push({ googleId: body.googleId });
+    }
+
+    // Fast database query with minimal fields
+    const existingUser = await User.findOne({
+      $or: searchCriteria
+    }).select('_id email username phone googleId isRegistered role authMethod').lean();
+
+    // Cache only email uniqueness for performance (most common check)
+    const emailCacheKey = `email_exists:${validatedData.email.toLowerCase()}`;
+    await redisUtils.set(emailCacheKey, !!existingUser, 300); // Cache for 5 minutes
 
     if (existingUser) {
       // Handle existing user scenarios

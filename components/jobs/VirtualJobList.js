@@ -1,12 +1,14 @@
 // components/jobs/VirtualJobList.js - Optimized job listing with virtual scrolling
 'use client';
 
-import { useMemo, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo, useCallback, useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import VirtualList from '../ui/VirtualList';
 import JobCardRectangular from '../JobCardRectangular';
 import { LoadingSkeleton } from '../ui/LoadingStates';
 import { useInfiniteJobs } from '../../hooks/useQuery';
+import { getClientAbly, CHANNELS, EVENTS } from '../../lib/ably';
+import { toast } from 'sonner';
 
 export default function VirtualJobList({
   filters = {},
@@ -16,8 +18,16 @@ export default function VirtualJobList({
   onJobApply,
   user,
   sortBy = 'newest',
-  showFilters = true
+  showFilters = true,
+  enableRealTimeFiltering = true,
+  showDistance = true,
+  userLocation = null
 }) {
+  const [realtimeJobs, setRealtimeJobs] = useState([]);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [appliedFilters, setAppliedFilters] = useState(filters);
+  const [sortDirection, setSortDirection] = useState('desc');
+
   // Use infinite query for job data
   const {
     data,
@@ -25,7 +35,8 @@ export default function VirtualJobList({
     hasNextPage,
     isFetchingNextPage,
     isLoading,
-    error
+    error,
+    refetch
   } = useInfiniteJobs(
     { ...filters, sortBy },
     {
@@ -34,11 +45,293 @@ export default function VirtualJobList({
     }
   );
 
-  // Flatten all pages into a single array
+  // Enhanced job processing with distance calculation and filtering
   const allJobs = useMemo(() => {
-    if (!data?.pages) return [];
-    return data.pages.flatMap(page => page.jobs || []);
-  }, [data]);
+  const queryJobs = data?.pages ? data.pages.flatMap(page => page.jobs || []) : [];
+  
+  // Remove duplicates between real-time and query jobs
+  const uniqueRealtimeJobs = realtimeJobs.filter(rtJob => 
+    !queryJobs.some(queryJob => queryJob._id === rtJob._id)
+  );
+
+  let combinedJobs = [...uniqueRealtimeJobs, ...queryJobs];
+
+  // Calculate distances if user location is available
+  if (userLocation && showDistance) {
+    combinedJobs = combinedJobs.map(job => {
+      if (job.location?.lat && job.location?.lng) {
+        const distance = calculateDistance(
+          userLocation.lat,
+          userLocation.lng,
+          job.location.lat,
+          job.location.lng
+        );
+        return { ...job, distance };
+      }
+      return job;
+    });
+  }
+
+  // Apply real-time filtering
+  if (enableRealTimeFiltering) {
+    combinedJobs = applyAdvancedFilters(combinedJobs, appliedFilters, userLocation);
+  }
+
+  // Apply sorting
+  combinedJobs = applySorting(combinedJobs, sortBy, sortDirection, userLocation);
+
+  return combinedJobs;
+}, [data, realtimeJobs, userLocation, showDistance, enableRealTimeFiltering, appliedFilters, sortBy, sortDirection]);
+
+  // Distance calculation function
+  const calculateDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Advanced filtering function
+  const applyAdvancedFilters = (jobs, filters, userLocation) => {
+    return jobs.filter(job => {
+      // Skills matching
+      if (filters.skills && filters.skills.length > 0) {
+        const hasMatchingSkill = filters.skills.some(skill =>
+          job.skillsRequired?.some(jobSkill =>
+            jobSkill.toLowerCase().includes(skill.toLowerCase())
+          )
+        );
+        if (!hasMatchingSkill) return false;
+      }
+
+      // Location radius filtering
+      if (filters.radius && userLocation && job.distance !== undefined) {
+        if (job.distance > filters.radius) return false;
+      }
+
+      // Budget range filtering
+      if (filters.budgetMin && job.budget?.amount && job.budget.amount < filters.budgetMin) {
+        return false;
+      }
+      if (filters.budgetMax && job.budget?.amount && job.budget.amount > filters.budgetMax) {
+        return false;
+      }
+
+      // Urgency filtering
+      if (filters.urgency && filters.urgency.length > 0) {
+        if (!filters.urgency.includes(job.urgency)) return false;
+      }
+
+      // Posted within time filter
+      if (filters.postedWithin && filters.postedWithin !== 'all') {
+        const now = new Date();
+        const postedDate = new Date(job.createdAt);
+        const timeDiff = now - postedDate;
+        const hours = timeDiff / (1000 * 60 * 60);
+
+        switch (filters.postedWithin) {
+          case '1h':
+            if (hours > 1) return false;
+            break;
+          case '6h':
+            if (hours > 6) return false;
+            break;
+          case '24h':
+            if (hours > 24) return false;
+            break;
+          case '7d':
+            if (hours > 168) return false;
+            break;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  // Advanced sorting function
+  const applySorting = (jobs, sortBy, direction, userLocation) => {
+    const sortedJobs = [...jobs];
+
+    sortedJobs.sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'newest':
+          comparison = new Date(b.createdAt) - new Date(a.createdAt);
+          break;
+        case 'oldest':
+          comparison = new Date(a.createdAt) - new Date(b.createdAt);
+          break;
+        case 'budget':
+          comparison = (b.budget?.amount || 0) - (a.budget?.amount || 0);
+          break;
+        case 'deadline':
+          comparison = new Date(a.deadline) - new Date(b.deadline);
+          break;
+        case 'distance':
+          if (userLocation) {
+            comparison = (a.distance || Infinity) - (b.distance || Infinity);
+          }
+          break;
+        case 'relevance':
+          // Calculate relevance based on user skills
+          if (user?.skills) {
+            const aRelevance = calculateRelevanceScore(a, user.skills);
+            const bRelevance = calculateRelevanceScore(b, user.skills);
+            comparison = bRelevance - aRelevance;
+          }
+          break;
+      }
+
+      return direction === 'desc' ? comparison : -comparison;
+    });
+
+    return sortedJobs;
+  };
+
+  // Calculate relevance score based on user skills
+  const calculateRelevanceScore = (job, userSkills) => {
+    if (!job.skillsRequired || !userSkills) return 0;
+
+    const matchingSkills = job.skillsRequired.filter(jobSkill =>
+      userSkills.some(userSkill =>
+        userSkill.toLowerCase() === jobSkill.toLowerCase()
+      )
+    );
+
+    return matchingSkills.length / job.skillsRequired.length;
+  };
+
+  // Real-time job updates
+useEffect(() => {
+  if (!user || user.role !== 'fixer') return;
+
+  let ably = null;
+  let channels = [];
+
+  const setupRealtimeConnection = async () => {
+    try {
+      ably = getClientAbly();
+      if (!ably) return;
+
+      ably.options.clientId = `fixer-${user.id}`;
+
+      // Connection events
+      ably.connection.on('connected', () => {
+        console.log('✅ VirtualJobList connected to Ably');
+        setConnectionStatus('connected');
+      });
+
+      ably.connection.on('disconnected', () => {
+        console.log('⚠️ VirtualJobList disconnected from Ably');
+        setConnectionStatus('disconnected');
+      });
+
+      ably.connection.on('failed', (error) => {
+        console.error('❌ VirtualJobList Ably connection failed:', error);
+        setConnectionStatus('failed');
+      });
+
+      // Subscribe to general new jobs
+      const newJobsChannel = ably.channels.get(CHANNELS.newJobs);
+      channels.push(newJobsChannel);
+
+      const jobPostedCallback = (message) => {
+        const newJob = message.data;
+        console.log('📨 New job received:', newJob.title);
+
+        // Check if job matches current filters
+        const matchesSkills = !filters.skills || filters.skills.length === 0 ||
+          filters.skills.some(skill => 
+            newJob.skillsRequired?.some(jobSkill => 
+              jobSkill.toLowerCase().includes(skill.toLowerCase())
+            )
+          );
+
+        const matchesLocation = !filters.location?.city ||
+          newJob.location?.city === filters.location.city;
+
+        if (matchesSkills && matchesLocation) {
+          setRealtimeJobs(prev => {
+            const existingJobIndex = prev.findIndex(job => job._id === newJob.jobId);
+            if (existingJobIndex !== -1) return prev; // Don't duplicate
+            
+            return [{
+              ...newJob,
+              _id: newJob.jobId,
+              isRealTimeUpdate: true,
+              createdAt: newJob.timestamp || newJob.createdAt
+            }, ...prev.slice(0, 9)]; // Keep only 10 real-time jobs
+          });
+
+          toast.success(`New ${newJob.title} job posted!`, {
+            description: `Budget: ₹${newJob.budget?.amount?.toLocaleString() || 'Negotiable'}`,
+            action: {
+              label: 'View',
+              onClick: () => onJobClick && onJobClick(newJob.jobId)
+            }
+          });
+        }
+      };
+
+      await newJobsChannel.subscribe(EVENTS.JOB_POSTED, jobPostedCallback);
+
+      // Subscribe to skill-specific channels if filters are applied
+      if (filters.skills && filters.skills.length > 0) {
+        for (const skill of filters.skills) {
+          const skillChannel = ably.channels.get(CHANNELS.skillJobs(skill));
+          channels.push(skillChannel);
+
+          const skillCallback = (message) => {
+            console.log(`📨 Skill-specific job for ${skill}:`, message.data.title);
+          };
+
+          await skillChannel.subscribe(EVENTS.JOB_POSTED, skillCallback);
+        }
+      }
+
+      // Subscribe to location-specific channel if filter is applied
+      if (filters.location?.city && filters.location?.state) {
+        const locationChannel = ably.channels.get(CHANNELS.locationJobs(filters.location.city, filters.location.state));
+        channels.push(locationChannel);
+
+        const locationCallback = (message) => {
+          console.log(`📨 Location-specific job for ${filters.location.city}:`, message.data.title);
+        };
+
+        await locationChannel.subscribe(EVENTS.JOB_POSTED, locationCallback);
+      }
+
+    } catch (error) {
+      console.error('❌ Real-time setup error:', error);
+      setConnectionStatus('failed');
+    }
+  };
+
+  setupRealtimeConnection();
+
+  // Cleanup
+  return () => {
+    channels.forEach(channel => {
+      channel.unsubscribe(); // Remove all subscriptions from this channel
+    });
+    if (ably) {
+      ably.close(); // Only close if we created it
+    }
+  };
+}, [user, JSON.stringify(filters)]); // Use JSON.stringify for deep comparison
+
+
+  // Clear real-time jobs when filters change
+  useEffect(() => {
+    setRealtimeJobs([]);
+  }, [filters]);
 
   // Memoized render function for performance
   const renderJobItem = useCallback((job, index, { style, isVisible }) => (
@@ -56,9 +349,11 @@ export default function VirtualJobList({
         onApply={onJobApply}
         isApplying={false}
         onClick={() => onJobClick?.(job)}
+        userLocation={userLocation}
+        showDistance={showDistance}
       />
     </motion.div>
-  ), [user, onJobApply, onJobClick]);
+  ), [user, onJobApply, onJobClick, userLocation, showDistance]);
 
   // Handle load more for infinite scrolling
   const handleLoadMore = useCallback(() => {
@@ -255,6 +550,8 @@ export function VirtualJobGrid({
           job={job}
           user={user}
           onApply={onJobApply}
+          userLocation={null} // Grid view doesn't use distance
+          showDistance={false}
           isApplying={false}
           onClick={() => onJobClick?.(job)}
         />

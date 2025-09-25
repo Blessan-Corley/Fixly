@@ -45,6 +45,7 @@ import {
 import { useApp } from '../../../providers';
 import { toast } from 'sonner';
 import InstagramCommentsRealtime from '../../../../components/InstagramCommentsRealtime';
+import RealTimeJobApplications from '../../../../components/jobs/RealTimeJobApplications';
 
 export default function JobDetailsPage({ params }) {
   const { jobId } = params;
@@ -617,7 +618,7 @@ export default function JobDetailsPage({ params }) {
     switch (urgency) {
       case 'asap': return 'text-red-600 bg-red-50 border-red-200';
       case 'flexible': return 'text-blue-600 bg-blue-50 border-blue-200';
-      case 'scheduled': return 'text-purple-600 bg-purple-50 border-purple-200';
+      case 'scheduled': return 'text-fixly-primary bg-fixly-accent/10 border-fixly-accent/30';
       default: return 'text-gray-600 bg-gray-50 border-gray-200';
     }
   };
@@ -1766,7 +1767,7 @@ export default function JobDetailsPage({ params }) {
 
                       {/* Upgrade Prompt for Non-Pro Users */}
                       {!showFixerDetails && (
-                        <div className="bg-gradient-to-r from-fixly-accent/10 to-purple-500/10 border border-fixly-accent/20 rounded-lg p-4 mt-4">
+                        <div className="bg-gradient-to-r from-fixly-accent/10 to-fixly-secondary/10 border border-fixly-accent/20 rounded-lg p-4 mt-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center">
                               <TrendingUp className="h-5 w-5 text-fixly-accent mr-2" />

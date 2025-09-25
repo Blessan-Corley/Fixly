@@ -26,7 +26,7 @@ import { usePageLoading } from '../../contexts/LoadingContext';
 import { GlobalLoading } from '../../components/ui/GlobalLoading';
 import { toast } from 'sonner';
 import VerificationPrompt from '@/components/dashboard/VerificationPrompt';
-import { MobileCard, MobilePullToRefresh, useMobileDevice } from '../../components/ui/MobileOptimized';
+import { MobileCard, MobilePullToRefresh, useMobileDevice } from '../../components/ui/mobile';
 
 export default function DashboardPage() {
   const { user, loading } = useApp();
@@ -138,7 +138,7 @@ export default function DashboardPage() {
             description: 'Chat with fixers',
             icon: MessageSquare,
             href: '/dashboard/messages',
-            color: 'bg-purple-500'
+            color: 'bg-fixly-primary'
           }
         ];
       
@@ -204,7 +204,7 @@ export default function DashboardPage() {
             description: 'System reports',
             icon: Activity,
             href: '/dashboard/admin/reports',
-            color: 'bg-purple-500'
+            color: 'bg-fixly-primary'
           }
         ];
       
@@ -388,8 +388,8 @@ export default function DashboardPage() {
 
       <div className="card card-hover">
         <div className="flex items-center">
-          <div className="p-3 bg-purple-100 rounded-lg">
-            <DollarSign className="h-6 w-6 text-purple-600" />
+          <div className="p-3 bg-fixly-accent/20 rounded-lg">
+            <DollarSign className="h-6 w-6 text-fixly-primary" />
           </div>
           <div className="ml-4">
             <div className="text-2xl font-bold text-fixly-text">

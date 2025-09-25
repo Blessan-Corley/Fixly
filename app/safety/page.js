@@ -144,7 +144,7 @@ export default function SafetyPage() {
         'File a police report if necessary'
       ],
       icon: Shield,
-      color: 'bg-purple-500'
+      color: 'bg-fixly-primary'
     }
   ];
 

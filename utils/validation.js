@@ -768,7 +768,7 @@ export const ValidationRules = {
       /^demo\d*$/i,           // demo, demo1
       /^sample\d*$/i,         // sample, sample1
 
-      // Enhanced patterns for usernames containing reserved words
+      // COMPREHENSIVE: Block usernames containing problematic words
       /.*test.*/i,            // anything containing "test"
       /.*user.*/i,            // anything containing "user"
       /.*temp.*/i,            // anything containing "temp"
@@ -779,6 +779,11 @@ export const ValidationRules = {
       /.*null.*/i,            // anything containing "null"
       /.*undefined.*/i,       // anything containing "undefined"
       /.*default.*/i,         // anything containing "default"
+      /.*fake.*/i,            // anything containing "fake"
+      /.*spam.*/i,            // anything containing "spam"
+      /.*bot.*/i,             // anything containing "bot"
+      /.*root.*/i,            // anything containing "root"
+      /.*system.*/i,          // anything containing "system"
       /^guest\d*$/i,          // guest, guest1
       /^admin\d*$/i,          // admin, admin1
       /^fixly/i,              // anything starting with fixly

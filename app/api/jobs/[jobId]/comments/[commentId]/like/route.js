@@ -6,7 +6,8 @@ import connectDB from '@/lib/db';
 import Job from '@/models/Job';
 import User from '@/models/User';
 import { rateLimit } from '@/utils/rateLimiting';
-import { emitToJob } from '@/lib/socket';
+import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
+import { sendTemplatedNotification, NOTIFICATION_TEMPLATES } from '@/lib/services/notificationService';
 
 export async function POST(request, { params }) {
   try {
@@ -118,34 +119,40 @@ export async function POST(request, { params }) {
 
     // Send notification only for likes (not unlikes) and not to self
     if (result.liked && notificationTarget.toString() !== user._id.toString()) {
-      const targetUser = await User.findById(notificationTarget);
-      if (targetUser) {
-        await targetUser.addNotification(
-          replyId ? 'reply_liked' : 'comment_liked',
-          replyId ? 'Reply Liked' : 'Comment Liked',
-          notificationMessage,
-          {
-            jobId: job._id,
-            commentId,
-            replyId,
-            fromUser: user._id
-          }
-        );
-      }
+      await sendTemplatedNotification(
+        'COMMENT_LIKE',
+        notificationTarget.toString(),
+        {
+          likerName: user.name,
+          jobId: job._id.toString(),
+          commentId: commentId
+        },
+        {
+          senderId: user._id.toString(),
+          priority: 'low'
+        }
+      );
     }
 
-    // Emit real-time event for like/unlike
-    emitToJob(jobId, 'comment:like_toggled', {
-      commentId,
-      replyId,
-      jobId,
-      userId: user._id,
-      userName: user.name,
-      liked: result.liked,
-      likeCount: result.likeCount,
-      type: replyId ? 'reply' : 'comment',
-      timestamp: new Date()
-    });
+    // Emit real-time event for like/unlike via Ably
+    try {
+      const ably = getServerAbly();
+      const channel = ably.channels.get(CHANNELS.jobComments(jobId));
+
+      await channel.publish(EVENTS.COMMENT_LIKED, {
+        commentId,
+        replyId,
+        jobId,
+        userId: user._id,
+        userName: user.name,
+        liked: result.liked,
+        likeCount: result.likeCount,
+        type: replyId ? 'reply' : 'comment',
+        timestamp: new Date().toISOString()
+      });
+    } catch (ablyError) {
+      console.error('Failed to publish like event:', ablyError);
+    }
 
     return NextResponse.json({
       success: true,

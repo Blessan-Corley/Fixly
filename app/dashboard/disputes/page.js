@@ -104,7 +104,7 @@ export default function DisputesPage() {
       case 'pending': return <Clock className={`${iconClass} text-yellow-500`} />;
       case 'under_review': return <Eye className={`${iconClass} text-blue-500`} />;
       case 'awaiting_response': return <MessageSquare className={`${iconClass} text-orange-500`} />;
-      case 'in_mediation': return <Scale className={`${iconClass} text-purple-500`} />;
+      case 'in_mediation': return <Scale className={`${iconClass} text-fixly-primary`} />;
       case 'resolved': return <CheckCircle className={`${iconClass} text-green-500`} />;
       case 'escalated': return <Flag className={`${iconClass} text-red-500`} />;
       case 'closed': return <XCircle className={`${iconClass} text-gray-500`} />;
@@ -118,7 +118,7 @@ export default function DisputesPage() {
       case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'under_review': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'awaiting_response': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'in_mediation': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'in_mediation': return 'bg-fixly-accent/20 text-fixly-primary border-fixly-accent/30';
       case 'resolved': return 'bg-green-100 text-green-800 border-green-200';
       case 'escalated': return 'bg-red-100 text-red-800 border-red-200';
       case 'closed': return 'bg-gray-100 text-gray-800 border-gray-200';
@@ -208,7 +208,7 @@ export default function DisputesPage() {
               label: 'In Mediation', 
               value: statistics.inMediation, 
               icon: Scale, 
-              color: 'purple' 
+              color: 'teal' 
             },
             { 
               label: 'Resolved', 

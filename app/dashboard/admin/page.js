@@ -190,7 +190,7 @@ function AdminPanelContent() {
   const getRoleBadge = (role) => {
     const styles = {
       hirer: 'bg-blue-100 text-blue-800',
-      fixer: 'bg-purple-100 text-purple-800',
+      fixer: 'bg-fixly-accent/20 text-fixly-primary',
       admin: 'bg-gray-100 text-gray-800'
     };
     
@@ -296,15 +296,15 @@ function AdminPanelContent() {
             className="card"
           >
             <div className="flex items-center">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-purple-600" />
+              <div className="p-3 bg-fixly-accent/20 rounded-lg">
+                <DollarSign className="h-6 w-6 text-fixly-primary" />
               </div>
               <div className="ml-4">
                 <div className="text-2xl font-bold text-fixly-text">
                   ₹{(stats.revenue?.total || 0).toLocaleString()}
                 </div>
                 <div className="text-sm text-fixly-text-muted">Platform Revenue</div>
-                <div className="text-xs text-purple-600">
+                <div className="text-xs text-fixly-primary">
                   ₹{(stats.revenue?.monthly || 0).toLocaleString()} this month
                 </div>
               </div>

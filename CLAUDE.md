@@ -24,7 +24,7 @@
   "@reduxjs/toolkit": "2.3.0",
   "react-hook-form": "7.53.2",
   "zod": "3.23.8",
-  "socket.io-client": "4.8.1",
+  "ably": "2.13.0",
   "@googlemaps/js-api-loader": "1.16.8",
   "lucide-react": "0.454.0"
 }
@@ -38,7 +38,7 @@
   "redis": "4.7.0",
   "upstash/redis": "1.34.3",
   "nodemailer": "6.9.16",
-  "socket.io": "4.8.1",
+  "ably": "2.13.0",
   "cloudinary": "2.5.1",
   "razorpay": "2.9.4",
   "bcryptjs": "2.4.3",

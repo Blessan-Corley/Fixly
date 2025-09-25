@@ -171,7 +171,7 @@ function ApplicationsContent() {
           { label: 'Total Applications', value: applications.length, icon: Briefcase, color: 'blue' },
           { label: 'Pending', value: applications.filter(a => a.status === 'pending').length, icon: Clock, color: 'yellow' },
           { label: 'Accepted', value: applications.filter(a => a.status === 'accepted').length, icon: CheckCircle, color: 'green' },
-          { label: 'Success Rate', value: applications.length > 0 ? Math.round((applications.filter(a => a.status === 'accepted').length / applications.length) * 100) + '%' : '0%', icon: Star, color: 'purple' }
+          { label: 'Success Rate', value: applications.length > 0 ? Math.round((applications.filter(a => a.status === 'accepted').length / applications.length) * 100) + '%' : '0%', icon: Star, color: 'teal' }
         ].map((stat, index) => (
           <motion.div
             key={stat.label}

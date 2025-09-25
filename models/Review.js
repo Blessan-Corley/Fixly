@@ -223,7 +223,7 @@ ReviewSchema.statics.getAverageRating = async function(userId) {
   const result = await this.aggregate([
     {
       $match: {
-        reviewee: mongoose.Types.ObjectId(userId),
+        reviewee: new mongoose.Types.ObjectId(userId),
         status: 'published',
         isPublic: true
       }
@@ -266,7 +266,7 @@ ReviewSchema.statics.getAverageRating = async function(userId) {
 // Static method to get detailed ratings breakdown
 ReviewSchema.statics.getDetailedRatings = async function(userId, reviewType = 'client_to_fixer') {
   const matchStage = {
-    reviewee: mongoose.Types.ObjectId(userId),
+    reviewee: new mongoose.Types.ObjectId(userId),
     reviewType,
     status: 'published',
     isPublic: true

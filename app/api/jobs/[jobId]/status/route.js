@@ -6,6 +6,7 @@ import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
+import { sendJobAssignmentMessage, sendWorkStatusMessage, sendPaymentReminder, sendDisputeMessage } from '../../../../../lib/services/automatedMessaging';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,6 +142,13 @@ export async function PUT(request, { params }) {
 
     switch (newStatus) {
       case 'in_progress':
+        // Send work started message if job was already assigned
+        if (job.assignedTo && !assignedFixerId) {
+          setTimeout(() => {
+            sendWorkStatusMessage(jobId, 'in_progress').catch(console.error);
+          }, 1000);
+        }
+
         // Assign job to fixer if specified
         if (assignedFixerId) {
           const fixer = await User.findById(assignedFixerId);
@@ -188,6 +196,11 @@ export async function PUT(request, { params }) {
               hirerId: job.createdBy._id
             }
           );
+
+          // Send automated messaging
+          setTimeout(() => {
+            sendJobAssignmentMessage(jobId).catch(console.error);
+          }, 1000);
         }
         break;
 
@@ -212,6 +225,15 @@ export async function PUT(request, { params }) {
             fixerId: currentUser._id
           }
         );
+
+        // Send automated messaging
+        setTimeout(() => {
+          sendWorkStatusMessage(jobId, 'completed').catch(console.error);
+          // Send payment reminder after 4 hours
+          setTimeout(() => {
+            sendPaymentReminder(jobId).catch(console.error);
+          }, 4 * 60 * 60 * 1000);
+        }, 1000);
         break;
 
       case 'cancelled':
@@ -259,6 +281,11 @@ export async function PUT(request, { params }) {
             }
           );
         }
+
+        // Send automated dispute messaging
+        setTimeout(() => {
+          sendDisputeMessage(jobId).catch(console.error);
+        }, 1000);
         break;
 
       case 'expired':

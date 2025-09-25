@@ -117,7 +117,7 @@ export default function ResourcesPage() {
       title: 'Financial Management',
       description: 'Manage your finances like a pro',
       icon: CreditCard,
-      color: 'bg-purple-500',
+      color: 'bg-fixly-primary',
       resources: [
         {
           title: 'Tax Guide for Service Providers',

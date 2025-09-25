@@ -6,9 +6,10 @@ import { SessionProvider, useSession } from 'next-auth/react';
 import { Toaster } from 'sonner';
 import { LoadingProvider } from '../contexts/LoadingContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
-// Real-time providers removed - using SSE instead
+import { AblyProvider, useAbly } from '../contexts/AblyContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import QueryProvider, { QueryPerformanceMonitor, QueryErrorBoundary } from '../components/providers/QueryProvider';
+import DarkModeManager from '../components/ui/DarkModeManager';
 
 // App Context
 const AppContext = createContext();
@@ -24,13 +25,11 @@ export function useApp() {
 // App Provider Component
 function AppProviderContent({ children }) {
   const { data: session, status } = useSession();
+  const { notifications, unreadCount, clearNotification, clearAllNotifications } = useAbly();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState([]);
   const [error, setError] = useState(null);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const notificationPollRef = useRef(null);
-  
+
   // Initialize network status monitoring
   const { isOnline, checkConnection } = useNetworkStatus();
 
@@ -38,7 +37,6 @@ function AppProviderContent({ children }) {
   const lastSessionId = useRef(null);
   const lastUserId = useRef(null);
   const userFetchController = useRef(null);
-  const notificationsFetchController = useRef(null);
 
   // ✅ OPTIMIZATION: Debounced fetch functions
   const fetchUserProfile = useCallback(async (sessionUserId) => {
@@ -102,82 +100,6 @@ function AppProviderContent({ children }) {
     }
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    // ✅ CRITICAL FIX: Only run on client side
-    if (typeof window === 'undefined') {
-      return;
-    }
-    
-    // Only fetch if we have a user
-    if (!lastUserId.current) return;
-
-    // Cancel previous request
-    if (notificationsFetchController.current) {
-      notificationsFetchController.current.abort();
-    }
-
-    // Create new abort controller
-    notificationsFetchController.current = new AbortController();
-
-    try {
-      console.log('🔔 Fetching notifications...');
-      
-      const response = await fetch('/api/user/notifications', {
-        signal: notificationsFetchController.current.signal
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const notifications = data.notifications || [];
-        setNotifications(notifications);
-        const unread = notifications.filter(n => !n.read).length;
-        setUnreadCount(unread);
-        console.log('✅ Notifications fetched:', notifications.length, 'unread:', unread);
-      } else {
-        console.error('❌ Failed to fetch notifications:', response.status);
-      }
-    } catch (error) {
-      if (error.name !== 'AbortError') {
-        console.error('❌ Notifications fetch error:', error);
-      }
-    }
-  }, []);
-
-  // Real-time notification polling
-  const startNotificationPolling = useCallback(() => {
-    if (notificationPollRef.current) {
-      clearInterval(notificationPollRef.current);
-    }
-
-    notificationPollRef.current = setInterval(async () => {
-      try {
-        const response = await fetch('/api/user/notifications');
-        if (response.ok) {
-          const data = await response.json();
-          const newNotifications = data.notifications || [];
-          
-          // Only update if there are changes
-          if (JSON.stringify(newNotifications) !== JSON.stringify(notifications)) {
-            setNotifications(newNotifications);
-            const unread = newNotifications.filter(n => !n.read).length;
-            setUnreadCount(unread);
-          }
-        }
-      } catch (error) {
-        // Silent fail for polling
-        console.error('Notification polling error:', error);
-      }
-    }, 10000); // Poll every 10 seconds
-  }, [notifications]);
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (notificationPollRef.current) {
-        clearInterval(notificationPollRef.current);
-      }
-    };
-  }, []);
 
   // ✅ CRITICAL FIX: Only fetch user when session ACTUALLY changes
   useEffect(() => {
@@ -212,7 +134,6 @@ function AppProviderContent({ children }) {
         await fetchUserProfile(currentSessionId);
       } else {
         setUser(null);
-        setNotifications([]);
         lastUserId.current = null;
         setLoading(false);
       }
@@ -221,19 +142,6 @@ function AppProviderContent({ children }) {
     handleSessionChange();
   }, [session?.user?.id, status, fetchUserProfile]); // ✅ Only depend on user ID, not entire session
 
-  // ✅ OPTIMIZATION: Fetch notifications only when user ID changes (not on every user update)
-  useEffect(() => {
-    if (user && user._id && lastUserId.current !== user._id) {
-      lastUserId.current = user._id;
-      // Debounce notifications fetch
-      const timer = setTimeout(() => {
-        fetchNotifications();
-        startNotificationPolling();
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-  }, [user?._id, fetchNotifications]); // ✅ Only depend on user ID
 
   // ✅ CLEANUP: Cancel requests on unmount
   useEffect(() => {
@@ -241,41 +149,7 @@ function AppProviderContent({ children }) {
       if (userFetchController.current) {
         userFetchController.current.abort();
       }
-      if (notificationsFetchController.current) {
-        notificationsFetchController.current.abort();
-      }
     };
-  }, []);
-
-  // Mark notification as read
-  const markNotificationRead = useCallback(async (notificationId) => {
-    try {
-      const response = await fetch('/api/user/notifications/read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notificationId })
-      });
-
-      if (response.ok) {
-        setNotifications(prev => {
-          const updated = prev.map(notification => 
-            notification._id === notificationId 
-              ? { ...notification, read: true }
-              : notification
-          );
-          const unread = updated.filter(n => !n.read).length;
-          setUnreadCount(unread);
-          return updated;
-        });
-      }
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
-  }, []);
-
-  // Add new notification
-  const addNotification = useCallback((notification) => {
-    setNotifications(prev => [notification, ...prev.slice(0, 49)]); // Keep only latest 50
   }, []);
 
   // Update user data (optimized to prevent unnecessary re-renders)
@@ -303,8 +177,8 @@ function AppProviderContent({ children }) {
     loading,
     notifications,
     unreadCount,
-    markNotificationRead,
-    addNotification,
+    clearNotification,
+    clearAllNotifications,
     updateUser,
     session,
     isAuthenticated: !!session,
@@ -326,16 +200,19 @@ export function Providers({ children }) {
   return (
     <QueryErrorBoundary>
       <QueryProvider>
-        <SessionProvider 
+        <SessionProvider
           refetchInterval={0} // ✅ CRITICAL: Disable automatic session refetching
           refetchOnWindowFocus={false} // ✅ CRITICAL: Disable refetch on window focus
         >
           <ThemeProvider>
             <LoadingProvider>
-              <AppProviderContent>
-                {children}
-                <QueryPerformanceMonitor />
-                <Toaster 
+              <AblyProvider>
+                <AppProviderContent>
+                  <DarkModeManager>
+                    {children}
+                  </DarkModeManager>
+                  <QueryPerformanceMonitor />
+                  <Toaster 
                   position="top-right"
                   toastOptions={{
                     duration: 4000,
@@ -360,7 +237,8 @@ export function Providers({ children }) {
                     },
                   }}
                 />
-              </AppProviderContent>
+                </AppProviderContent>
+              </AblyProvider>
             </LoadingProvider>
           </ThemeProvider>
         </SessionProvider>
