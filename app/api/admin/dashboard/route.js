@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import connectDB from '../../../../lib/mongodb';
+import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
 import Job from '../../../../models/Job';
 import { withErrorHandler, validateRequired, AuthenticationError } from '../../../../lib/errorHandling';
-import { cache, analytics } from '../../../../lib/cache';
+import { redisUtils } from '../../../../lib/redis';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth';
 
@@ -32,7 +32,7 @@ export const GET = withErrorHandler(async (request) => {
   
   // Check cache first
   const cacheKey = `admin_dashboard_${range}_${Math.floor(now.getTime() / (5 * 60 * 1000))}`; // 5 min cache
-  const cachedData = await cache.get(cacheKey);
+  const cachedData = await redisUtils.get(cacheKey);
   
   if (cachedData) {
     return NextResponse.json(cachedData);
@@ -159,10 +159,10 @@ export const GET = withErrorHandler(async (request) => {
     };
 
     // Cache for 5 minutes
-    await cache.set(cacheKey, dashboardData, 300);
+    await redisUtils.set(cacheKey, dashboardData, 300);
     
-    // Track analytics
-    await analytics.trackEvent('admin_dashboard_viewed', {
+    // Analytics tracking removed - using simple console.log instead
+    console.log('📊 Admin dashboard accessed', {
       userId: session.user.id,
       range,
       timestamp: new Date().toISOString()

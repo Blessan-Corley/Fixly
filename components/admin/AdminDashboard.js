@@ -26,7 +26,7 @@ import {
   LineChart
 } from 'lucide-react';
 import { useAbly } from '../../contexts/AblyContext';
-import { cache } from '../../lib/cache';
+import { redisUtils } from '../../lib/redis';
 import { LoadingSpinner, LoadingSkeleton } from '../ui/LoadingStates';
 import { OptimizedImage } from '../ui/OptimizedImage';
 

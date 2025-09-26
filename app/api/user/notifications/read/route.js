@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../../lib/db';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
-import { cache } from '../../../../../lib/cache';
+import { redisUtils } from '../../../../../lib/redis';
 import { getNotificationService } from '../../../../../lib/notifications';
 
 export async function POST(request) {
@@ -64,8 +64,8 @@ export async function POST(request) {
 
     // Invalidate cache for this user
     try {
-      const cachePattern = `notifications:${session.user.id}:*`;
-      await cache.invalidatePattern(cachePattern);
+      const cacheKey = `notifications:${session.user.id}`;
+      await redisUtils.del(cacheKey);
     } catch (cacheError) {
       console.log('Cache invalidation error:', cacheError.message);
     }

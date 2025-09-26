@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useAbly, useAblyChannel } from '../../contexts/AblyContext';
 import { RealTimeCounter } from '../ui/RealTimeCounter';
-import { cache } from '../../lib/cache';
+import { redisUtils } from '../../lib/redis';
 
 export default function EnhancedAdvancedSearch({
   onSearch,
@@ -244,7 +244,7 @@ export default function EnhancedAdvancedSearch({
 
     // Cache recent searches with enhanced data
     try {
-      await cache.set(`recent_search_${Date.now()}`, {
+      await redisUtils.set(`recent_search_${Date.now()}`, {
         ...searchParams,
         resultCount: jobStats.total
       }, 3600);

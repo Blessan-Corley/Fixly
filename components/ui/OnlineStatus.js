@@ -7,6 +7,8 @@
 
 import { useState, useEffect } from 'react';
 import { useAbly, useAblyPresence } from '@/contexts/AblyContext';
+import { Users, LogOut, MessageSquare, FileText, Edit, MapPin } from 'lucide-react';
+import SmartAvatar from './SmartAvatar';
 
 // Online Status Indicator
 export function OnlineStatusIndicator({ userId, username, size = 'default', showLabel = false }) {
@@ -125,12 +127,6 @@ export function UserAvatarWithStatus({
   showLastSeen = false,
   className = ""
 }) {
-  const sizeClasses = {
-    small: 'w-8 h-8 text-sm',
-    default: 'w-10 h-10 text-base',
-    large: 'w-12 h-12 text-lg',
-    xl: 'w-16 h-16 text-xl'
-  };
 
   const statusSizes = {
     small: 'small',
@@ -141,24 +137,12 @@ export function UserAvatarWithStatus({
 
   return (
     <div className={`relative ${className}`}>
-      {/* Avatar */}
-      <div className={`
-        ${sizeClasses[size]}
-        bg-fixly-primary rounded-full
-        flex items-center justify-center
-        text-white font-semibold
-        overflow-hidden
-      `}>
-        {user?.image ? (
-          <img
-            src={user.image}
-            alt={user.name}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <span>{user?.name?.[0]?.toUpperCase() || 'U'}</span>
-        )}
-      </div>
+      {/* Smart Avatar */}
+      <SmartAvatar
+        user={user}
+        size={size}
+        alt={user?.name}
+      />
 
       {/* Online Status */}
       {showStatus && user?.id && (
@@ -320,19 +304,21 @@ export function LiveActivityFeed({ channelName, className = "" }) {
   };
 
   const getActivityIcon = (type) => {
+    const iconProps = "w-4 h-4 text-fixly-accent";
+
     switch (type) {
       case 'user_joined':
-        return '👋';
+        return <Users className={iconProps} />;
       case 'user_left':
-        return '👋';
+        return <LogOut className={iconProps} />;
       case 'comment_posted':
-        return '💬';
+        return <MessageSquare className={iconProps} />;
       case 'application_submitted':
-        return '📝';
+        return <FileText className={iconProps} />;
       case 'job_updated':
-        return '✏️';
+        return <Edit className={iconProps} />;
       default:
-        return '📍';
+        return <MapPin className={iconProps} />;
     }
   };
 
@@ -355,9 +341,9 @@ export function LiveActivityFeed({ channelName, className = "" }) {
               ${index === 0 ? 'opacity-100' : 'opacity-70'}
             `}
           >
-            <span className="text-base">
+            <div className="flex-shrink-0">
               {getActivityIcon(activity.type)}
-            </span>
+            </div>
             <span>{getActivityText(activity)}</span>
             <span className="ml-auto">
               {new Date(activity.timestamp).toLocaleTimeString([], {

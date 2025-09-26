@@ -382,12 +382,13 @@ export default function AboutUsPage() {
               Have questions or want to learn more about Fixly? We'd love to hear from you.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* First row - 3 primary contact methods */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
               <div className="flex flex-col items-center p-6">
                 <Mail className="h-8 w-8 text-fixly-accent mb-3" />
                 <h3 className="font-semibold text-fixly-text mb-2">Email Us</h3>
-                <a 
-                  href="mailto:blessancorley@gmail.com" 
+                <a
+                  href="mailto:blessancorley@gmail.com"
                   className="text-fixly-accent hover:text-fixly-accent-dark transition-colors"
                 >
                   blessancorley@gmail.com
@@ -397,8 +398,8 @@ export default function AboutUsPage() {
               <div className="flex flex-col items-center p-6">
                 <Phone className="h-8 w-8 text-fixly-accent mb-3" />
                 <h3 className="font-semibold text-fixly-text mb-2">Call Us</h3>
-                <a 
-                  href="tel:+919976768211" 
+                <a
+                  href="tel:+919976768211"
                   className="text-fixly-accent hover:text-fixly-accent-dark transition-colors"
                 >
                   +91 9976768211
@@ -408,8 +409,8 @@ export default function AboutUsPage() {
               <div className="flex flex-col items-center p-6">
                 <MessageSquare className="h-8 w-8 text-fixly-accent mb-3" />
                 <h3 className="font-semibold text-fixly-text mb-2">WhatsApp</h3>
-                <a 
-                  href="https://wa.me/919976768211?text=Hi! I'd like to know more about Fixly." 
+                <a
+                  href="https://wa.me/919976768211?text=Hi! I'd like to know more about Fixly."
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-fixly-accent hover:text-fixly-accent-dark transition-colors"
@@ -417,14 +418,22 @@ export default function AboutUsPage() {
                   +91 9976768211
                 </a>
               </div>
+            </div>
 
-              <div className="flex flex-col items-center p-6">
+            {/* Second row - Location card centered */}
+            <div className="flex justify-center">
+              <div className="flex flex-col items-center p-6 max-w-sm">
                 <MapPin className="h-8 w-8 text-fixly-accent mb-3" />
                 <h3 className="font-semibold text-fixly-text mb-2">Visit Us</h3>
-                <p className="text-fixly-text-muted text-center">
+                <a
+                  href="https://www.google.com/maps/search/?api=1&query=11.000044,77.080355"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-fixly-text-muted text-center hover:text-fixly-accent transition-colors cursor-pointer"
+                >
                   Coimbatore, Tamil Nadu<br />
                   India
-                </p>
+                </a>
               </div>
             </div>
 

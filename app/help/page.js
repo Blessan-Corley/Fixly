@@ -692,8 +692,8 @@ export default function HelpPage() {
             Back to {category.title}
           </button>
           
-          <div className="bg-white rounded-lg border border-fixly-border p-8">
-            <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: article.content }} />
+          <div className="bg-fixly-card rounded-lg border border-fixly-border p-8">
+            <div className="prose max-w-none prose-headings:text-fixly-text prose-p:text-fixly-text prose-li:text-fixly-text prose-strong:text-fixly-text dark:prose-invert" dangerouslySetInnerHTML={{ __html: article.content }} />
             
             {/* Feedback */}
             <div className="mt-8 pt-8 border-t border-fixly-border">
@@ -756,7 +756,7 @@ export default function HelpPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-white rounded-lg border border-fixly-border p-6 cursor-pointer hover:shadow-md transition-shadow"
+                className="bg-fixly-card rounded-lg border border-fixly-border p-6 cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => setSelectedArticle(article.id)}
               >
                 <div className="flex items-center justify-between">
@@ -785,7 +785,7 @@ export default function HelpPage() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
-                  className="bg-white rounded-lg border border-fixly-border p-6 cursor-pointer hover:shadow-md transition-shadow"
+                  className="bg-fixly-card rounded-lg border border-fixly-border p-6 cursor-pointer hover:shadow-md transition-shadow"
                   onClick={() => {
                     if (result.type === 'faq') {
                       toggleFAQ(result.id);
@@ -840,7 +840,7 @@ export default function HelpPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-white rounded-lg border border-fixly-border p-6 cursor-pointer hover:shadow-md transition-shadow"
+                    className="bg-fixly-card rounded-lg border border-fixly-border p-6 cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => setSelectedCategory(category.id)}
                   >
                     <div className="flex items-center mb-4">
@@ -874,7 +874,7 @@ export default function HelpPage() {
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: (categoryIndex * faqCategory.questions.length + index) * 0.05 }}
-                          className="bg-white rounded-lg border border-fixly-border"
+                          className="bg-fixly-card rounded-lg border border-fixly-border"
                         >
                           <button
                             onClick={() => toggleFAQ(faqId)}
@@ -889,7 +889,7 @@ export default function HelpPage() {
                           </button>
                           {isExpanded && (
                             <div className="px-6 pb-4">
-                              <p className="text-fixly-text-light">{faq.a}</p>
+                              <p className="text-fixly-text dark:text-fixly-text">{faq.a}</p>
                             </div>
                           )}
                         </motion.div>
@@ -909,18 +909,29 @@ export default function HelpPage() {
             Can't find what you're looking for? Our support team is here to help.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button className="flex items-center justify-center px-6 py-3 bg-white rounded-lg border border-fixly-border hover:shadow-md transition-shadow">
+            <a
+              href="https://wa.me/919976768211?text=Hi! I need help with Fixly."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center px-6 py-3 bg-fixly-card rounded-lg border border-fixly-border hover:shadow-md transition-shadow text-fixly-text hover:text-fixly-accent"
+            >
               <MessageCircle className="h-5 w-5 text-fixly-accent mr-2" />
-              Live Chat
-            </button>
-            <button className="flex items-center justify-center px-6 py-3 bg-white rounded-lg border border-fixly-border hover:shadow-md transition-shadow">
+              WhatsApp Chat
+            </a>
+            <a
+              href="mailto:blessancorley@gmail.com?subject=Help Request - Fixly&body=Hi, I need help with:"
+              className="flex items-center justify-center px-6 py-3 bg-fixly-card rounded-lg border border-fixly-border hover:shadow-md transition-shadow text-fixly-text hover:text-fixly-accent"
+            >
               <Mail className="h-5 w-5 text-fixly-accent mr-2" />
               Email Support
-            </button>
-            <button className="flex items-center justify-center px-6 py-3 bg-white rounded-lg border border-fixly-border hover:shadow-md transition-shadow">
+            </a>
+            <a
+              href="tel:+919976768211"
+              className="flex items-center justify-center px-6 py-3 bg-fixly-card rounded-lg border border-fixly-border hover:shadow-md transition-shadow text-fixly-text hover:text-fixly-accent"
+            >
               <Phone className="h-5 w-5 text-fixly-accent mr-2" />
               Call Us
-            </button>
+            </a>
           </div>
         </div>
       </div>
@@ -930,7 +941,7 @@ export default function HelpPage() {
   return (
     <div className="min-h-screen bg-fixly-bg">
       {/* Header */}
-      <div className="bg-white border-b border-fixly-border">
+      <div className="bg-fixly-card border-b border-fixly-border">
         <div className="max-w-6xl mx-auto px-4 py-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-fixly-text mb-4">
@@ -943,13 +954,13 @@ export default function HelpPage() {
             {/* Search */}
             <div className="max-w-2xl mx-auto">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-fixly-text-muted dark:text-fixly-text-light" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search for help..."
-                  className="w-full pl-12 pr-4 py-4 text-lg border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-accent focus:border-transparent"
+                  className="w-full pl-12 pr-4 py-4 text-lg bg-white dark:bg-fixly-card text-fixly-text dark:text-fixly-text placeholder:text-fixly-text-muted border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-accent focus:border-transparent transition-colors"
                 />
               </div>
             </div>

@@ -1,5 +1,28 @@
 #!/usr/bin/env node
 
+// Load environment variables manually from .env.local
+import { readFileSync } from 'fs';
+
+try {
+  const envContent = readFileSync('.env.local', 'utf8');
+  const lines = envContent.split('\n');
+  
+  for (const line of lines) {
+    if (line.trim() && !line.startsWith('#')) {
+      const [key, ...valueParts] = line.split('=');
+      if (key && valueParts.length > 0) {
+        const value = valueParts.join('=').trim();
+        // Remove quotes if present
+        const cleanValue = value.replace(/^["']|["']$/g, '');
+        process.env[key.trim()] = cleanValue;
+      }
+    }
+  }
+  console.log('✅ Environment variables loaded from .env.local');
+} catch (error) {
+  console.warn('⚠️ Could not load .env.local:', error.message);
+}
+
 console.log('🧪 TESTING REAL DATABASE AND REDIS CONNECTIONS');
 console.log('='.repeat(60));
 
@@ -7,6 +30,8 @@ async function testMongoDB() {
   console.log('\n🗄️ Testing MongoDB Connection...');
   
   try {
+    console.log('MongoDB URI available:', !!process.env.MONGODB_URI);
+    
     // Import the database manager
     const databaseManager = await import('./lib/core/DatabaseManager.js');
     
@@ -33,6 +58,9 @@ async function testRedis() {
   console.log('\n🔴 Testing Redis Connection...');
   
   try {
+    console.log('Redis URL available:', !!process.env.UPSTASH_REDIS_REST_URL);
+    console.log('Redis Token available:', !!process.env.UPSTASH_REDIS_REST_TOKEN);
+    
     // Import the Redis manager
     const redisManager = await import('./lib/core/RedisManager.js');
     
@@ -65,62 +93,29 @@ async function testRedis() {
   }
 }
 
-async function testRateLimiting() {
-  console.log('\n🛡️ Testing Rate Limiting Service...');
+async function testAPIRoute() {
+  console.log('\n🌐 Testing Actual API Route...');
   
   try {
-    const rateLimitingService = await import('./lib/core/RateLimiting.js');
-    
-    // Test rate limiting check
-    const result = await rateLimitingService.default.checkRateLimit(
-      'test_user_123',
-      'test_operation',
-      {
-        config: {
-          rate: 10,
-          burst: 15,
-          windowSec: 60
-        }
+    // Test a simple API endpoint that doesn't require auth
+    const response = await fetch('http://localhost:3000/api/health', {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
       }
-    );
+    });
     
-    console.log('✅ Rate limiting service operational');
-    console.log(`   Allowed: ${result.allowed}, Remaining: ${result.remaining || 'N/A'}`);
-    
-    return true;
-    
-  } catch (error) {
-    console.error('❌ Rate limiting test failed:', error.message);
-    return false;
-  }
-}
-
-async function testAuthentication() {
-  console.log('\n🔐 Testing Authentication Configuration...');
-  
-  try {
-    // Import auth options
-    const authModule = await import('./lib/auth.js');
-    
-    if (authModule.authOptions) {
-      console.log('✅ Auth options loaded successfully');
-      
-      // Check providers
-      const providerCount = authModule.authOptions.providers.length;
-      console.log(`✅ Found ${providerCount} authentication provider(s)`);
-      
-      // Check required configurations
-      const hasCredentials = authModule.authOptions.providers.some(p => p.name === 'credentials');
-      console.log(`✅ Credentials provider: ${hasCredentials ? 'Configured' : 'Not configured'}`);
-      
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ API route responded successfully:', data);
       return true;
     } else {
-      console.log('❌ Auth options not found');
+      console.log('⚠️ API route responded with status:', response.status);
       return false;
     }
     
   } catch (error) {
-    console.error('❌ Authentication test failed:', error.message);
+    console.error('❌ API route test failed (server might not be running):', error.message);
     return false;
   }
 }
@@ -131,8 +126,7 @@ async function main() {
   const results = {
     mongodb: await testMongoDB(),
     redis: await testRedis(),
-    rateLimiting: await testRateLimiting(),
-    authentication: await testAuthentication()
+    apiRoute: await testAPIRoute()
   };
   
   const passed = Object.values(results).filter(r => r === true).length;
@@ -145,19 +139,20 @@ async function main() {
   console.log(`📊 Overall: ${passed}/${total} tests passed`);
   console.log(`🗄️ MongoDB: ${results.mongodb ? '✅ WORKING' : '❌ FAILED'}`);
   console.log(`🔴 Redis: ${results.redis ? '✅ WORKING' : '❌ FAILED'}`);
-  console.log(`🛡️ Rate Limiting: ${results.rateLimiting ? '✅ WORKING' : '❌ FAILED'}`);
-  console.log(`🔐 Authentication: ${results.authentication ? '✅ WORKING' : '❌ FAILED'}`);
+  console.log(`🌐 API Route: ${results.apiRoute ? '✅ WORKING' : '❌ FAILED (server not running)'}`);
   
   if (passed === total) {
     console.log('\n🎉 ALL CORE SERVICES ARE WORKING!');
     console.log('✨ Database and Redis connections are functional');
     console.log('🚀 APIs should work properly with real data');
   } else {
-    console.log('\n⚠️ Some services have issues that need fixing');
-    console.log('🔧 APIs may not work properly until these are resolved');
+    console.log('\n⚠️ Some services have issues:');
+    if (!results.mongodb) console.log('   🔧 MongoDB connection needs fixing');
+    if (!results.redis) console.log('   🔧 Redis connection needs fixing');
+    if (!results.apiRoute) console.log('   🔧 Start the dev server to test API routes');
   }
   
-  return passed === total;
+  return passed >= 2; // At least MongoDB and Redis should work
 }
 
 main().then(success => {

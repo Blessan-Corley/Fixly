@@ -6,7 +6,7 @@ import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
-import { sendJobAssignmentMessage, sendWorkStatusMessage, sendPaymentReminder, sendDisputeMessage } from '../../../../../lib/services/automatedMessaging';
+import { sendWorkStatusMessage, sendDisputeMessage } from '../../../../../lib/services/automatedMessaging';
 
 export const dynamic = 'force-dynamic';
 
@@ -197,10 +197,8 @@ export async function PUT(request, { params }) {
             }
           );
 
-          // Send automated messaging
-          setTimeout(() => {
-            sendJobAssignmentMessage(jobId).catch(console.error);
-          }, 1000);
+          // Job assignment message already sent by MessageService.createJobConversation()
+          // in applications route - no need to duplicate
         }
         break;
 
@@ -229,10 +227,7 @@ export async function PUT(request, { params }) {
         // Send automated messaging
         setTimeout(() => {
           sendWorkStatusMessage(jobId, 'completed').catch(console.error);
-          // Send payment reminder after 4 hours
-          setTimeout(() => {
-            sendPaymentReminder(jobId).catch(console.error);
-          }, 4 * 60 * 60 * 1000);
+          // No payment reminders - users handle payment directly
         }, 1000);
         break;
 

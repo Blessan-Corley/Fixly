@@ -15,7 +15,7 @@ import {
   Navigation,
   Target
 } from 'lucide-react';
-import { cache } from '../../lib/cache';
+import { redisUtils } from '../../lib/redis';
 // Real-time search updates handled by main search hook
 
 export default function AdvancedSearch({ 
@@ -149,7 +149,7 @@ export default function AdvancedSearch({
 
     // Cache recent searches
     try {
-      await cache.set(`recent_search_${Date.now()}`, searchParams, 3600); // 1 hour
+      await redisUtils.set(`recent_search_${Date.now()}`, searchParams, 3600); // 1 hour
     } catch (error) {
       console.error('Failed to cache search:', error);
     }

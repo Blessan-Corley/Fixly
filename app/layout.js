@@ -3,6 +3,7 @@ import { Manrope, PT_Mono } from 'next/font/google';
 import { Providers } from './providers';
 import CookieConsent from '../components/CookieConsent';
 import PWAInstallPrompt from '../components/ui/PWAInstallPrompt';
+import StructuredData from '../components/seo/StructuredData';
 import './globals.css';
 
 // Enhanced font configuration with better fallbacks and error handling
@@ -30,8 +31,8 @@ export const metadata = {
   title: 'Fixly - Hyperlocal Service Marketplace',
   description: 'Find trusted local service professionals for all your home and business needs. From plumbing to electrical work, connect with skilled fixers in your area.',
   keywords: ['local services', 'home repair', 'skilled workers', 'plumber', 'electrician', 'handyman', 'hyperlocal', 'marketplace'],
-  authors: [{ name: 'Fixly Team' }],
-  creator: 'Fixly',
+  authors: [{ name: 'Blessan Corley A' }],
+  creator: 'Blessan Corley A',
   publisher: 'Fixly',
   formatDetection: {
     email: false,
@@ -106,6 +107,8 @@ export default function RootLayout({ children }) {
     <html lang="en" className={`${manrope.variable} ${ptMono.variable}`}>
       <body className="font-manrope antialiased">
         <Providers>
+          <StructuredData type="organization" />
+          <StructuredData type="website" />
           {children}
           <PWAInstallPrompt />
           <CookieConsent />

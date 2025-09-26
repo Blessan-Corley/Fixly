@@ -106,24 +106,26 @@ export default function VirtualList({
   }, [horizontal, onScroll, visibleStartIndex, visibleEndIndex, loadMore, hasMore, loading, threshold]);
 
   // Resize observer for container
-  useEffect(() => {
-    const element = scrollElementRef.current;
-    if (!element) return;
+useEffect(() => {
+  const element = scrollElementRef.current;
+  if (!element) return;
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const newHeight = horizontal ? entry.contentRect.width : entry.contentRect.height;
-        setContainerHeight(newHeight);
-      }
-    });
+  const resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const newHeight = horizontal ? entry.contentRect.width : entry.contentRect.height;
+      setContainerHeight(newHeight);
+    }
+  });
 
-    resizeObserver.observe(element);
-    observerRef.current = resizeObserver;
+  resizeObserver.observe(element);
+  observerRef.current = resizeObserver;
 
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [horizontal]);
+  return () => {
+    if (observerRef.current) {
+      observerRef.current.disconnect(); // Proper cleanup
+    }
+  };
+}, [horizontal]);
 
   // Scroll to index
   const scrollToIndex = useCallback((index, align = 'auto') => {
@@ -358,16 +360,16 @@ export function VariableHeightVirtualList({
   const itemRefs = useRef(new Map());
 
   // Measure item heights
-  const measureItem = useCallback((index, element) => {
-    if (!element) return;
-    
-    const height = element.getBoundingClientRect().height;
-    setItemHeights(prev => {
-      const newMap = new Map(prev);
-      newMap.set(index, height);
-      return newMap;
-    });
-  }, []);
+const measureItem = useCallback((index, element) => {
+  if (!element || !itemRefs.current.has(index)) return;
+  
+  const height = element.getBoundingClientRect().height;
+  setItemHeights(prev => {
+    const newMap = new Map(prev);
+    newMap.set(index, height);
+    return newMap;
+  });
+}, []);
 
   // Calculate positions and visible range
   const { visibleItems, totalHeight, offsetBefore } = useMemo(() => {

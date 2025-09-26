@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Clock, 
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  MapPin,
+  Clock,
   MessageSquare,
   Send,
   CheckCircle,
@@ -38,7 +38,7 @@ export default function ContactPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Basic validation
     if (!formData.name || !formData.email || !formData.message) {
       toast.error('Please fill in all required fields');
@@ -46,7 +46,7 @@ export default function ContactPage() {
     }
 
     setLoading(true);
-    
+
     try {
       // Send form data to backend API
       const response = await fetch('/api/contact', {
@@ -64,7 +64,7 @@ export default function ContactPage() {
         toast.success(data.message || 'Message sent successfully! We\'ll get back to you soon.', {
           style: { background: 'green', color: 'white' }
         });
-        
+
         // Reset form
         setFormData({
           name: '',
@@ -79,7 +79,7 @@ export default function ContactPage() {
           style: { background: 'red', color: 'white' }
         });
       }
-      
+
     } catch (error) {
       console.error('Contact form submission error:', error);
       toast.error('Network error. Please check your connection and try again.', {
@@ -120,7 +120,7 @@ export default function ContactPage() {
       title: 'Location',
       description: 'We\'re based in Tamil Nadu, India',
       value: 'Coimbatore, Tamil Nadu',
-      action: null,
+      action: 'https://www.google.com/maps/search/?api=1&query=11.000044,77.080355',
       primary: false
     },
     {
@@ -198,7 +198,7 @@ export default function ContactPage() {
             Get in Touch
           </h1>
           <p className="text-xl text-fixly-text-light max-w-3xl mx-auto mb-8">
-            Have questions, feedback, or need help? We're here to assist you. 
+            Have questions, feedback, or need help? We're here to assist you.
             Our friendly support team is ready to help you get the most out of Fixly.
           </p>
         </motion.div>
@@ -208,36 +208,77 @@ export default function ContactPage() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16"
+          className="mb-16"
         >
-          {contactMethods.map((method, index) => (
-            <div
-              key={index}
-              className={`card text-center p-6 ${
-                method.primary ? 'border-fixly-accent' : ''
-              }`}
-            >
-              <method.icon className="h-12 w-12 text-fixly-accent mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-fixly-text mb-2">
-                {method.title}
-              </h3>
-              <p className="text-fixly-text-muted text-sm mb-4">
-                {method.description}
-              </p>
-              {method.action ? (
-                <a
-                  href={method.action}
-                  className="text-fixly-accent hover:text-fixly-accent-dark font-medium"
+          {/* First row - 3 primary contact methods */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            {contactMethods.slice(0, 3).map((method, index) => (
+              <div
+                key={index}
+                className={`card text-center p-6 ${
+                  method.primary ? 'border-fixly-accent' : ''
+                }`}
+              >
+                <method.icon className="h-12 w-12 text-fixly-accent mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-fixly-text mb-2">
+                  {method.title}
+                </h3>
+                <p className="text-fixly-text-muted text-sm mb-4">
+                  {method.description}
+                </p>
+                {method.action ? (
+                  <a
+                    href={method.action}
+                    target={method.action.startsWith('http') ? '_blank' : '_self'}
+                    rel={method.action.startsWith('http') ? 'noopener noreferrer' : ''}
+                    className="text-fixly-accent hover:text-fixly-accent-dark font-medium transition-colors"
+                  >
+                    {method.value}
+                  </a>
+                ) : (
+                  <span className="text-fixly-text font-medium">
+                    {method.value}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Second row - 2 info cards centered */}
+          <div className="flex justify-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
+              {contactMethods.slice(3).map((method, index) => (
+                <div
+                  key={index + 3}
+                  className={`card text-center p-6 ${
+                    method.primary ? 'border-fixly-accent' : ''
+                  }`}
                 >
-                  {method.value}
-                </a>
-              ) : (
-                <span className="text-fixly-text font-medium">
-                  {method.value}
-                </span>
-              )}
+                  <method.icon className="h-12 w-12 text-fixly-accent mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-fixly-text mb-2">
+                    {method.title}
+                  </h3>
+                  <p className="text-fixly-text-muted text-sm mb-4">
+                    {method.description}
+                  </p>
+                  {method.action ? (
+                    <a
+                      href={method.action}
+                      target={method.action.startsWith('http') ? '_blank' : '_self'}
+                      rel={method.action.startsWith('http') ? 'noopener noreferrer' : ''}
+                      className="text-fixly-accent hover:text-fixly-accent-dark font-medium transition-colors"
+                    >
+                      {method.value}
+                    </a>
+                  ) : (
+                    <span className="text-fixly-text font-medium">
+                      {method.value}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </motion.div>
 
         <div className="grid lg:grid-cols-2 gap-12">
@@ -287,7 +328,7 @@ export default function ContactPage() {
                       required
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-fixly-text mb-2">
                       Email Address *
@@ -316,7 +357,7 @@ export default function ContactPage() {
                       placeholder="Enter your phone number"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-fixly-text mb-2">
                       Category
@@ -421,7 +462,7 @@ export default function ContactPage() {
                   Quick Response Guarantee
                 </h3>
                 <p className="text-fixly-text-light">
-                  We typically respond to all inquiries within 24 hours during business days. 
+                  We typically respond to all inquiries within 24 hours during business days.
                   For urgent matters, please call us directly.
                 </p>
               </div>
@@ -465,26 +506,26 @@ export default function ContactPage() {
             Other Ways to Reach Us
           </h2>
           <p className="text-fixly-text-light mb-6">
-            Choose the method that works best for you. We're committed to providing 
+            Choose the method that works best for you. We're committed to providing
             excellent customer service and support.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a 
+            <a
               href="mailto:blessancorley@gmail.com"
               className="btn-primary flex items-center justify-center"
             >
               <Mail className="h-5 w-5 mr-2" />
               Email Support
             </a>
-            <a 
+            <a
               href="tel:+919976768211"
               className="btn-secondary flex items-center justify-center"
             >
               <Phone className="h-5 w-5 mr-2" />
               Call Now
             </a>
-            <a 
+            <a
               href="https://wa.me/919976768211?text=Hi! I need help with Fixly."
               target="_blank"
               rel="noopener noreferrer"

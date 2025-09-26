@@ -1,6 +1,0 @@
-{
-  "scripts": {
-    "fix-usernames": "node scripts/fix-duplicate-usernames.js",
-    "db-cleanup": "node scripts/fix-duplicate-usernames.js"
-  }
-}

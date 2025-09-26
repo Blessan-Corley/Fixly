@@ -267,9 +267,14 @@ export default function PrivacyPolicyPage() {
               <MapPin className="h-6 w-6 text-fixly-accent mr-3" />
               <div>
                 <div className="font-medium text-fixly-text">Address</div>
-                <div className="text-fixly-text-muted">
+                <a
+                  href="https://www.google.com/maps/search/?api=1&query=11.000044,77.080355"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-fixly-text-muted hover:text-fixly-accent transition-colors cursor-pointer"
+                >
                   Coimbatore, Tamil Nadu, India
-                </div>
+                </a>
               </div>
             </div>
           </div>
