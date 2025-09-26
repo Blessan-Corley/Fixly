@@ -15,10 +15,6 @@ export default function NotificationCenter({ userId, className = '' }) {
     markAsRead: markNotificationAsRead,
     error
   } = useRealTimeNotifications();
-
-  // For connection status, we'll use Ably context
-  const connected = true; // Ably handles this internally
-  const connecting = false;
   
   // Filter notifications
   const filteredNotifications = notifications.filter(notification => {
@@ -101,12 +97,7 @@ export default function NotificationCenter({ userId, className = '' }) {
         ) : (
           <Bell className="w-6 h-6" />
         )}
-        
-        {/* Connection Status */}
-        <div className={`absolute -top-1 -left-1 w-3 h-3 rounded-full ${
-          connected ? 'bg-green-500' : connecting ? 'bg-yellow-500' : 'bg-red-500'
-        }`} />
-        
+
         {/* Unread Badge */}
         {unreadNotifications > 0 && (
           <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1">

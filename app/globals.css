@@ -96,6 +96,29 @@
 }
 
 @layer base {
+  /* Remove focus outlines for mouse users, keep for keyboard users */
+  *:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+
+  *:focus-visible {
+    outline: 2px solid rgb(var(--fixly-primary-light));
+    outline-offset: 2px;
+  }
+
+  /* Improve button focus behavior */
+  button:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+
+  /* Improve link focus behavior */
+  a:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
+
   * {
     @apply border-border;
   }
@@ -367,7 +390,25 @@
   /* Enhanced mobile padding for input fields with icons */
   @media (max-width: 640px) {
     .input-field-with-icon {
-      @apply pl-12;
+      padding-left: 3rem;
+      padding-right: 3rem;
+    }
+
+    /* Ensure adequate spacing around icons on mobile */
+    .relative .absolute.left-3 {
+      left: 0.75rem;
+      z-index: 10;
+    }
+
+    /* Ensure right icons don't overlap on smaller screens */
+    .relative .absolute.right-3 {
+      right: 0.75rem;
+      z-index: 10;
+    }
+
+    /* Specific mobile adjustments for input containers with icons */
+    .relative .input-field-with-icon {
+      min-height: 48px; /* Ensure adequate touch target */
     }
   }
 
@@ -405,8 +446,46 @@
   
   .select-field {
     @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 cursor-pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 20px;
+    padding-right: 40px;
   }
   
+  /* Dropdown Components - Rounded and Professional */
+  .dropdown-menu {
+    @apply bg-fixly-card border border-fixly-border rounded-xl shadow-fixly-lg z-50 p-2 min-w-48;
+  }
+
+  .dropdown-item {
+    @apply w-full px-3 py-2 text-left text-fixly-text hover:bg-fixly-bg-secondary hover:text-fixly-primary rounded-lg transition-colors duration-150 cursor-pointer;
+  }
+
+  .dropdown-separator {
+    @apply border-t border-fixly-border my-2;
+  }
+
+  .dropdown-header {
+    @apply px-3 py-2 text-xs font-medium text-fixly-text-muted uppercase tracking-wider;
+  }
+
+  /* Toast and Modal Components - Rounded */
+  .toast {
+    @apply bg-fixly-card border border-fixly-border rounded-xl shadow-fixly-lg p-4;
+  }
+
+  .modal {
+    @apply bg-fixly-card border border-fixly-border rounded-xl shadow-fixly-lg p-6 max-w-lg;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 bg-black bg-opacity-50 z-40;
+  }
+
   /* Badge Components - Subtle and Professional */
   .badge {
     @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium;

@@ -2,9 +2,9 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../../../../lib/auth';
-import connectDB from '../../../../../lib/mongodb';
+import connectDB from '../../../../../lib/db';
 import Job from '../../../../../models/Job';
-import { analytics } from '../../../../../lib/cache';
+// Analytics tracking removed - focusing on core functionality
 import { getServerAbly, CHANNELS, EVENTS } from '../../../../../lib/ably';
 
 export async function POST(request, { params }) {
@@ -47,17 +47,13 @@ export async function POST(request, { params }) {
     if (viewCount > 0) {
       await job.save();
 
-      // Track in analytics system
-      await analytics.trackEvent('job_viewed', {
+      // View tracking removed - using simple console.log instead
+      console.log('👁️ Job viewed', {
         jobId: job._id,
-        jobTitle: job.title,
-        jobCategory: job.skillsRequired[0],
-        jobBudget: job.budget.amount,
-        jobBudgetType: job.budget.type,
+        userId: session.user.id,
         viewCount: viewCount,
-        userAgent: userAgent,
-        ipAddress: ipAddress
-      }, session.user.id);
+        timestamp: new Date().toISOString()
+      });
 
       // Broadcast real-time view count update
       try {

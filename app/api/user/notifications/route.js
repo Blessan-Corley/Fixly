@@ -5,7 +5,7 @@ import { authOptions } from '@/lib/auth';
 import connectDB from '../../../../lib/db';
 import User from '../../../../models/User';
 import { rateLimit } from '../../../../utils/rateLimiting';
-import { cache } from '../../../../lib/cache';
+import { redisUtils } from '../../../../lib/redis';
 import { getNotificationService, NOTIFICATION_CATEGORIES } from '../../../../lib/notifications';
 
 // Cache configuration
@@ -44,7 +44,7 @@ export async function GET(request) {
 
     // Try to get from cache first
     try {
-      const cachedData = await cache.get(cacheKey);
+      const cachedData = await redisUtils.get(cacheKey);
       if (cachedData) {
         const response = NextResponse.json(cachedData);
         response.headers.set('X-Cache', 'HIT');
@@ -80,7 +80,7 @@ export async function GET(request) {
 
     // Cache the response
     try {
-      await cache.set(cacheKey, responseData, CACHE_TTL);
+      await redisUtils.set(cacheKey, responseData, CACHE_TTL);
     } catch (cacheError) {
       console.log('Cache set error:', cacheError.message);
     }

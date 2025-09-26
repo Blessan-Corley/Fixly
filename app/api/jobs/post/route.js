@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../auth/[...nextauth]/route';
-import rateLimitMiddleware from '@/lib/rateLimit';
+import { rateLimit } from '@/utils/rateLimiting';
 import cacheMiddleware, { invalidateUserCache } from '@/lib/redisCache';
 import { contentValidationMiddleware, FieldValidators } from '@/lib/contentValidation';
 import inputSanitizationMiddleware, { CustomSanitizers, schemaSanitize } from '@/lib/inputSanitization';
@@ -20,14 +20,14 @@ export async function POST(request) {
     const forwarded = request.headers.get('x-forwarded-for');
     const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
 
-    // Redis-based rate limiting - 10 job posts per hour per IP
-    const rateLimitResult = await redisRateLimit(`job_posting:${ip}`, 10, 3600);
+    // Rate limiting - use predefined job posting limits (5 posts per hour)
+    const rateLimitResult = await rateLimit(request, 'job_posting');
     if (!rateLimitResult.success) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Too many job posting requests. Please try again later.',
-          resetTime: new Date(rateLimitResult.resetTime).toISOString()
+          message: rateLimitResult.message || 'Too many job posting requests. Please try again later.',
+          remainingTime: rateLimitResult.remainingTime
         },
         { status: 429 }
       );
@@ -394,14 +394,14 @@ export async function GET(request) {
     const forwarded = request.headers.get('x-forwarded-for');
     const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
 
-    // Redis-based rate limiting - 100 requests per 15 minutes per IP
-    const rateLimitResult = await redisRateLimit(`api_requests:${ip}`, 100, 900);
+    // Rate limiting - use predefined API request limits (1000 requests per 15 minutes)
+    const rateLimitResult = await rateLimit(request, 'api_requests');
     if (!rateLimitResult.success) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Too many requests. Please try again later.',
-          resetTime: new Date(rateLimitResult.resetTime).toISOString()
+          message: rateLimitResult.message || 'Too many requests. Please try again later.',
+          remainingTime: rateLimitResult.remainingTime
         },
         { status: 429 }
       );

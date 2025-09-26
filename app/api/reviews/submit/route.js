@@ -6,7 +6,7 @@ import Job from '@/models/Job';
 import Review from '@/models/Review';
 import User from '@/models/User';
 import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
-import rateLimitMiddleware from '@/lib/rateLimit';
+import { rateLimit } from '@/utils/rateLimiting';
 import cacheMiddleware from '@/lib/redisCache';
 import { contentValidationMiddleware, FieldValidators } from '@/lib/contentValidation';
 import inputSanitizationMiddleware, { CustomSanitizers, schemaSanitize } from '@/lib/inputSanitization';
@@ -125,12 +125,9 @@ async function applyMiddlewares(request) {
   }
 
   // Apply rate limiting
-  const rateLimitResult = await new Promise((resolve) => {
-    rateLimitMiddleware({ requests: 5, window: 3600 })(req, res, () => resolve(null));
-  });
-
-  if (rateLimitResult) {
-    throw new Error('Rate limit exceeded');
+  const rateLimitResult = await rateLimit(request, 'reviews', 5, 60 * 60 * 1000);
+  if (!rateLimitResult.success) {
+    throw new Error(rateLimitResult.message || 'Rate limit exceeded');
   }
 
   // Apply input sanitization

@@ -161,7 +161,7 @@ export const VirtualJobList = dynamic(
   }
 );
 
-// Unified Skill Selector - Load when needed (works as modal or inline)
+// Unified Skill Selector - Can be server-rendered for better performance
 export const SkillSelector = dynamic(
   () => import('../SkillSelector/SkillSelector'),
   {
@@ -180,11 +180,11 @@ export const SkillSelector = dynamic(
         </div>
       </div>
     ),
-    ssr: false
+    ssr: true // Skill list can be pre-rendered for faster UX
   }
 );
 
-// File Upload Components - Load when file operations are needed
+// File Upload Components - Needs client for file operations
 export const FileUploadZone = dynamic(
   () => import('../ui/FileUploadZone'),
   {
@@ -194,7 +194,7 @@ export const FileUploadZone = dynamic(
         <p className="mt-2 text-fixly-text-muted dark:text-gray-400">Loading file upload...</p>
       </div>
     ),
-    ssr: false
+    ssr: false // File APIs require client-side
   }
 );
 
@@ -280,7 +280,7 @@ export const VideoCall = dynamic(
   }
 );
 
-// Settings Pages - Administrative features
+// Settings Pages - Can be server-rendered for better SEO
 export const SettingsPage = dynamic(
   () => import('../settings/SettingsPage'),
   {
@@ -297,7 +297,7 @@ export const SettingsPage = dynamic(
         </div>
       </div>
     ),
-    ssr: false
+    ssr: true // Settings can be pre-rendered for faster loading
   }
 );
 

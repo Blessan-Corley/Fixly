@@ -39,44 +39,42 @@ export default function JobCardRectangular({
   );
 
   // Real-time view count updates
-  useEffect(() => {
-    if (!job._id) return;
+useEffect(() => {
+  if (!job._id) return;
 
-    let ably = null;
-    let channel = null;
+  let channel = null;
 
-    const setupRealtimeViewCount = async () => {
-      try {
-        ably = getClientAbly();
-        if (!ably) return;
+  const setupRealtimeViewCount = async () => {
+    try {
+      const ably = getClientAbly();
+      if (!ably) return;
 
-        channel = ably.channels.get(CHANNELS.jobUpdates(job._id));
+      channel = ably.channels.get(CHANNELS.jobUpdates(job._id));
 
-        await channel.subscribe(EVENTS.JOB_UPDATED, (message) => {
-          const { type, viewCount: newViewCount } = message.data;
+      const viewCountCallback = (message) => {
+        const { type, viewCount: newViewCount } = message.data;
 
-          if (type === 'view_count' && typeof newViewCount === 'number') {
-            setViewCount(newViewCount);
-          }
-        });
+        if (type === 'view_count' && typeof newViewCount === 'number') {
+          setViewCount(newViewCount);
+        }
+      };
 
-        console.log(`👀 Subscribed to view count updates for job ${job._id}`);
-      } catch (error) {
-        console.error('❌ Real-time view count setup error:', error);
-      }
-    };
+      await channel.subscribe(EVENTS.JOB_UPDATED, viewCountCallback);
 
-    setupRealtimeViewCount();
+      console.log(`👀 Subscribed to view count updates for job ${job._id}`);
+    } catch (error) {
+      console.error('❌ Real-time view count setup error:', error);
+    }
+  };
 
-    return () => {
-      if (channel) {
-        channel.unsubscribe();
-      }
-      if (ably) {
-        ably.close();
-      }
-    };
-  }, [job._id]);
+  setupRealtimeViewCount();
+
+  return () => {
+    if (channel) {
+      channel.unsubscribe(); // Remove subscription instead of closing ably
+    }
+  };
+}, [job._id]);
 
   // Real-time time updates
   useEffect(() => {
@@ -158,7 +156,24 @@ export default function JobCardRectangular({
       await onApply(job._id);
     }
   };
+const formatTimeAgo = (dateString) => {
+  if (!dateString) return '';
+  const now = new Date();
+  const created = new Date(dateString);
+  const diffInSeconds = Math.floor((now - created) / 1000);
 
+  if (diffInSeconds < 60) {
+    return `${diffInSeconds}s ago`;
+  } else if (diffInSeconds < 3600) {
+    return `${Math.floor(diffInSeconds / 60)}m ago`;
+  } else if (diffInSeconds < 86400) {
+    return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  } else if (diffInSeconds < 604800) {
+    return `${Math.floor(diffInSeconds / 86400)}d ago`;
+  } else {
+    return `${Math.floor(diffInSeconds / 604800)}w ago`;
+  }
+};
   // Sensitive content filtering for job display
   const sanitizeText = (text) => {
     if (!text) return '';

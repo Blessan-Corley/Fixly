@@ -52,6 +52,12 @@ const validateUsername = async (username) => {
     return { valid: false, error: 'Username cannot contain consecutive underscores' };
   }
 
+  // Check for consecutive same characters (more than 2 in a row)
+  const consecutivePattern = /(.)\1{2,}/;
+  if (consecutivePattern.test(username)) {
+    return { valid: false, error: 'Username cannot have more than 2 consecutive identical characters' };
+  }
+
   const reserved = ['admin', 'root', 'fixly', 'api', 'dashboard'];
   if (reserved.includes(username)) {
     return { valid: false, error: 'This username is reserved' };
@@ -521,10 +527,14 @@ export default function SignupPage() {
 
     // Debounced validation for username and email
     if (field === 'username' || field === 'email') {
-      clearTimeout(window.validationTimeout);
-      window.validationTimeout = setTimeout(async () => {
-        await performLiveValidation(field, value);
-      }, 500); // 500ms debounce
+      if (typeof window !== 'undefined' && window.validationTimeout) {
+        clearTimeout(window.validationTimeout);
+      }
+      if (typeof window !== 'undefined') {
+        window.validationTimeout = setTimeout(async () => {
+          await performLiveValidation(field, value);
+        }, 500); // 500ms debounce
+      }
     }
   };
 
@@ -534,8 +544,8 @@ export default function SignupPage() {
 
     try {
       if (field === 'username') {
-        // Use existing ValidationRules from your utilities
-        const validation = window.ValidationRules?.validateUsername(value);
+        // Validate username using local validation
+        const validation = await validateUsername(value);
         if (!validation?.valid) {
           setErrors(prev => ({ ...prev, username: validation.error }));
           return;

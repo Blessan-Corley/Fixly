@@ -107,12 +107,12 @@ const categoryIcons = {
   'Cleaning Services': { icon: Sparkle, color: 'bg-fixly-accent/20 dark:bg-fixly-accent/10 text-fixly-accent dark:text-fixly-accent', bgColor: 'bg-fixly-accent' },
   'Automotive Services': { icon: Car, color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400', bgColor: 'bg-red-500' },
   'Gardening Services': { icon: TreePine, color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400', bgColor: 'bg-emerald-500' },
-  'Moving Services': { icon: Truck, color: 'bg-fixly-secondary/20 dark:bg-fixly-secondary/10 text-fixly-secondary dark:text-fixly-secondary', bgColor: 'bg-fixly-secondary' },
+  'Moving Services': { icon: Truck, color: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400', bgColor: 'bg-orange-500' },
   'Beauty & Wellness': { icon: Scissors, color: 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-400', bgColor: 'bg-pink-500' },
   'Healthcare Services': { icon: Stethoscope, color: 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400', bgColor: 'bg-rose-500' },
   'Photography & Events': { icon: Camera, color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400', bgColor: 'bg-violet-500' },
   'Tutoring & Education': { icon: GraduationCap, color: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400', bgColor: 'bg-cyan-500' },
-  'Security Services': { icon: Shield, color: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300', bgColor: 'bg-slate-500' },
+  'Security Services': { icon: Shield, color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400', bgColor: 'bg-amber-500' },
   'Digital Services': { icon: Monitor, color: 'bg-fixly-primary/20 dark:bg-fixly-primary/10 text-fixly-primary dark:text-fixly-primary', bgColor: 'bg-fixly-primary' },
 };
 

@@ -176,8 +176,10 @@ export default function CookiesPage() {
           className="mb-12"
         >
           <h2 className="text-3xl font-bold text-fixly-text mb-8">Types of Cookies We Use</h2>
-          <div className="grid md:grid-cols-2 gap-8">
-            {cookieTypes.map((type, index) => (
+
+          {/* First row - 3 essential cookie types */}
+          <div className="grid md:grid-cols-3 gap-8 mb-8">
+            {cookieTypes.slice(0, 3).map((type, index) => (
               <motion.div
                 key={type.title}
                 initial={{ opacity: 0, y: 20 }}
@@ -194,11 +196,11 @@ export default function CookiesPage() {
                     {type.title}
                   </h3>
                 </div>
-                
+
                 <p className="text-fixly-text-light mb-4">
                   {type.description}
                 </p>
-                
+
                 <ul className="space-y-2">
                   {type.examples.map((example, exampleIndex) => (
                     <li key={exampleIndex} className="flex items-start">
@@ -209,6 +211,44 @@ export default function CookiesPage() {
                 </ul>
               </motion.div>
             ))}
+          </div>
+
+          {/* Second row - 2 additional cookie types centered */}
+          <div className="flex justify-center">
+            <div className="grid md:grid-cols-2 gap-8 max-w-4xl">
+              {cookieTypes.slice(3).map((type, index) => (
+                <motion.div
+                  key={type.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: (index + 3) * 0.1 }}
+                  className="card"
+                >
+                  <div className="flex items-center mb-4">
+                    <div className="bg-fixly-accent/10 w-12 h-12 rounded-lg flex items-center justify-center mr-4">
+                      <type.icon className="h-6 w-6 text-fixly-accent" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-fixly-text">
+                      {type.title}
+                    </h3>
+                  </div>
+
+                  <p className="text-fixly-text-light mb-4">
+                    {type.description}
+                  </p>
+
+                  <ul className="space-y-2">
+                    {type.examples.map((example, exampleIndex) => (
+                      <li key={exampleIndex} className="flex items-start">
+                        <CheckCircle className="h-4 w-4 text-fixly-accent mr-2 mt-0.5 flex-shrink-0" />
+                        <span className="text-sm text-fixly-text-muted">{example}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </motion.div>
 
@@ -269,13 +309,13 @@ export default function CookiesPage() {
             work properly without cookies enabled.
           </p>
           
-          <div className="bg-fixly-warning-bg border border-fixly-warning/20 rounded-lg p-4">
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg p-4">
             <div className="flex items-start">
-              <Shield className="h-5 w-5 text-fixly-warning mr-3 mt-0.5 flex-shrink-0" />
+              <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400 mr-3 mt-0.5 flex-shrink-0" />
               <div>
-                <h4 className="font-semibold text-fixly-warning-text mb-2">Important Note</h4>
-                <p className="text-sm text-fixly-warning-text">
-                  Disabling essential cookies will prevent you from using core Fixly features such as posting jobs, 
+                <h4 className="font-semibold text-amber-800 dark:text-amber-200 mb-2">Important Note</h4>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  Disabling essential cookies will prevent you from using core Fixly features such as posting jobs,
                   applying for work, making payments, and accessing your dashboard.
                 </p>
               </div>

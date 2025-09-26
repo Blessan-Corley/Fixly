@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../lib/auth';
-import connectDB from '../../../lib/mongodb';
+import connectDB from '../../../lib/db';
 import LocationPreference from '../../../models/LocationPreference';
 import User from '../../../models/User';
 

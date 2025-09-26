@@ -28,10 +28,12 @@ import { useApp } from '../../providers';
 import { toast } from 'sonner';
 import { usePageLoading } from '../../../contexts/LoadingContext';
 import { GlobalLoading } from '../../../components/ui/GlobalLoading';
+import { validateContent } from '../../../lib/validations/content-validator';
 import { searchCities } from '../../../data/cities';
 import SkillSelector from '../../../components/SkillSelector/SkillSelector';
 import { ProfileVerificationStatus } from '../../../components/dashboard/VerificationPrompt';
 import EnhancedLocationSelector from '../../../components/LocationPicker/EnhancedLocationSelector';
+import FirebasePhoneAuth from '../../../components/auth/FirebasePhoneAuth';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
@@ -87,6 +89,11 @@ export default function ProfilePage() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [countdown, setCountdown] = useState(0);
+
+  // Phone verification states
+  const [showPhoneVerification, setShowPhoneVerification] = useState(false);
+  const [newPhoneNumber, setNewPhoneNumber] = useState('');
+  const [showPhoneEdit, setShowPhoneEdit] = useState(false);
 
   // Initialize form data only once when user data is available
   const [initialized, setInitialized] = useState(false);
@@ -399,25 +406,73 @@ export default function ProfilePage() {
     </div>
   ), [formData.name, handleInputChange]);
 
-  const BioInput = memo(() => (
-    <div>
-      <label className="block text-sm font-medium text-fixly-text mb-2">
-        Bio
-      </label>
-      <textarea
-        key="bio-input"
-        value={formData.bio || ''}
-        onChange={(e) => handleInputChange('bio', e.target.value)}
-        placeholder="Tell others about yourself..."
-        className="textarea-field h-24"
-        maxLength={500}
-        autoComplete="off"
-      />
-      <p className="text-xs text-fixly-text-muted mt-1">
-        {(formData.bio || '').length}/500 characters
-      </p>
-    </div>
-  ), [formData.bio, handleInputChange]);
+  const BioInput = memo(() => {
+    const [bioValidation, setBioValidation] = useState({ isValid: true, violations: [] });
+    const [validating, setValidating] = useState(false);
+
+    const validateBio = useCallback(async (text) => {
+      if (!text || text.trim().length === 0) {
+        setBioValidation({ isValid: true, violations: [] });
+        return;
+      }
+
+      setValidating(true);
+      try {
+        const validation = await validateContent(text, 'profile');
+        setBioValidation(validation);
+      } catch (error) {
+        console.warn('Bio validation failed:', error);
+        setBioValidation({ isValid: true, violations: [] });
+      } finally {
+        setValidating(false);
+      }
+    }, []);
+
+    const handleBioChange = useCallback((e) => {
+      const text = e.target.value;
+      handleInputChange('bio', text);
+
+      // Debounce validation
+      const timeoutId = setTimeout(() => validateBio(text), 500);
+      return () => clearTimeout(timeoutId);
+    }, [handleInputChange, validateBio]);
+
+    return (
+      <div>
+        <label className="block text-sm font-medium text-fixly-text mb-2">
+          Bio
+          {validating && (
+            <span className="ml-2 text-xs text-fixly-text-muted">
+              <Loader className="inline h-3 w-3 animate-spin mr-1" />
+              Validating...
+            </span>
+          )}
+        </label>
+        <textarea
+          key="bio-input"
+          value={formData.bio || ''}
+          onChange={handleBioChange}
+          placeholder="Tell others about yourself... (avoid sharing phone numbers, addresses, or external contact info)"
+          className={`textarea-field h-24 ${!bioValidation.isValid ? 'border-red-500 focus:border-red-500' : ''}`}
+          maxLength={500}
+          autoComplete="off"
+        />
+        <div className="mt-1 flex items-center justify-between">
+          <div>
+            {!bioValidation.isValid && bioValidation.violations.length > 0 && (
+              <div className="text-xs text-red-500">
+                <AlertCircle className="inline h-3 w-3 mr-1" />
+                {bioValidation.violations[0].message}
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-fixly-text-muted">
+            {(formData.bio || '').length}/500 characters
+          </p>
+        </div>
+      </div>
+    );
+  }, [formData.bio, handleInputChange]);
 
   if (!user) {
     return (
@@ -428,6 +483,59 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  // Phone verification functions
+  const handlePhoneVerificationComplete = async (result) => {
+    console.log('Phone verification completed:', result);
+
+    // Update user data
+    if (result.user) {
+      updateUser(result.user);
+    }
+
+    // Close verification modal
+    setShowPhoneVerification(false);
+    setNewPhoneNumber('');
+    toast.success('Phone number verified successfully!');
+  };
+
+  const handlePhoneVerificationError = (error) => {
+    console.error('Phone verification error:', error);
+    toast.error(error.message || 'Phone verification failed');
+  };
+
+  const handlePhoneNumberUpdate = async () => {
+    if (!newPhoneNumber || newPhoneNumber.length !== 10) {
+      toast.error('Please enter a valid 10-digit phone number');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/user/update-phone', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: newPhoneNumber })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Update user state
+        updateUser({ ...user, phone: newPhoneNumber, phoneVerified: false });
+
+        // Start verification process
+        setShowPhoneEdit(false);
+        setShowPhoneVerification(true);
+
+        toast.success('Phone number updated! Please verify it now.');
+      } else {
+        toast.error(data.message || 'Failed to update phone number');
+      }
+    } catch (error) {
+      console.error('Phone update error:', error);
+      toast.error('Failed to update phone number');
+    }
+  };
 
   return (
     <div className="p-6 lg:p-8 max-w-4xl mx-auto">
@@ -586,9 +694,40 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center">
-                  <Phone className="h-4 w-4 text-fixly-accent mr-3" />
-                  <span className="text-fixly-text">{user.phone}</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Phone className="h-4 w-4 text-fixly-accent mr-3" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-fixly-text">{user.phone}</span>
+                      {user.phoneVerified ? (
+                        <div className="flex items-center">
+                          <CheckCircle className="h-4 w-4 text-fixly-success mr-1" />
+                          <span className="text-xs text-fixly-success font-medium">Verified</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <AlertCircle className="h-4 w-4 text-fixly-warning mr-1" />
+                          <span className="text-xs text-fixly-warning font-medium">Not Verified</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!user.phoneVerified && user.phone && (
+                      <button
+                        onClick={() => setShowPhoneVerification(true)}
+                        className="btn-primary text-xs px-3 py-1"
+                      >
+                        Verify
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowPhoneEdit(true)}
+                      className="btn-secondary text-xs px-3 py-1"
+                    >
+                      Change
+                    </button>
+                  </div>
                 </div>
 
                 {user.bio && (
@@ -1113,6 +1252,100 @@ export default function ProfilePage() {
                 Cancel
               </button>
             </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Phone Edit Modal */}
+      {showPhoneEdit && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl p-6 w-full max-w-md"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-fixly-text">Update Phone Number</h3>
+              <button
+                onClick={() => {
+                  setShowPhoneEdit(false);
+                  setNewPhoneNumber('');
+                }}
+                className="text-fixly-text-muted hover:text-fixly-text"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-fixly-text mb-2">
+                  New Phone Number
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <span className="text-fixly-text-muted text-sm">+91</span>
+                  </div>
+                  <input
+                    type="tel"
+                    value={newPhoneNumber}
+                    onChange={(e) => setNewPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="Enter 10-digit mobile number"
+                    className="w-full pl-16 pr-4 py-3 border border-fixly-border rounded-lg focus:ring-2 focus:ring-fixly-accent focus:border-fixly-accent"
+                    maxLength={10}
+                  />
+                </div>
+                <p className="text-xs text-fixly-text-muted mt-1">
+                  You'll need to verify this number after updating
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-fixly-border">
+                <button
+                  onClick={() => {
+                    setShowPhoneEdit(false);
+                    setNewPhoneNumber('');
+                  }}
+                  className="btn-ghost flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePhoneNumberUpdate}
+                  disabled={!newPhoneNumber || newPhoneNumber.length !== 10}
+                  className="btn-primary flex-1"
+                >
+                  Update & Verify
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Phone Verification Modal */}
+      {showPhoneVerification && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl p-6 w-full max-w-md"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-fixly-text">Verify Phone Number</h3>
+              <button
+                onClick={() => setShowPhoneVerification(false)}
+                className="text-fixly-text-muted hover:text-fixly-text"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <FirebasePhoneAuth
+              phoneNumber={newPhoneNumber || user.phone}
+              onVerificationComplete={handlePhoneVerificationComplete}
+              onError={handlePhoneVerificationError}
+            />
           </motion.div>
         </div>
       )}

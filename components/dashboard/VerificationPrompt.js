@@ -72,7 +72,7 @@ export default function VerificationPrompt({ variant = 'banner' }) {
                 </div>
               </div>
               <p className="text-gray-600 mb-4">
-                Increase trust and unlock all features by verifying your {pendingVerifications.join(' and ').toLowerCase()}.
+                Complete your profile to unlock full potential by verifying your {pendingVerifications.join(' and ').toLowerCase()}.
               </p>
               
               {/* Verification Status */}
@@ -147,7 +147,7 @@ export default function VerificationPrompt({ variant = 'banner' }) {
                 Complete your account verification
               </p>
               <p className="text-sm text-amber-700">
-                Verify your {pendingVerifications.join(' and ').toLowerCase()} to build trust and unlock all features
+                Complete your profile to unlock full potential - verify your {pendingVerifications.join(' and ').toLowerCase()}
               </p>
             </div>
           </div>
@@ -268,7 +268,7 @@ export function ProfileVerificationStatus({ user, showActions = true }) {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium text-blue-900">Complete Verification</p>
-              <p className="text-sm text-blue-700">Verify all your details to unlock premium features</p>
+              <p className="text-sm text-blue-700">Complete your profile to unlock full potential</p>
             </div>
             <button
               onClick={() => router.push('/auth/verify-account')}

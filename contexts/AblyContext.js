@@ -7,102 +7,102 @@ import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { getClientAbly, ChannelManager, CHANNELS, EVENTS } from '@/lib/ably';
 import { useSession } from 'next-auth/react';
 import { webPushService } from '@/lib/services/webPushService';
+import { useAblyConnection } from '@/hooks/useAblyConnection';
 
 const AblyContext = createContext();
 
 export function AblyProvider({ children }) {
   const { data: session } = useSession();
-  const [ably, setAbly] = useState(null);
-  const [channelManager, setChannelManager] = useState(null);
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [notifications, setNotifications] = useState([]);
   const cleanupRef = useRef([]);
 
-  // Initialize Ably connection
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const ablyInstance = getClientAbly();
+  // Use the enhanced connection hook
+  const {
+    ably,
+    connectionStatus,
+    isConnected,
+    reconnect,
+    healthCheck
+  } = useAblyConnection();
 
+  const [channelManager, setChannelManager] = useState(null);
+
+  // Initialize channel manager when ably is available
+  useEffect(() => {
+    if (ably && connectionStatus !== 'disabled') {
       // Update client ID when user logs in
-      if (session?.user?.id && ablyInstance.auth.clientId !== session.user.id) {
-        ablyInstance.auth.clientId = session.user.id;
+      if (session?.user?.id && ably.auth.clientId !== session.user.id) {
+        ably.auth.clientId = session.user.id;
       }
 
-      setAbly(ablyInstance);
-      setChannelManager(new ChannelManager(ablyInstance));
-
-      // Monitor connection status
-      ablyInstance.connection.on('connected', () => {
-        console.log('🟢 Ably connected');
-        setConnectionStatus('connected');
-      });
-
-      ablyInstance.connection.on('disconnected', () => {
-        console.log('🔴 Ably disconnected');
-        setConnectionStatus('disconnected');
-      });
-
-      ablyInstance.connection.on('suspended', () => {
-        console.log('🟡 Ably suspended');
-        setConnectionStatus('suspended');
-      });
-
-      ablyInstance.connection.on('connecting', () => {
-        console.log('🔄 Ably connecting');
-        setConnectionStatus('connecting');
-      });
-
-      ablyInstance.connection.on('failed', (error) => {
-        console.error('❌ Ably connection failed:', error);
-        setConnectionStatus('failed');
-      });
+      const newChannelManager = new ChannelManager(ably);
+      setChannelManager(newChannelManager);
 
       return () => {
         // Cleanup all subscriptions
         cleanupRef.current.forEach(cleanup => cleanup());
         cleanupRef.current = [];
 
-        if (channelManager) {
-          channelManager.cleanup();
-        }
-
-        ablyInstance.close();
+        // Cleanup the current channel manager
+        newChannelManager.cleanup();
       };
     }
-  }, [session?.user?.id]);
+  }, [ably, session?.user?.id, connectionStatus]); // ✅ Removed channelManager from deps
 
   // Subscribe to user notifications when logged in
   useEffect(() => {
-    if (session?.user?.id && channelManager) {
+    if (session?.user?.id && channelManager && connectionStatus === 'connected') {
       const subscribeToNotifications = async () => {
         try {
+          console.log(`📧 Subscribing to notifications for user: ${session.user.id}`);
+
           const unsubscribe = await channelManager.subscribeToChannel(
             CHANNELS.userNotifications(session.user.id),
             EVENTS.NOTIFICATION_SENT,
             (message) => {
               console.log('📢 New notification:', message.data);
-              setNotifications(prev => [message.data, ...prev]);
+              setNotifications(prev => [message.data, ...prev.slice(0, 49)]);
 
               // Show browser notification if permission granted
-              if (Notification.permission === 'granted') {
+              if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(message.data.title || 'Fixly Notification', {
                   body: message.data.message,
                   icon: '/favicon.ico',
                   tag: message.data.messageId
                 });
               }
+
+              // Also handle push notifications for mobile
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                  type: 'SHOW_NOTIFICATION',
+                  payload: {
+                    title: message.data.title || 'Fixly Notification',
+                    body: message.data.message,
+                    icon: '/favicon.ico',
+                    badge: '/favicon.ico',
+                    tag: message.data.messageId
+                  }
+                });
+              }
             }
           );
 
           cleanupRef.current.push(unsubscribe);
+          console.log('✅ Successfully subscribed to notifications');
         } catch (error) {
           console.error('Failed to subscribe to notifications:', error);
         }
       };
 
-      subscribeToNotifications();
+      // Add a small delay to ensure connection is stable
+      const timeoutId = setTimeout(subscribeToNotifications, 500);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
-  }, [session?.user?.id, channelManager]);
+  }, [session?.user?.id, channelManager, connectionStatus]);
 
   // Request notification permission
   useEffect(() => {
@@ -202,9 +202,11 @@ export function AblyProvider({ children }) {
     ably,
     channelManager,
 
-    // Connection status
+    // Connection status and controls
     connectionStatus,
-    isConnected: connectionStatus === 'connected',
+    isConnected,
+    reconnect,
+    healthCheck,
 
     // Notifications
     notifications,

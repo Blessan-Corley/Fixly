@@ -7,7 +7,7 @@ import Job from '../../../../../models/Job';
 import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
 import { moderateContent } from '../../../../../utils/sensitiveContentFilter';
-import { analytics } from '@/lib/cache';
+// Analytics tracking removed - focusing on core functionality
 import { sendTemplatedNotification, NOTIFICATION_TEMPLATES } from '@/lib/services/notificationService';
 import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
 import nodemailer from 'nodemailer';
@@ -225,18 +225,13 @@ export async function POST(request, { params }) {
     // Add application to job
     job.applications.push(application);
     
-    // Track application analytics
-    await analytics.trackEvent('job_applied', {
+    // Application tracking removed - using simple console.log instead
+    console.log('📝 Job application submitted', {
       jobId: job._id,
-      jobTitle: job.title,
-      jobCategory: job.skillsRequired[0],
-      jobBudget: job.budget.amount,
-      jobBudgetType: job.budget.type,
+      userId: user._id,
       proposedAmount: application.proposedAmount,
-      priceVariance: application.priceVariance,
-      priceVariancePercentage: application.priceVariancePercentage,
-      applicationCount: job.applications.length
-    }, user._id);
+      timestamp: new Date().toISOString()
+    });
     
     await job.save();
 
