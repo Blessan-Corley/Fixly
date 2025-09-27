@@ -14,7 +14,8 @@ import {
   Navigation,
   Clock,
   DollarSign,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
@@ -64,6 +65,9 @@ function BrowseJobsContent() {
     budgetMax: '',
     urgency: '',
     deadline: '',
+    deadlineFilter: '', // 'today', 'tomorrow', 'week', 'month', 'custom'
+    customDeadlineStart: '',
+    customDeadlineEnd: '',
     sortBy: 'newest',
     maxDistance: null // null means no distance filter
   });
@@ -191,6 +195,44 @@ function BrowseJobsContent() {
           }
         }
 
+        // Apply deadline-based filtering
+        if (filters.deadlineFilter) {
+          const now = new Date();
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const nextWeek = new Date(today);
+          nextWeek.setDate(nextWeek.getDate() + 7);
+          const nextMonth = new Date(today);
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+          processedJobs = processedJobs.filter(job => {
+            const jobDeadline = new Date(job.deadline);
+
+            switch (filters.deadlineFilter) {
+              case 'today':
+                return jobDeadline >= today && jobDeadline < tomorrow;
+              case 'tomorrow':
+                const dayAfterTomorrow = new Date(tomorrow);
+                dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+                return jobDeadline >= tomorrow && jobDeadline < dayAfterTomorrow;
+              case 'week':
+                return jobDeadline >= today && jobDeadline <= nextWeek;
+              case 'month':
+                return jobDeadline >= today && jobDeadline <= nextMonth;
+              case 'custom':
+                if (filters.customDeadlineStart && filters.customDeadlineEnd) {
+                  const startDate = new Date(filters.customDeadlineStart);
+                  const endDate = new Date(filters.customDeadlineEnd);
+                  return jobDeadline >= startDate && jobDeadline <= endDate;
+                }
+                return true;
+              default:
+                return true;
+            }
+          });
+        }
+
         if (reset) {
           setJobs(processedJobs);
         } else {
@@ -302,6 +344,9 @@ function BrowseJobsContent() {
       budgetMax: '',
       urgency: '',
       deadline: '',
+      deadlineFilter: '',
+      customDeadlineStart: '',
+      customDeadlineEnd: '',
       sortBy: locationEnabled ? 'distance' : 'newest',
       maxDistance: null
     });
@@ -445,6 +490,47 @@ function BrowseJobsContent() {
           </button>
         </div>
 
+        {/* Quick Filters */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm font-medium text-fixly-text mr-2">Quick filters:</span>
+
+          {/* Jobs Near Me Button */}
+          {locationEnabled && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                handleFilterChange('sortBy', 'distance');
+                handleFilterChange('maxDistance', 10); // 10km radius
+              }}
+              className={`btn-sm ${filters.sortBy === 'distance' && filters.maxDistance === 10
+                ? 'bg-fixly-accent text-white'
+                : 'bg-white border border-fixly-border text-fixly-text hover:border-fixly-accent'
+              } flex items-center space-x-2`}
+            >
+              <Navigation className="h-3 w-3" />
+              <span>Jobs Near Me</span>
+            </motion.button>
+          )}
+
+
+          {/* Clear Quick Filters */}
+          {(filters.sortBy === 'distance' && filters.maxDistance === 10) && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                handleFilterChange('sortBy', 'newest');
+                handleFilterChange('maxDistance', null);
+              }}
+              className="btn-sm bg-gray-100 text-gray-600 hover:bg-gray-200 flex items-center space-x-1"
+            >
+              <X className="h-3 w-3" />
+              <span>Clear</span>
+            </motion.button>
+          )}
+        </div>
+
         {/* Advanced Filters */}
         <AnimatePresence>
           {showFilters && (
@@ -505,6 +591,56 @@ function BrowseJobsContent() {
                     <option value="scheduled">Scheduled</option>
                   </select>
                 </div>
+
+                {/* Deadline Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    <span className="flex items-center">
+                      <Clock className="h-4 w-4 mr-1" />
+                      Deadline
+                    </span>
+                  </label>
+                  <select
+                    value={filters.deadlineFilter}
+                    onChange={(e) => handleFilterChange('deadlineFilter', e.target.value)}
+                    className="select-field"
+                  >
+                    <option value="">All deadlines</option>
+                    <option value="today">Due today</option>
+                    <option value="tomorrow">Due tomorrow</option>
+                    <option value="week">Within a week</option>
+                    <option value="month">Within a month</option>
+                    <option value="custom">Custom range</option>
+                  </select>
+                </div>
+
+                {/* Custom Date Range - Only show when custom is selected */}
+                {filters.deadlineFilter === 'custom' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-fixly-text mb-2">
+                        From Date
+                      </label>
+                      <input
+                        type="date"
+                        value={filters.customDeadlineStart}
+                        onChange={(e) => handleFilterChange('customDeadlineStart', e.target.value)}
+                        className="input-field"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-fixly-text mb-2">
+                        To Date
+                      </label>
+                      <input
+                        type="date"
+                        value={filters.customDeadlineEnd}
+                        onChange={(e) => handleFilterChange('customDeadlineEnd', e.target.value)}
+                        className="input-field"
+                      />
+                    </div>
+                  </>
+                )}
 
                 {/* Distance Filter - Only show when location is enabled */}
                 {locationEnabled && (

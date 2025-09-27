@@ -188,7 +188,7 @@ const userSchema = new mongoose.Schema({
   },
   emailVerified: {
     type: Boolean,
-    default: false
+    default: true  // Default to verified unless explicitly set to false
   },
   phoneVerified: {
     type: Boolean,
@@ -1478,8 +1478,20 @@ userSchema.statics.findByPhone = function(phone) {
 userSchema.pre('save', async function(next) {
   try {
   // Ensure phone number is properly formatted
-  if (this.phone && !this.phone.startsWith('+')) {
-    this.phone = '+91' + this.phone.replace(/[^\d]/g, '');
+  if (this.phone) {
+    // Clean the phone number
+    const cleanPhone = this.phone.replace(/[^\d]/g, '');
+
+    // Only format if it doesn't already have country code
+    if (!this.phone.startsWith('+')) {
+      // If it starts with 91, just add +
+      if (cleanPhone.startsWith('91')) {
+        this.phone = '+' + cleanPhone;
+      } else {
+        // Otherwise add +91
+        this.phone = '+91' + cleanPhone;
+      }
+    }
   }
   
   // Convert skills to lowercase

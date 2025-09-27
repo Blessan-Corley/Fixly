@@ -215,8 +215,8 @@ export async function POST(request) {
         };
 
         if (body.phone) {
-          const cleanPhone = body.phone.replace(/[^\d]/g, '');
-          userData.phone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+          // Just store the phone as-is, let the User model handle formatting
+          userData.phone = body.phone;
         }
 
         if (body.location) {
@@ -243,8 +243,8 @@ export async function POST(request) {
       };
 
       if (body.phone) {
-        const cleanPhone = body.phone.replace(/[^\d]/g, '');
-        updateData.phone = cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+        // Just store the phone as-is, let the User model handle formatting
+        updateData.phone = body.phone;
       }
       if (body.username) {
         updateData.username = body.username.toLowerCase().trim();
@@ -644,8 +644,8 @@ export async function POST(request) {
       // Authentication
       authMethod: body.authMethod || 'email',
       providers: [body.authMethod || 'email'],
-      isVerified: body.authMethod === 'google',
-      emailVerified: body.authMethod === 'google',
+      isVerified: true, // Mark as verified during signup for all users
+      emailVerified: true, // Email is verified during signup process
       phoneVerified: false,
 
       // Status

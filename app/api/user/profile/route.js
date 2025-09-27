@@ -182,6 +182,7 @@ export async function GET(request) {
       
       // Location
       location: user.location || null,
+      locationHistory: user.locationHistory?.slice(0, 5) || [], // Return last 5 location entries
       
       // Role-specific data
       skills: user.role === 'fixer' ? (user.skills || []) : undefined,
@@ -208,7 +209,7 @@ export async function GET(request) {
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
       authMethod: user.authMethod || 'email',
-      emailVerified: user.emailVerified || false,
+      emailVerified: user.emailVerified !== false, // Default to true unless explicitly false
       phoneVerified: user.phoneVerified || false,
       
       // Auth IDs (don't expose sensitive data)
@@ -379,8 +380,69 @@ export async function PUT(request) {
       );
     }
 
-    // Apply updates
-    Object.assign(user, updates);
+    // Apply updates with special handling for location
+    for (const [key, value] of Object.entries(updates)) {
+      if (key === 'location') {
+        // Enhanced location update with coordinates and history
+        if (value && value.lat && value.lng) {
+          // Update main location
+          user.location = {
+            ...user.location,
+            city: value.city || value.name || '',
+            state: value.state || '',
+            accuracy: value.accuracy,
+            timestamp: new Date(),
+            source: value.source || 'manual',
+            homeAddress: {
+              doorNo: value.doorNo || user.location?.homeAddress?.doorNo || '',
+              street: value.street || value.route || '',
+              district: value.district || value.locality || '',
+              state: value.state || '',
+              postalCode: value.postalCode || value.postal_code || '',
+              formattedAddress: value.formatted_address || value.address || `${value.city || ''}, ${value.state || ''}`.trim().replace(/^,\s*|,\s*$/g, ''),
+              coordinates: {
+                latitude: value.lat,
+                longitude: value.lng
+              },
+              setAt: new Date()
+            }
+          };
+
+          // Add to location history (limit to last 10 entries)
+          if (!user.locationHistory) {
+            user.locationHistory = [];
+          }
+
+          user.locationHistory.unshift({
+            coordinates: {
+              latitude: value.lat,
+              longitude: value.lng
+            },
+            address: value.formatted_address || value.address || `${value.city || ''}, ${value.state || ''}`.trim().replace(/^,\s*|,\s*$/g, ''),
+            city: value.city || value.name || '',
+            state: value.state || '',
+            source: value.source || 'manual',
+            accuracy: value.accuracy,
+            timestamp: new Date(),
+            deviceInfo: {
+              type: 'web',
+              userAgent: 'Location update from profile'
+            }
+          });
+
+          // Keep only last 10 location history entries
+          if (user.locationHistory.length > 10) {
+            user.locationHistory = user.locationHistory.slice(0, 10);
+          }
+        } else {
+          // Simple location update without coordinates
+          user.location = value;
+        }
+      } else {
+        user[key] = value;
+      }
+    }
+
     await user.save();
 
     console.log('✅ Profile updated successfully for user:', user._id);
@@ -393,6 +455,7 @@ export async function PUT(request) {
         name: user.name,
         bio: user.bio,
         location: user.location,
+        locationHistory: user.locationHistory?.slice(0, 5) || [], // Return last 5 location entries
         skills: user.skills,
         preferences: user.preferences,
         profilePhoto: user.profilePhoto,

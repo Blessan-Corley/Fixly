@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft,
   ChevronRight,
@@ -47,6 +47,7 @@ import {
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
 import { skillCategories } from '../../../data/cities';
+import DeadlineSelector from '../../../components/ui/DeadlineSelector';
 import SkillSelector from '../../../components/SkillSelector/SkillSelector';
 import EnhancedLocationSelector from '../../../components/LocationPicker/EnhancedLocationSelector';
 
@@ -112,6 +113,8 @@ function PostJobContent() {
   const [loadingDrafts, setLoadingDrafts] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [draftToDelete, setDraftToDelete] = useState(null);
 
   // Real-time validation states (like signup form) - Background validation without loading indicators
   const [validationMessages, setValidationMessages] = useState({});
@@ -238,15 +241,22 @@ function PostJobContent() {
     }
   };
 
-  const deleteDraft = async (draftId) => {
+  const handleDeleteClick = (draft) => {
+    setDraftToDelete(draft);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteDraft = async () => {
+    if (!draftToDelete) return;
+
     try {
-      const response = await fetch(`/api/jobs/drafts?draftId=${draftId}`, {
+      const response = await fetch(`/api/jobs/drafts?draftId=${draftToDelete._id}`, {
         method: 'DELETE'
       });
 
       if (response.ok) {
-        setAvailableDrafts(prev => prev.filter(draft => draft._id !== draftId));
-        if (currentDraftId === draftId) {
+        setAvailableDrafts(prev => prev.filter(draft => draft._id !== draftToDelete._id));
+        if (currentDraftId === draftToDelete._id) {
           setCurrentDraftId(null);
           setDraftStatus('unsaved');
           setLastSaved(null);
@@ -258,6 +268,9 @@ function PostJobContent() {
     } catch (error) {
       console.error('Error deleting draft:', error);
       toast.error('Failed to delete draft');
+    } finally {
+      setShowDeleteConfirm(false);
+      setDraftToDelete(null);
     }
   };
 
@@ -570,6 +583,7 @@ function PostJobContent() {
         newAttachments.push({
           id: uploadResult.media.id,
           name: uploadResult.media.filename,
+          filename: uploadResult.media.filename, // Required by JobDraft model
           type: uploadResult.media.type,
           size: uploadResult.media.size,
           url: uploadResult.media.url,
@@ -712,7 +726,7 @@ function PostJobContent() {
 
     switch (step) {
       case 1:
-        if (!formData.title.trim()) {
+        if (!formData.title || !formData.title.trim()) {
           newErrors.title = 'Title is required';
         } else if (formData.title.length < 10) {
           newErrors.title = 'Title must be at least 10 characters';
@@ -724,7 +738,7 @@ function PostJobContent() {
           }
         }
 
-        if (!formData.description.trim()) {
+        if (!formData.description || !formData.description.trim()) {
           newErrors.description = 'Description is required';
         } else if (formData.description.length < 30) {
           newErrors.description = 'Description must be at least 30 characters';
@@ -746,11 +760,11 @@ function PostJobContent() {
           newErrors['budget.amount'] = 'Budget amount is required';
         }
 
-        if (!formData.location.address.trim()) {
+        if (!formData.location.address || !formData.location.address.trim()) {
           newErrors['location.address'] = 'Address is required';
         }
 
-        if (!formData.location.city.trim()) {
+        if (!formData.location.city || !formData.location.city.trim()) {
           newErrors['location.city'] = 'City is required';
         }
 
@@ -760,10 +774,29 @@ function PostJobContent() {
         break;
 
       case 3:
-        if (!formData.deadline) {
-          newErrors.deadline = 'Deadline is required';
-        } else if (new Date(formData.deadline) <= new Date()) {
-          newErrors.deadline = 'Deadline must be in the future';
+        // Deadline validation based on urgency
+        if (formData.urgency === 'scheduled') {
+          // For scheduled jobs, scheduledDate is required, not deadline
+          if (!formData.scheduledDate) {
+            newErrors.scheduledDate = 'Scheduled date is required for scheduled jobs';
+          } else if (new Date(formData.scheduledDate) <= new Date()) {
+            newErrors.scheduledDate = 'Scheduled date must be in the future';
+          }
+        } else {
+          // For flexible and ASAP jobs, deadline is required
+          if (!formData.deadline) {
+            newErrors.deadline = 'Deadline is required';
+          } else if (new Date(formData.deadline) <= new Date()) {
+            newErrors.deadline = 'Deadline must be in the future';
+          } else {
+            // Check 24-hour restriction for free users
+            const twentyFourHoursFromNow = new Date();
+            twentyFourHoursFromNow.setHours(twentyFourHoursFromNow.getHours() + 24);
+
+            if (!subscriptionInfo?.isPro && new Date(formData.deadline) < twentyFourHoursFromNow) {
+              newErrors.deadline = 'Free users must set deadlines at least 24 hours in advance. Upgrade to Pro for priority scheduling.';
+            }
+          }
         }
 
         if (formData.scheduledDate && new Date(formData.scheduledDate) <= new Date()) {
@@ -780,7 +813,7 @@ function PostJobContent() {
       case 4:
         // Final comprehensive validation - check all steps
         // Step 1 validation
-        if (!formData.title.trim()) {
+        if (!formData.title || !formData.title.trim()) {
           newErrors.title = 'Job title is required';
         } else if (formData.title.length < 10) {
           newErrors.title = 'Job title must be at least 10 characters';
@@ -788,7 +821,7 @@ function PostJobContent() {
           newErrors.title = 'Job title cannot exceed 30 characters';
         }
 
-        if (!formData.description.trim()) {
+        if (!formData.description || !formData.description.trim()) {
           newErrors.description = 'Job description is required';
         } else if (formData.description.length < 30) {
           newErrors.description = 'Description must be at least 30 characters';
@@ -807,19 +840,35 @@ function PostJobContent() {
           newErrors['budget.amount'] = 'Valid budget amount is required';
         }
 
-        if (!formData.location.address.trim()) {
+        if (!formData.location.address || !formData.location.address.trim()) {
           newErrors['location.address'] = 'Complete address is required';
         }
 
-        if (!formData.location.city.trim()) {
+        if (!formData.location.city || !formData.location.city.trim()) {
           newErrors['location.city'] = 'City is required';
         }
 
         // Step 3 validation
-        if (!formData.deadline) {
-          newErrors.deadline = 'Job deadline is required';
-        } else if (new Date(formData.deadline) <= new Date()) {
-          newErrors.deadline = 'Deadline must be in the future';
+        // Step 4: Final validation - deadline based on urgency
+        if (formData.urgency === 'scheduled') {
+          if (!formData.scheduledDate) {
+            newErrors.scheduledDate = 'Scheduled date is required for scheduled jobs';
+          } else if (new Date(formData.scheduledDate) <= new Date()) {
+            newErrors.scheduledDate = 'Scheduled date must be in the future';
+          }
+        } else {
+          if (!formData.deadline) {
+            newErrors.deadline = 'Job deadline is required';
+          } else if (new Date(formData.deadline) <= new Date()) {
+            newErrors.deadline = 'Deadline must be in the future';
+          } else {
+            const twentyFourHoursFromNow = new Date();
+            twentyFourHoursFromNow.setHours(twentyFourHoursFromNow.getHours() + 24);
+
+            if (!subscriptionInfo?.isPro && new Date(formData.deadline) < twentyFourHoursFromNow) {
+              newErrors.deadline = 'Free users must set deadlines at least 24 hours in advance. Upgrade to Pro for priority scheduling.';
+            }
+          }
         }
 
         if (formData.scheduledDate && new Date(formData.scheduledDate) <= new Date()) {
@@ -1138,7 +1187,20 @@ function PostJobContent() {
 
         <EnhancedLocationSelector
           initialLocation={formData.location}
-          onLocationSelect={(location) => handleInputChange('location', location)}
+          onLocationSelect={(location) => {
+            // Transform the location data to match the expected format
+            const transformedLocation = {
+              address: location?.address || location?.formatted || '',
+              city: location?.components?.city || location?.city || '',
+              state: location?.components?.state || location?.state || '',
+              pincode: location?.components?.pincode || location?.pincode || '',
+              lat: location?.lat || location?.coordinates?.lat || null,
+              lng: location?.lng || location?.coordinates?.lng || null,
+              // Keep original data for reference
+              _original: location
+            };
+            handleInputChange('location', transformedLocation);
+          }}
           required={true}
           className="w-full"
         />
@@ -1165,39 +1227,35 @@ function PostJobContent() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Enhanced Deadline Selection */}
+      {formData.urgency !== 'scheduled' ? (
+        <DeadlineSelector
+          selectedDeadline={formData.deadline}
+          onDeadlineSelect={(deadline) => handleInputChange('deadline', deadline ? deadline.toISOString().slice(0, 16) : '')}
+          userPlan={subscriptionInfo?.isPro ? 'pro' : 'free'}
+          required={true}
+          error={errors.deadline}
+          className="mb-6"
+        />
+      ) : (
         <div>
           <label className="block text-sm font-medium text-fixly-text mb-2">
-            Deadline *
+            Scheduled Date *
           </label>
-          <input
-            type="datetime-local"
-            value={formData.deadline}
-            onChange={(e) => handleInputChange('deadline', e.target.value)}
-            className="input-field"
-            min={new Date().toISOString().slice(0, 16)}
+          <p className="text-xs text-fixly-text-light mb-4">
+            Set the specific date and time when this job should be started.
+          </p>
+          <DeadlineSelector
+            selectedDeadline={formData.scheduledDate}
+            onDeadlineSelect={(scheduledDate) => handleInputChange('scheduledDate', scheduledDate ? scheduledDate.toISOString().slice(0, 16) : '')}
+            userPlan={subscriptionInfo?.isPro ? 'pro' : 'free'}
+            required={true}
+            error={errors.scheduledDate}
+            mode="scheduled"
+            className="mb-4"
           />
-          {errors.deadline && (
-            <p className="text-red-500 text-sm mt-1">{errors.deadline}</p>
-          )}
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-fixly-text mb-2">
-            Scheduled Date (Optional)
-          </label>
-          <input
-            type="datetime-local"
-            value={formData.scheduledDate}
-            onChange={(e) => handleInputChange('scheduledDate', e.target.value)}
-            className="input-field"
-            min={new Date().toISOString().slice(0, 16)}
-          />
-          {errors.scheduledDate && (
-            <p className="text-red-500 text-sm mt-1">{errors.scheduledDate}</p>
-          )}
-        </div>
-      </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-fixly-text mb-2">
@@ -1434,9 +1492,37 @@ function PostJobContent() {
             </div>
 
             <div>
-              <span className="font-medium">Deadline:</span>
+              <span className="font-medium">
+                {formData.urgency === 'scheduled' ? 'Scheduled Date:' : 'Deadline:'}
+              </span>
               <p className="text-fixly-text-muted">
-                {new Date(formData.deadline).toLocaleDateString()}
+                {formData.urgency === 'scheduled' && formData.scheduledDate
+                  ? new Date(formData.scheduledDate).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  : formData.deadline
+                    ? new Date(formData.deadline).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })
+                    : 'Not set'
+                }
+              </p>
+            </div>
+
+            <div>
+              <span className="font-medium">Urgency:</span>
+              <p className="text-fixly-text-muted capitalize">
+                {formData.urgency === 'asap' ? 'ASAP' : formData.urgency}
               </p>
             </div>
           </div>
@@ -1832,11 +1918,7 @@ function PostJobContent() {
                           Load
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm('Are you sure you want to delete this draft?')) {
-                              deleteDraft(draft._id);
-                            }
-                          }}
+                          onClick={() => handleDeleteClick(draft)}
                           className="p-2 hover:bg-red-50 hover:text-red-600 rounded transition-colors"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1862,6 +1944,79 @@ function PostJobContent() {
           </motion.div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 text-white">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">Delete Draft</h3>
+                    <p className="text-white/80 text-sm">This action cannot be undone</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-6">
+                <p className="text-fixly-text mb-4">
+                  Are you sure you want to delete the draft{' '}
+                  <span className="font-semibold text-fixly-accent">
+                    "{draftToDelete?.title || 'Untitled Job'}"
+                  </span>
+                  ? This will permanently remove all progress and cannot be recovered.
+                </p>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6">
+                  <div className="flex items-start space-x-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-amber-700">
+                      All attachments and form data will be permanently deleted.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+                <div className="flex items-center justify-end space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDraftToDelete(null);
+                    }}
+                    className="btn-ghost text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDeleteDraft}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Delete Draft
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

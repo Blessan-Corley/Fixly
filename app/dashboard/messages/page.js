@@ -36,6 +36,7 @@ import {
 import { toast } from 'sonner';
 import { usePageLoading } from '../../../contexts/LoadingContext';
 import { GlobalLoading } from '../../../components/ui/GlobalLoading';
+import SmartAvatar from '../../../components/ui/SmartAvatar';
 
 export default function MessagesPage() {
   const { data: session } = useSession();
@@ -556,17 +557,15 @@ export default function MessagesPage() {
                     className={`flex items-end space-x-2 ${isOwn ? 'justify-end' : 'justify-start'}`}
                   >
                     {!isOwn && showAvatar && (
-                      <div className="h-8 w-8 bg-fixly-accent-light rounded-full flex items-center justify-center">
-                        {message.sender.photoURL ? (
-                          <img
-                            src={message.sender.photoURL}
-                            alt={message.sender.name}
-                            className="h-8 w-8 rounded-full object-cover"
-                          />
-                        ) : (
-                          <User className="h-4 w-4 text-fixly-accent" />
-                        )}
-                      </div>
+                      <SmartAvatar
+                        user={{
+                          name: message.sender.name,
+                          image: message.sender.photoURL,
+                          picture: message.sender.photoURL
+                        }}
+                        size="sm"
+                        className="h-8 w-8"
+                      />
                     )}
                     {!isOwn && !showAvatar && <div className="w-8" />}
                     

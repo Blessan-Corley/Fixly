@@ -21,7 +21,7 @@ export async function POST(request) {
     }
 
     // Check setup key (you can change this to any secret key)
-    const ADMIN_SETUP_KEY = process.env.ADMIN_SETUP_KEY || 'fixly_admin_setup_2024';
+    const ADMIN_SETUP_KEY = process.env.ADMIN_SETUP_KEY || 'fixly_admin_setup_2025';
     if (setupKey !== ADMIN_SETUP_KEY) {
       return NextResponse.json(
         { message: 'Invalid setup key' },

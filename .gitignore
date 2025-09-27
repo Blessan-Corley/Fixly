@@ -125,6 +125,9 @@ storybook-static
 *.tgz
 *.tar.gz
 .cache/
+
+# Claude Code Development Files
+CLAUDE.md
 DEPLOYMENT.md
 SECURITY.md
 TESTING_CHECKLIST.md
@@ -164,3 +167,22 @@ scripts/production-test.js
 scripts/verify-production.js
 scripts/production-load-test.js
 scripts/final-system-verification.js
+scripts/verify-deployment.js
+
+# Documentation & Reports - Development Only
+# Exclude all markdown files except README
+*.md
+!README.md
+# Exclude specific development docs
+CLAUDE.md
+DEPLOYMENT.md
+DOCS/
+.VSCodeCounter/
+# Exclude test and development script files
+test-*.js
+*-report.md
+*-summary.md
+*-documentation.md
+*-implementation.md
+*-system.md
+*-guide.md

@@ -54,7 +54,7 @@ const emailTemplates = {
             
             <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
               <p style="color: #9CA3AF; font-size: 12px;">
-                © 2024 Fixly. All rights reserved.<br>
+                © 2025 Fixly. All rights reserved.<br>
                 This is an automated email. Please do not reply.
               </p>
             </div>
@@ -105,7 +105,7 @@ const emailTemplates = {
             
             <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
               <p style="color: #9CA3AF; font-size: 12px;">
-                © 2024 Fixly. All rights reserved.<br>
+                © 2025 Fixly. All rights reserved.<br>
                 This is an automated email. Please do not reply.
               </p>
             </div>
@@ -181,7 +181,7 @@ const emailTemplates = {
         
         <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB;">
           <p style="color: #9CA3AF; font-size: 12px;">
-            © 2024 Fixly. All rights reserved.<br>
+            © 2025 Fixly. All rights reserved.<br>
             This is an automated email. Please do not reply.
           </p>
         </div>
