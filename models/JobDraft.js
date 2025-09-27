@@ -125,7 +125,8 @@ const jobDraftSchema = new mongoose.Schema({
     },
     filename: {
       type: String,
-      required: [true, 'Filename is required'],
+      required: false,
+      default: 'unknown',
       maxlength: [100, 'Filename cannot exceed 100 characters']
     },
     type: {

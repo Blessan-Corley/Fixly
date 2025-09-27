@@ -22,7 +22,8 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Target
+  Target,
+  Clock
 } from 'lucide-react';
 import { useApp } from '../../providers';
 import { toast } from 'sonner';
@@ -34,6 +35,7 @@ import SkillSelector from '../../../components/SkillSelector/SkillSelector';
 import { ProfileVerificationStatus } from '../../../components/dashboard/VerificationPrompt';
 import EnhancedLocationSelector from '../../../components/LocationPicker/EnhancedLocationSelector';
 import FirebasePhoneAuth from '../../../components/auth/FirebasePhoneAuth';
+import SmartAvatar from '../../../components/ui/SmartAvatar';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
@@ -94,6 +96,14 @@ export default function ProfilePage() {
   const [showPhoneVerification, setShowPhoneVerification] = useState(false);
   const [newPhoneNumber, setNewPhoneNumber] = useState('');
   const [showPhoneEdit, setShowPhoneEdit] = useState(false);
+
+  // Email change states
+  const [showEmailChange, setShowEmailChange] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailChangeLoading, setEmailChangeLoading] = useState(false);
+  const [emailOtpCountdown, setEmailOtpCountdown] = useState(0);
 
   // Initialize form data only once when user data is available
   const [initialized, setInitialized] = useState(false);
@@ -318,10 +328,13 @@ export default function ProfilePage() {
       const data = await response.json();
 
       if (response.ok) {
-        // Update user photo immediately
+        // Update user photo with unified field names
         updateUser({
-          profilePhoto: data.profilePhoto.url,
-          photoURL: data.profilePhoto.url
+          ...user,
+          profilePhoto: data.profilePhoto,
+          image: data.profilePhoto.url,
+          photoURL: data.profilePhoto.url,
+          picture: data.profilePhoto.url
         });
         toast.success(`Profile photo updated successfully! Next update available on ${new Date(data.profilePhoto.nextUpdateDate).toLocaleDateString()}`);
       } else {
@@ -404,7 +417,7 @@ export default function ProfilePage() {
         autoFocus={false}
       />
     </div>
-  ), [formData.name, handleInputChange]);
+  ), [formData.name]);
 
   const BioInput = memo(() => {
     const [bioValidation, setBioValidation] = useState({ isValid: true, violations: [] });
@@ -431,11 +444,18 @@ export default function ProfilePage() {
     const handleBioChange = useCallback((e) => {
       const text = e.target.value;
       handleInputChange('bio', text);
+    }, []);
 
-      // Debounce validation
-      const timeoutId = setTimeout(() => validateBio(text), 500);
+    // Debounce bio validation
+    useEffect(() => {
+      const timeoutId = setTimeout(() => {
+        if (formData.bio) {
+          validateBio(formData.bio);
+        }
+      }, 500);
+
       return () => clearTimeout(timeoutId);
-    }, [handleInputChange, validateBio]);
+    }, [formData.bio, validateBio]);
 
     return (
       <div>
@@ -472,7 +492,7 @@ export default function ProfilePage() {
         </div>
       </div>
     );
-  }, [formData.bio, handleInputChange]);
+  }, [formData.bio]);
 
   if (!user) {
     return (
@@ -537,29 +557,167 @@ export default function ProfilePage() {
     }
   };
 
+  // Email change functions with proper validation
+  const validateNewEmail = async (email) => {
+    try {
+      // Use existing validation API
+      const response = await fetch('/api/user/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email })
+      });
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Email validation error:', error);
+      return { available: false, message: 'Failed to validate email' };
+    }
+  };
+
+  const handleSendEmailOtp = async () => {
+    if (!newEmail || !newEmail.trim()) {
+      toast.error('Please enter a new email address');
+      return;
+    }
+
+    if (newEmail.toLowerCase() === user.email.toLowerCase()) {
+      toast.error('New email cannot be the same as current email');
+      return;
+    }
+
+    // First validate the email using existing API
+    setEmailChangeLoading(true);
+    const validation = await validateNewEmail(newEmail.trim());
+
+    if (!validation.available) {
+      toast.error(validation.message);
+      setEmailChangeLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/user/change-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          newEmail: newEmail.trim(),
+          step: 'send_otp'
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setEmailOtpSent(true);
+        setEmailOtpCountdown(300); // 5 minutes countdown
+        toast.success(result.message);
+
+        // Start countdown
+        const interval = setInterval(() => {
+          setEmailOtpCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(interval);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      console.error('Email OTP send error:', error);
+      toast.error('Failed to send verification code');
+    } finally {
+      setEmailChangeLoading(false);
+    }
+  };
+
+  const handleVerifyEmailChange = async () => {
+    if (!emailOtp || emailOtp.length !== 6) {
+      toast.error('Please enter the 6-digit verification code');
+      return;
+    }
+
+    setEmailChangeLoading(true);
+    try {
+      const response = await fetch('/api/user/change-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          newEmail: newEmail.trim(),
+          otp: emailOtp,
+          step: 'verify_and_change'
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Update user data
+        updateUser({
+          ...user,
+          email: newEmail.trim(),
+          emailVerified: true
+        });
+
+        // Reset states
+        setShowEmailChange(false);
+        setNewEmail('');
+        setEmailOtp('');
+        setEmailOtpSent(false);
+        setEmailOtpCountdown(0);
+
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      console.error('Email change verification error:', error);
+      toast.error('Failed to verify email change');
+    } finally {
+      setEmailChangeLoading(false);
+    }
+  };
+
+  const handleCancelEmailChange = () => {
+    setShowEmailChange(false);
+    setNewEmail('');
+    setEmailOtp('');
+    setEmailOtpSent(false);
+    setEmailOtpCountdown(0);
+  };
+
   return (
-    <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto min-h-screen">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-fixly-text mb-2">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-bold text-fixly-text mb-2">
           My Profile
         </h1>
-        <p className="text-fixly-text-light">
+        <p className="text-sm md:text-base text-fixly-text-light">
           Manage your profile information and preferences
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
         {/* Left Column - Profile Photo & Basic Info */}
-        <div className="space-y-6">
+        <div className="space-y-4 md:space-y-6">
           {/* Profile Photo */}
           <ProfileSection title="Profile Photo">
             <div className="text-center">
               <div className="relative inline-block">
-                <img
-                  src={user.profilePhoto || '/default-avatar.png'}
-                  alt={user.name}
-                  className="h-24 w-24 rounded-full object-cover mx-auto"
+                <SmartAvatar
+                  user={user}
+                  size="3xl"
+                  className="mx-auto"
                 />
                 <label
                   htmlFor="photo-upload"
@@ -663,7 +821,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Right Column - Detailed Information */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Basic Information */}
           <ProfileSection title="Basic Information" editable={true}>
             {editing ? (
@@ -681,17 +839,25 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center">
-                  <Mail className="h-4 w-4 text-fixly-accent mr-3" />
-                  <div className="flex items-center gap-2">
-                    <span className="text-fixly-text">{user.email}</span>
-                    {user.emailVerified && (
-                      <div className="flex items-center">
-                        <CheckCircle className="h-4 w-4 text-fixly-success mr-1" />
-                        <span className="text-xs text-fixly-success font-medium">Verified</span>
-                      </div>
-                    )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Mail className="h-4 w-4 text-fixly-accent mr-3" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-fixly-text">{user.email}</span>
+                      {user.emailVerified && (
+                        <div className="flex items-center">
+                          <CheckCircle className="h-4 w-4 text-fixly-success mr-1" />
+                          <span className="text-xs text-fixly-success font-medium">Verified</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => setShowEmailChange(true)}
+                    className="text-fixly-accent hover:text-fixly-accent-dark text-sm font-medium"
+                  >
+                    Change
+                  </button>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -786,17 +952,76 @@ export default function ProfilePage() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <MapPin className="h-4 w-4 text-fixly-accent mr-3" />
-                  <span className="text-fixly-text">
-                    {user.location ? `${user.location.name || user.location.city}, ${user.location.state}` : 'Not specified'}
-                  </span>
-                </div>
-                {user.location && (
-                  <span className="text-xs text-fixly-text-muted">
-                    Accurate to {user.location.accuracy ? `${Math.round(user.location.accuracy)}m` : '~1km'}
-                  </span>
+              <div className="space-y-3">
+                {user.location && (user.location.city || user.location.homeAddress?.formattedAddress) ? (
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start">
+                      <MapPin className="h-4 w-4 text-fixly-accent mr-3 mt-1" />
+                      <div>
+                        <div className="text-fixly-text font-medium">
+                          {user.location.city || user.location.homeAddress?.district || 'Current Location'}
+                        </div>
+                        {user.location.state && (
+                          <div className="text-sm text-fixly-text-muted">
+                            {user.location.state}
+                          </div>
+                        )}
+                        {user.location.homeAddress?.formattedAddress && (
+                          <div className="text-xs text-fixly-text-muted mt-1 max-w-xs">
+                            {user.location.homeAddress.formattedAddress}
+                          </div>
+                        )}
+                        {user.location.homeAddress?.coordinates && (
+                          <div className="text-xs text-fixly-accent mt-1 flex items-center">
+                            <Target className="h-3 w-3 mr-1" />
+                            GPS: {user.location.homeAddress.coordinates.latitude?.toFixed(4)}, {user.location.homeAddress.coordinates.longitude?.toFixed(4)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {user.location.accuracy && (
+                        <span className="text-xs text-fixly-text-muted bg-fixly-bg rounded px-2 py-1">
+                          ±{Math.round(user.location.accuracy)}m
+                        </span>
+                      )}
+                      {user.location.timestamp && (
+                        <div className="text-xs text-fixly-text-muted mt-1">
+                          Updated {new Date(user.location.timestamp).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 border-2 border-dashed border-fixly-border rounded-lg">
+                    <MapPin className="h-8 w-8 text-fixly-text-muted mx-auto mb-2" />
+                    <p className="text-fixly-text-muted mb-3">No location set</p>
+                    <p className="text-xs text-fixly-text-muted">
+                      Add your location to help hirers find you nearby
+                    </p>
+                  </div>
+                )}
+
+                {/* Location History Preview */}
+                {user.locationHistory && user.locationHistory.length > 0 && (
+                  <div className="border-t border-fixly-border pt-3 mt-3">
+                    <div className="text-xs font-medium text-fixly-text-muted mb-2 flex items-center">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Recent Locations
+                    </div>
+                    <div className="space-y-1 max-h-20 overflow-y-auto">
+                      {user.locationHistory.slice(0, 3).map((loc, index) => (
+                        <div key={index} className="text-xs text-fixly-text-muted flex items-center justify-between py-1">
+                          <span className="truncate">
+                            {loc.city || loc.address || 'Unknown location'}
+                          </span>
+                          <span className="text-xs ml-2">
+                            {new Date(loc.timestamp).toLocaleDateString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -1217,7 +1442,7 @@ export default function ProfilePage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-fixly-card rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+            className="bg-fixly-card rounded-xl max-w-2xl w-full mx-4 p-4 md:p-6 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -1346,6 +1571,136 @@ export default function ProfilePage() {
               onVerificationComplete={handlePhoneVerificationComplete}
               onError={handlePhoneVerificationError}
             />
+          </motion.div>
+        </div>
+      )}
+
+      {/* Email Change Modal */}
+      {showEmailChange && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-fixly-card rounded-2xl p-6 w-full max-w-md"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-fixly-text">Change Email Address</h2>
+                <p className="text-sm text-fixly-text-muted">
+                  Enter your new email address to receive a verification code
+                </p>
+              </div>
+              <button
+                onClick={handleCancelEmailChange}
+                className="text-fixly-text-muted hover:text-fixly-text"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {!emailOtpSent ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Current Email
+                  </label>
+                  <div className="flex items-center p-3 bg-fixly-bg-secondary rounded-lg">
+                    <Mail className="h-4 w-4 text-fixly-text-muted mr-2" />
+                    <span className="text-fixly-text">{user.email}</span>
+                    <CheckCircle className="h-4 w-4 text-fixly-success ml-2" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    New Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-fixly-text-muted" />
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="Enter new email address"
+                      className="w-full pl-10 pr-4 py-3 bg-fixly-bg border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSendEmailOtp}
+                  disabled={emailChangeLoading || !newEmail.trim()}
+                  className="w-full btn-primary disabled:opacity-50"
+                >
+                  {emailChangeLoading ? (
+                    <Loader className="animate-spin h-4 w-4 mr-2" />
+                  ) : (
+                    <Mail className="h-4 w-4 mr-2" />
+                  )}
+                  Send Verification Code
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="text-center p-4 bg-fixly-accent/10 rounded-lg">
+                  <Mail className="h-8 w-8 text-fixly-accent mx-auto mb-2" />
+                  <p className="text-fixly-text font-medium">Verification code sent!</p>
+                  <p className="text-sm text-fixly-text-muted">
+                    We've sent a 6-digit code to <strong>{newEmail}</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-fixly-text mb-2">
+                    Verification Code
+                  </label>
+                  <input
+                    type="text"
+                    value={emailOtp}
+                    onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit code"
+                    className="w-full px-4 py-3 bg-fixly-bg border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 text-center tracking-widest font-mono text-lg"
+                    maxLength={6}
+                  />
+                  {emailOtpCountdown > 0 && (
+                    <p className="text-sm text-fixly-text-muted mt-2 text-center">
+                      Code expires in {Math.floor(emailOtpCountdown / 60)}:{(emailOtpCountdown % 60).toString().padStart(2, '0')}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCancelEmailChange}
+                    className="flex-1 btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleVerifyEmailChange}
+                    disabled={emailChangeLoading || emailOtp.length !== 6}
+                    className="flex-1 btn-primary disabled:opacity-50"
+                  >
+                    {emailChangeLoading ? (
+                      <Loader className="animate-spin h-4 w-4 mr-2" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Verify & Change
+                  </button>
+                </div>
+
+                {emailOtpCountdown === 0 && (
+                  <button
+                    onClick={handleSendEmailOtp}
+                    disabled={emailChangeLoading}
+                    className="w-full btn-outline text-sm"
+                  >
+                    Resend Code
+                  </button>
+                )}
+              </div>
+            )}
           </motion.div>
         </div>
       )}

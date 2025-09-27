@@ -24,7 +24,7 @@ const createMockSession = (role, additionalData = {}) => ({
     ...additionalData
   },
   accessToken: `mock-token-${role}`,
-  expires: '2024-12-31'
+  expires: '2025-12-31'
 });
 
 // Mock components that require authentication

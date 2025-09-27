@@ -22,7 +22,7 @@ When a fixer gets assigned, the system automatically sends this comprehensive me
 **📋 JOB DETAILS:**
 • **Title:** Fix Kitchen Sink Plumbing
 • **Budget:** ₹3,000 (materials included)
-• **Deadline:** December 30, 2024
+• **Deadline:** December 30, 2025
 • **Urgency:** Urgent
 
 **📍 LOCATION:**

@@ -7,8 +7,11 @@ import { sendPasswordResetEmail } from '@/lib/email';
 
 export async function POST(request) {
   try {
-    // Strict rate limiting for password reset requests
-    const rateLimitResult = await rateLimit(request, 'password_reset', 3, 15 * 60 * 1000); // 3 attempts per 15 minutes
+    // Strict rate limiting for password reset requests using Redis for consistency
+    const forwarded = request.headers.get('x-forwarded-for');
+    const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
+
+    const rateLimitResult = await rateLimit(request, `forgot_password_${ip}`, 3, 15 * 60 * 1000); // 3 attempts per 15 minutes
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { 

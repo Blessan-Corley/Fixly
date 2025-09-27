@@ -1,7 +1,7 @@
 // app/api/jobs/post/route.js - Enhanced with all improvements
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { rateLimit } from '@/utils/rateLimiting';
 import cacheMiddleware, { invalidateUserCache } from '@/lib/redisCache';
 import { contentValidationMiddleware, FieldValidators } from '@/lib/contentValidation';
@@ -9,6 +9,7 @@ import inputSanitizationMiddleware, { CustomSanitizers, schemaSanitize } from '@
 import connectDB from '@/lib/db';
 import Job from '@/models/Job';
 import User from '@/models/User';
+import JobDraft from '@/models/JobDraft';
 import { getServerAbly, CHANNELS, EVENTS } from '@/lib/ably';
 
 export const dynamic = 'force-dynamic';
@@ -113,14 +114,37 @@ export async function POST(request) {
     } = body;
 
     // Enhanced validation with content filtering
-    if (!title || !description || !deadline || !location || !attachments) {
+    if (!title || !description || !location || !attachments) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Missing required fields: title, description, deadline, location, and at least 1 photo are required'
+          message: 'Missing required fields: title, description, location, and at least 1 photo are required'
         },
         { status: 400 }
       );
+    }
+
+    // Validate deadline/scheduledDate based on urgency
+    if (urgency === 'scheduled') {
+      if (!scheduledDate) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Scheduled date is required for scheduled jobs'
+          },
+          { status: 400 }
+        );
+      }
+    } else {
+      if (!deadline) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Deadline is required for flexible and ASAP jobs'
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Validate title length (30 characters max)
@@ -158,28 +182,22 @@ export async function POST(request) {
       );
     }
 
-    // Content validation for title and description
-    const titleValidation = await ContentValidator.validateContent(title, 'job_posting', session.user.id);
-    if (!titleValidation.isValid) {
-      const violations = titleValidation.violations.map(v => v.type).join(', ');
+    // Basic content validation
+    if (title.trim().length < 10) {
       return NextResponse.json(
         {
           success: false,
-          message: `Job title contains inappropriate content: ${violations}`,
-          violations: titleValidation.violations
+          message: 'Job title must be at least 10 characters'
         },
         { status: 400 }
       );
     }
 
-    const descValidation = await ContentValidator.validateContent(description, 'job_posting', session.user.id);
-    if (!descValidation.isValid) {
-      const violations = descValidation.violations.map(v => v.type).join(', ');
+    if (description.trim().length < 30) {
       return NextResponse.json(
         {
           success: false,
-          message: `Job description contains inappropriate content: ${violations}`,
-          violations: descValidation.violations
+          message: 'Job description must be at least 30 characters'
         },
         { status: 400 }
       );
@@ -218,7 +236,7 @@ export async function POST(request) {
         lat: location?.lat || null,
         lng: location?.lng || null
       },
-      deadline: new Date(deadline),
+      deadline: deadline ? new Date(deadline) : (scheduledDate ? new Date(scheduledDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
       urgency: urgency || 'flexible',
       createdBy: user._id,
       status: 'open',

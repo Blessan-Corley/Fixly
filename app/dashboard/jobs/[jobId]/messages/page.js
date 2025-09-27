@@ -15,6 +15,7 @@ import { useApp } from '../../../../providers';
 import { toast } from 'sonner';
 import { toastMessages } from '../../../../../utils/toast';
 import { useMessaging } from '../../../../../hooks/useMessaging';
+import SmartAvatar from '../../../../../components/ui/SmartAvatar';
 
 export default function MessagesPage({ params }) {
   const { jobId } = params;
@@ -311,17 +312,11 @@ export default function MessagesPage({ params }) {
             {otherUser && (
               <div className="flex items-center gap-2 text-sm">
                 <div className="flex items-center gap-2">
-                  {otherUser.profilePhoto || otherUser.picture ? (
-                    <img
-                      src={otherUser.profilePhoto || otherUser.picture}
-                      alt={otherUser.name}
-                      className="h-8 w-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="h-8 w-8 rounded-full bg-fixly-accent flex items-center justify-center">
-                      <User className="h-4 w-4 text-fixly-text" />
-                    </div>
-                  )}
+                  <SmartAvatar
+                    user={otherUser}
+                    size="sm"
+                    className="h-8 w-8"
+                  />
                   <div>
                     <p className="font-medium text-fixly-text">{otherUser.name}</p>
                     <div className="flex items-center gap-1 text-xs">

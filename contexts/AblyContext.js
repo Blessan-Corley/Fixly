@@ -14,6 +14,7 @@ const AblyContext = createContext();
 export function AblyProvider({ children }) {
   const { data: session } = useSession();
   const [notifications, setNotifications] = useState([]);
+  const [connectionError, setConnectionError] = useState(null);
   const cleanupRef = useRef([]);
 
   // Use the enhanced connection hook
@@ -137,12 +138,20 @@ export function AblyProvider({ children }) {
       return null;
     }
 
+    // Validate channel name for null/undefined values
+    if (!channelName || channelName.includes('null') || channelName.includes('undefined')) {
+      console.warn(`⚠️ Invalid channel name: ${channelName} - skipping subscription`);
+      return null;
+    }
+
     try {
       const unsubscribe = await channelManager.subscribeToChannel(channelName, eventName, callback);
       cleanupRef.current.push(unsubscribe);
+      setConnectionError(null); // Clear any previous errors on successful subscription
       return unsubscribe;
     } catch (error) {
       console.error('Failed to subscribe to channel:', error);
+      setConnectionError(`Failed to subscribe to ${channelName}: ${error.message}`);
       return null;
     }
   };
@@ -207,6 +216,7 @@ export function AblyProvider({ children }) {
     isConnected,
     reconnect,
     healthCheck,
+    connectionError,
 
     // Notifications
     notifications,

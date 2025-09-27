@@ -18,6 +18,7 @@ import {
   Signal
 } from 'lucide-react';
 import { useApp } from '../../app/providers';
+import SmartAvatar from './SmartAvatar';
 import { useRealTimeNotifications } from '../../hooks/useRealTimeNotifications';
 
 // Enhanced mobile navigation with native app-like behavior
@@ -217,17 +218,11 @@ export default function MobileNav({
                 onClick={() => handleNavigation('/dashboard/profile')}
                 className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white dark:hover:bg-gray-700 transition-colors"
               >
-                <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                  {user?.profilePhoto ? (
-                    <img 
-                      src={user.profilePhoto} 
-                      alt={user.name}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <User className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                  )}
-                </div>
+                <SmartAvatar
+                  user={user}
+                  size="default"
+                  className="w-10 h-10"
+                />
                 <div className="flex-1 text-left">
                   <p className="font-medium text-gray-900 dark:text-white text-sm">
                     {user?.name || 'User Profile'}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn, getSession, signOut } from 'next-auth/react';
+import { signIn, getSession, signOut, useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Phone,
@@ -150,6 +150,7 @@ const validatePassword = (password) => {
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: sessionData, update } = useSession(); // Get session and update function
 
   const [urlRole, setUrlRole] = useState(''); // NO DEFAULT ROLE
   const method = searchParams.get('method');
@@ -823,7 +824,7 @@ export default function SignupPage() {
     try {
       console.log('📝 Submitting signup data - Method:', authMethod);
 
-      const formattedPhone = formData.phone ? `+91${formData.phone.replace(/[^\d]/g, '')}` : '';
+      const formattedPhone = formData.phone || '';
 
       // Enhanced location data structure for MongoDB
       const locationData = formData.address ? {
@@ -885,7 +886,8 @@ export default function SignupPage() {
             role: formData.role,
             phone: formattedPhone,
             username: formData.username.trim().toLowerCase(),
-            location: locationData
+            location: locationData,
+            termsAccepted: formData.termsAccepted // ✅ Include terms acceptance for validation
           };
           if (formData.role === 'fixer') {
             googleCompletionData.skills = formData.skills.map(skill =>
@@ -904,10 +906,20 @@ export default function SignupPage() {
           if (response.ok && data.success) {
             toast.success('Profile completed successfully! 🎉');
 
-            // Force session refresh for Google users
+            // Force session refresh for Google users - trigger JWT token update
             console.log('🔄 Refreshing session after Google completion');
-            const updatedSession = await getSession();
-            console.log('🔍 Updated session:', updatedSession);
+            try {
+              // Use NextAuth update to trigger JWT refresh from database
+              await update({
+                sessionVersion: Date.now(), // Force token refresh
+                isRegistered: true,
+                role: formData.role,
+                profileCompleted: true
+              });
+              console.log('✅ Session updated successfully');
+            } catch (error) {
+              console.warn('⚠️ Session update failed, continuing anyway:', error);
+            }
 
             // Clear any cached session data
             if (typeof window !== 'undefined') {
@@ -915,10 +927,10 @@ export default function SignupPage() {
               sessionStorage.removeItem('incompleteSignup');
             }
 
-            // Navigate to dashboard
+            // Navigate to dashboard with longer delay to allow session update
             setTimeout(() => {
               router.replace('/dashboard');
-            }, 500);
+            }, 1000);
           } else {
             console.error('❌ Google completion failed:', data);
             toast.error(data.message || 'Failed to complete profile. Please try again.');

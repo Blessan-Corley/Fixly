@@ -10,23 +10,35 @@ export default withAuth(
 
     console.log('🔒 Middleware:', { pathname, hasToken: !!token, userRole: token?.role, isRegistered: token?.isRegistered });
 
-    // ✅ CRITICAL: Check if user has incomplete profile
-    if (token && !token.isRegistered && pathname.startsWith('/dashboard')) {
-      console.log('🚫 Incomplete profile detected, redirecting to signup');
-      const redirectUrl = new URL('/auth/signup', req.url);
+    // ✅ CRITICAL: Enhanced signup completion validation
+    if (token && pathname.startsWith('/dashboard')) {
+      // Check if user has incomplete profile - must have role, username (not temp), and complete profile
+      const hasValidUsername = token.username && !token.username.startsWith('tmp_') && !token.username.startsWith('temp_');
+      const hasRequiredFields = token.role && hasValidUsername && token.isRegistered;
 
-      // Add method parameter for Google users
-      if (token.authMethod === 'google') {
-        redirectUrl.searchParams.set('method', 'google');
+      if (!hasRequiredFields) {
+        console.log('🚫 Incomplete signup detected, redirecting to signup completion');
+        console.log('Missing fields:', {
+          hasRole: !!token.role,
+          hasValidUsername,
+          isRegistered: token.isRegistered,
+          currentUsername: token.username
+        });
+
+        const redirectUrl = new URL('/auth/signup', req.url);
+
+        // Add method parameter for Google users
+        if (token.authMethod === 'google') {
+          redirectUrl.searchParams.set('method', 'google');
+        }
+
+        // Don't preserve role for Google users - they need to choose it again
+        if (token.role && token.authMethod !== 'google') {
+          redirectUrl.searchParams.set('role', token.role);
+        }
+
+        return NextResponse.redirect(redirectUrl);
       }
-
-      // Don't preserve role for Google users - they need to choose it
-      // Only preserve role if it was explicitly set by user during signup
-      if (token.role && token.authMethod !== 'google') {
-        redirectUrl.searchParams.set('role', token.role);
-      }
-
-      return NextResponse.redirect(redirectUrl);
     }
 
     // ✅ NEW: Handle new Google users without ID

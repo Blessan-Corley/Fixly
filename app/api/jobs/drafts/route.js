@@ -145,7 +145,10 @@ export async function POST(request) {
         deadline: formData.deadline ? new Date(formData.deadline) : null,
         scheduledDate: formData.scheduledDate ? new Date(formData.scheduledDate) : null,
         urgency: formData.urgency || 'flexible',
-        attachments: formData.attachments || [],
+        attachments: (formData.attachments || []).map(attachment => ({
+          ...attachment,
+          filename: attachment.filename || attachment.name || 'unknown'
+        })),
         currentStep: currentStep,
         completedSteps: completedSteps.map(step => ({
           step,
@@ -166,7 +169,10 @@ export async function POST(request) {
         deadline: formData.deadline ? new Date(formData.deadline) : null,
         scheduledDate: formData.scheduledDate ? new Date(formData.scheduledDate) : null,
         urgency: formData.urgency || 'flexible',
-        attachments: formData.attachments || [],
+        attachments: (formData.attachments || []).map(attachment => ({
+          ...attachment,
+          filename: attachment.filename || attachment.name || 'unknown'
+        })),
         currentStep: currentStep || 1,
         completedSteps: completedSteps.map(step => ({
           step,
@@ -186,7 +192,10 @@ export async function POST(request) {
       deadline: formData.deadline,
       scheduledDate: formData.scheduledDate,
       urgency: formData.urgency,
-      attachments: formData.attachments
+      attachments: (formData.attachments || []).map(attachment => ({
+        ...attachment,
+        filename: attachment.filename || attachment.name || 'unknown'
+      }))
     };
 
     if (saveType === 'manual') {
