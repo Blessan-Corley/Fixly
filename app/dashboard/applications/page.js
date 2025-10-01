@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -33,7 +33,27 @@ export default function ApplicationsPage() {
 function ApplicationsContent() {
   const { user } = useApp();
   const router = useRouter();
-  
+
+  // AbortController refs
+  const fetchApplicationsAbortRef = useRef(null);
+  const fetchEarningsAbortRef = useRef(null);
+  const withdrawAbortRef = useRef(null);
+
+  // Cleanup: abort all pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchApplicationsAbortRef.current) {
+        fetchApplicationsAbortRef.current.abort();
+      }
+      if (fetchEarningsAbortRef.current) {
+        fetchEarningsAbortRef.current.abort();
+      }
+      if (withdrawAbortRef.current) {
+        withdrawAbortRef.current.abort();
+      }
+    };
+  }, []);
+
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
@@ -57,6 +77,14 @@ function ApplicationsContent() {
   }, [activeTab]);
 
   const fetchApplications = async () => {
+    // Cancel previous request
+    if (fetchApplicationsAbortRef.current) {
+      fetchApplicationsAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    fetchApplicationsAbortRef.current = abortController;
+
     try {
       setLoading(true);
       const params = new URLSearchParams({
@@ -64,7 +92,14 @@ function ApplicationsContent() {
         search: filters.search
       });
 
-      const response = await fetch(`/api/fixer/applications?${params}`);
+      const response = await fetch(`/api/fixer/applications?${params}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       const data = await response.json();
 
       if (response.ok) {
@@ -73,6 +108,10 @@ function ApplicationsContent() {
         toast.error(data.message || 'Failed to fetch applications');
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching applications:', error);
       toast.error('Failed to fetch applications');
     } finally {
@@ -81,13 +120,32 @@ function ApplicationsContent() {
   };
 
   const fetchEarnings = async () => {
+    // Cancel previous request
+    if (fetchEarningsAbortRef.current) {
+      fetchEarningsAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    fetchEarningsAbortRef.current = abortController;
+
     try {
-      const response = await fetch('/api/user/earnings');
+      const response = await fetch('/api/user/earnings', {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setEarnings(data.earnings);
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching earnings:', error);
     }
   };
@@ -113,10 +171,23 @@ function ApplicationsContent() {
   };
 
   const withdrawApplication = async (jobId) => {
+    // Cancel previous request
+    if (withdrawAbortRef.current) {
+      withdrawAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    withdrawAbortRef.current = abortController;
+
     try {
       const response = await fetch(`/api/jobs/${jobId}/applications/withdraw`, {
-        method: 'POST'
+        method: 'POST',
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         toast.success('Application withdrawn successfully');
@@ -126,6 +197,10 @@ function ApplicationsContent() {
         toast.error(data.message || 'Failed to withdraw application');
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error withdrawing application:', error);
       toast.error('Failed to withdraw application');
     }

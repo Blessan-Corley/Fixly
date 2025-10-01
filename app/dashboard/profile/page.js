@@ -1,7 +1,7 @@
 // app/dashboard/profile/page.js
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -39,16 +39,40 @@ import SmartAvatar from '../../../components/ui/SmartAvatar';
 
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
-  const { 
-    loading: pageLoading, 
-    showRefreshMessage, 
-    startLoading, 
-    stopLoading 
+  const {
+    loading: pageLoading,
+    showRefreshMessage,
+    startLoading,
+    stopLoading
   } = usePageLoading('profile');
+
+  // AbortController refs for all fetch requests
+  const sendOtpAbortRef = useRef(null);
+  const changePasswordAbortRef = useRef(null);
+  const uploadPhotoAbortRef = useRef(null);
+  const updateProfileAbortRef = useRef(null);
+  const updatePhoneAbortRef = useRef(null);
+  const checkEmailAbortRef = useRef(null);
+  const verifyEmailOtpAbortRef = useRef(null);
+  const changeEmailAbortRef = useRef(null);
+
+  // Cleanup: abort all pending requests on unmount
+  useEffect(() => {
+    return () => {
+      [sendOtpAbortRef, changePasswordAbortRef, uploadPhotoAbortRef, updateProfileAbortRef,
+       updatePhoneAbortRef, checkEmailAbortRef, verifyEmailOtpAbortRef, changeEmailAbortRef
+      ].forEach(ref => {
+        if (ref.current) {
+          ref.current.abort();
+        }
+      });
+    };
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
-  
+
   // Form data
   const [formData, setFormData] = useState({
     name: '',

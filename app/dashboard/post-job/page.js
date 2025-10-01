@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -83,6 +83,7 @@ function PostJobContent() {
     },
     deadline: '',
     urgency: 'flexible',
+    type: 'one-time',
     scheduledDate: '',
     attachments: [] // Cloudinary media with isImage/isVideo flags
   });
@@ -121,6 +122,35 @@ function PostJobContent() {
   const [fieldValidations, setFieldValidations] = useState({});
   const [locationDetected, setLocationDetected] = useState(false);
 
+  // AbortController refs for all fetch operations
+  const subscriptionAbortRef = useRef(null);
+  const draftsListAbortRef = useRef(null);
+  const draftSaveAbortRef = useRef(null);
+  const draftLoadAbortRef = useRef(null);
+  const draftDeleteAbortRef = useRef(null);
+  const titleValidationAbortRef = useRef(null);
+  const descriptionValidationAbortRef = useRef(null);
+  const uploadMediaAbortRef = useRef(null);
+  const deleteMediaAbortRef = useRef(null);
+  const finalValidationAbortRef = useRef(null);
+  const postJobAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (subscriptionAbortRef.current) subscriptionAbortRef.current.abort();
+      if (draftsListAbortRef.current) draftsListAbortRef.current.abort();
+      if (draftSaveAbortRef.current) draftSaveAbortRef.current.abort();
+      if (draftLoadAbortRef.current) draftLoadAbortRef.current.abort();
+      if (draftDeleteAbortRef.current) draftDeleteAbortRef.current.abort();
+      if (titleValidationAbortRef.current) titleValidationAbortRef.current.abort();
+      if (descriptionValidationAbortRef.current) descriptionValidationAbortRef.current.abort();
+      if (uploadMediaAbortRef.current) uploadMediaAbortRef.current.abort();
+      if (deleteMediaAbortRef.current) deleteMediaAbortRef.current.abort();
+      if (finalValidationAbortRef.current) finalValidationAbortRef.current.abort();
+      if (postJobAbortRef.current) postJobAbortRef.current.abort();
+    };
+  }, []);
 
   // Fetch subscription info
   useEffect(() => {
@@ -130,12 +160,29 @@ function PostJobContent() {
 
   const fetchSubscriptionInfo = async () => {
     try {
-      const response = await fetch('/api/subscription/hirer');
+      // Cancel previous request
+      if (subscriptionAbortRef.current) {
+        subscriptionAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      subscriptionAbortRef.current = abortController;
+
+      const response = await fetch('/api/subscription/hirer', {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setSubscriptionInfo(data);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching subscription info:', error);
     } finally {
       setLoadingSubscription(false);
@@ -146,12 +193,29 @@ function PostJobContent() {
   const fetchUserDrafts = async () => {
     setLoadingDrafts(true);
     try {
-      const response = await fetch('/api/jobs/drafts?limit=10');
+      // Cancel previous request
+      if (draftsListAbortRef.current) {
+        draftsListAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      draftsListAbortRef.current = abortController;
+
+      const response = await fetch('/api/jobs/drafts?limit=10', {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setAvailableDrafts(data.drafts || []);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching drafts:', error);
       toast.error('Failed to load drafts');
     } finally {
@@ -164,6 +228,13 @@ function PostJobContent() {
 
     setDraftStatus('saving');
     try {
+      // Cancel previous request
+      if (draftSaveAbortRef.current) {
+        draftSaveAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      draftSaveAbortRef.current = abortController;
+
       const response = await fetch('/api/jobs/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,7 +245,12 @@ function PostJobContent() {
           saveType,
           completedSteps: []
         }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();
@@ -192,6 +268,9 @@ function PostJobContent() {
         throw new Error('Failed to save draft');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error saving draft:', error);
       setDraftStatus('error');
       if (saveType === 'manual') {
@@ -203,7 +282,20 @@ function PostJobContent() {
   const loadDraft = async (draftId) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/jobs/drafts/${draftId}`);
+      // Cancel previous request
+      if (draftLoadAbortRef.current) {
+        draftLoadAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      draftLoadAbortRef.current = abortController;
+
+      const response = await fetch(`/api/jobs/drafts/${draftId}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         const draft = data.draft;
@@ -213,6 +305,7 @@ function PostJobContent() {
           description: draft.description || '',
           skillsRequired: draft.skillsRequired || [],
           budget: draft.budget || { type: 'negotiable', amount: '', materialsIncluded: false },
+          type: draft.type || 'one-time',
           location: draft.location || {
             address: '', city: '', state: '', pincode: '', lat: null, lng: null
           },
@@ -234,6 +327,9 @@ function PostJobContent() {
         throw new Error('Failed to load draft');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error loading draft:', error);
       toast.error('Failed to load draft');
     } finally {
@@ -250,9 +346,21 @@ function PostJobContent() {
     if (!draftToDelete) return;
 
     try {
+      // Cancel previous request
+      if (draftDeleteAbortRef.current) {
+        draftDeleteAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      draftDeleteAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/drafts?draftId=${draftToDelete._id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         setAvailableDrafts(prev => prev.filter(draft => draft._id !== draftToDelete._id));
@@ -266,6 +374,9 @@ function PostJobContent() {
         throw new Error('Failed to delete draft');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error deleting draft:', error);
       toast.error('Failed to delete draft');
     } finally {
@@ -345,6 +456,13 @@ function PostJobContent() {
 
       // Silent background validation - no loading indicators
       try {
+        // Cancel previous validation request
+        if (titleValidationAbortRef.current) {
+          titleValidationAbortRef.current.abort();
+        }
+        const abortController = new AbortController();
+        titleValidationAbortRef.current = abortController;
+
         const contentValidation = await fetch('/api/validate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -353,7 +471,12 @@ function PostJobContent() {
             context: 'job_posting',
             userId: user?.id
           }),
+          signal: abortController.signal
         });
+
+        if (abortController.signal.aborted) {
+          return;
+        }
 
         if (contentValidation.ok) {
           const result = await contentValidation.json();
@@ -383,6 +506,9 @@ function PostJobContent() {
           }
         }
       } catch (error) {
+        if (error.name === 'AbortError') {
+          return;
+        }
         console.error('Title validation error:', error);
         // Silent error handling - don't show loading state errors
       }
@@ -409,6 +535,13 @@ function PostJobContent() {
 
       // Silent background validation - no loading indicators
       try {
+        // Cancel previous validation request
+        if (descriptionValidationAbortRef.current) {
+          descriptionValidationAbortRef.current.abort();
+        }
+        const abortController = new AbortController();
+        descriptionValidationAbortRef.current = abortController;
+
         const contentValidation = await fetch('/api/validate-content', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -417,7 +550,12 @@ function PostJobContent() {
             context: 'job_posting',
             userId: user?.id
           }),
+          signal: abortController.signal
         });
+
+        if (abortController.signal.aborted) {
+          return;
+        }
 
         if (contentValidation.ok) {
           const result = await contentValidation.json();
@@ -447,6 +585,9 @@ function PostJobContent() {
           }
         }
       } catch (error) {
+        if (error.name === 'AbortError') {
+          return;
+        }
         console.error('Description validation error:', error);
         // Silent error handling - don't show loading state errors
       }
@@ -559,13 +700,25 @@ function PostJobContent() {
           });
         }, 200);
 
+        // Cancel previous upload request
+        if (uploadMediaAbortRef.current) {
+          uploadMediaAbortRef.current.abort();
+        }
+        const abortController = new AbortController();
+        uploadMediaAbortRef.current = abortController;
+
         // Upload to Cloudinary via API
         const uploadResponse = await fetch('/api/jobs/upload-media', {
           method: 'POST',
           body: uploadFormData,
+          signal: abortController.signal
         });
 
         clearInterval(progressInterval);
+
+        if (abortController.signal.aborted) {
+          return;
+        }
 
         if (!uploadResponse.ok) {
           const errorData = await uploadResponse.json();
@@ -599,6 +752,15 @@ function PostJobContent() {
         console.log(`✅ Uploaded: ${file.name}`);
 
       } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log(`Upload aborted: ${file.name}`);
+          setUploadProgress(prev => {
+            const newProgress = { ...prev };
+            delete newProgress[fileId];
+            return newProgress;
+          });
+          continue;
+        }
         console.error('Upload error:', error);
         toast.error(`Failed to upload ${file.name}: ${error.message}`);
         setUploadProgress(prev => {
@@ -626,9 +788,21 @@ function PostJobContent() {
     try {
       // If it's a Cloudinary upload, delete from server
       if (attachment.publicId) {
+        // Cancel previous delete request
+        if (deleteMediaAbortRef.current) {
+          deleteMediaAbortRef.current.abort();
+        }
+        const abortController = new AbortController();
+        deleteMediaAbortRef.current = abortController;
+
         const deleteResponse = await fetch(`/api/jobs/upload-media?publicId=${attachment.publicId}`, {
           method: 'DELETE',
+          signal: abortController.signal
         });
+
+        if (abortController.signal.aborted) {
+          return;
+        }
 
         if (!deleteResponse.ok) {
           const errorData = await deleteResponse.json();
@@ -650,6 +824,9 @@ function PostJobContent() {
       toast.success('File removed successfully');
 
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error removing attachment:', error);
       toast.error('Failed to remove file');
     }
@@ -952,6 +1129,13 @@ function PostJobContent() {
 
       setLoading(true);
 
+      // Cancel previous post request
+      if (postJobAbortRef.current) {
+        postJobAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      postJobAbortRef.current = abortController;
+
       // Prepare submission data with draftId if available
       const submissionData = {
         ...formData,
@@ -961,8 +1145,13 @@ function PostJobContent() {
       const response = await fetch('/api/jobs/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(submissionData)
+        body: JSON.stringify(submissionData),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       let data;
       try {
@@ -992,6 +1181,9 @@ function PostJobContent() {
         }
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error posting job:', error);
       toast.error('Failed to post job. Please check your connection and try again.');
     } finally {

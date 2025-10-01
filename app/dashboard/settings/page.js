@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   User,
@@ -44,6 +44,26 @@ export default function SettingsPage() {
 function SettingsContent() {
   const { user } = useApp();
   const { theme, setLightTheme, setDarkTheme, setSystemTheme, isDark, isLight, isSystem } = useTheme();
+
+  // AbortController refs
+  const checkUsernameAbortRef = useRef(null);
+  const sendOtpAbortRef = useRef(null);
+  const checkEmailAbortRef = useRef(null);
+  const verifyOtpAbortRef = useRef(null);
+  const updateSettingsAbortRef = useRef(null);
+  const verificationAbortRef = useRef(null);
+
+  // Cleanup: abort all pending requests on unmount
+  useEffect(() => {
+    return () => {
+      [checkUsernameAbortRef, sendOtpAbortRef, checkEmailAbortRef,
+       verifyOtpAbortRef, updateSettingsAbortRef, verificationAbortRef
+      ].forEach(ref => {
+        if (ref.current) ref.current.abort();
+      });
+    };
+  }, []);
+
   const [loading, setLoading] = useState(false);
   const [activeSection, setActiveSection] = useState('profile');
   const [badgeStyle, setBadgeStyle] = useState('numbers'); // 'dots' or 'numbers'

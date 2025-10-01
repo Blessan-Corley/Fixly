@@ -1,7 +1,7 @@
 // app/dashboard/admin/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Users,
@@ -76,6 +76,26 @@ function AdminPanelContent() {
   const [selectedApplication, setSelectedApplication] = useState(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
 
+  // AbortController refs
+  const statsAbortRef = useRef(null);
+  const usersAbortRef = useRef(null);
+  const jobsAbortRef = useRef(null);
+  const verificationFetchAbortRef = useRef(null);
+  const verificationUpdateAbortRef = useRef(null);
+  const userActionAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (statsAbortRef.current) statsAbortRef.current.abort();
+      if (usersAbortRef.current) usersAbortRef.current.abort();
+      if (jobsAbortRef.current) jobsAbortRef.current.abort();
+      if (verificationFetchAbortRef.current) verificationFetchAbortRef.current.abort();
+      if (verificationUpdateAbortRef.current) verificationUpdateAbortRef.current.abort();
+      if (userActionAbortRef.current) userActionAbortRef.current.abort();
+    };
+  }, []);
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
@@ -89,29 +109,74 @@ function AdminPanelContent() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
+
+      // Cancel previous stats request
+      if (statsAbortRef.current) {
+        statsAbortRef.current.abort();
+      }
+      const statsController = new AbortController();
+      statsAbortRef.current = statsController;
+
       // Fetch admin stats
-      const statsResponse = await fetch('/api/dashboard/stats?role=admin');
+      const statsResponse = await fetch('/api/dashboard/stats?role=admin', {
+        signal: statsController.signal
+      });
+
+      if (statsController.signal.aborted) {
+        return;
+      }
+
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setStats(statsData);
       }
 
+      // Cancel previous users request
+      if (usersAbortRef.current) {
+        usersAbortRef.current.abort();
+      }
+      const usersController = new AbortController();
+      usersAbortRef.current = usersController;
+
       // Fetch recent users
-      const usersResponse = await fetch('/api/admin/users?limit=10');
+      const usersResponse = await fetch('/api/admin/users?limit=10', {
+        signal: usersController.signal
+      });
+
+      if (usersController.signal.aborted) {
+        return;
+      }
+
       if (usersResponse.ok) {
         const usersData = await usersResponse.json();
         setUsers(usersData.users || []);
       }
 
+      // Cancel previous jobs request
+      if (jobsAbortRef.current) {
+        jobsAbortRef.current.abort();
+      }
+      const jobsController = new AbortController();
+      jobsAbortRef.current = jobsController;
+
       // Fetch recent jobs
-      const jobsResponse = await fetch('/api/admin/jobs?limit=10');
+      const jobsResponse = await fetch('/api/admin/jobs?limit=10', {
+        signal: jobsController.signal
+      });
+
+      if (jobsController.signal.aborted) {
+        return;
+      }
+
       if (jobsResponse.ok) {
         const jobsData = await jobsResponse.json();
         setRecentJobs(jobsData.jobs || []);
       }
 
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching admin data:', error);
       toast.error('Failed to fetch dashboard data');
     } finally {
@@ -121,12 +186,29 @@ function AdminPanelContent() {
 
   const fetchVerificationData = async () => {
     try {
-      const response = await fetch(`/api/admin/verification?status=${verificationFilter}`);
+      // Cancel previous request
+      if (verificationFetchAbortRef.current) {
+        verificationFetchAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      verificationFetchAbortRef.current = abortController;
+
+      const response = await fetch(`/api/admin/verification?status=${verificationFilter}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setVerificationApplications(data.applications || []);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching verification data:', error);
       toast.error('Failed to fetch verification applications');
     }
@@ -134,11 +216,23 @@ function AdminPanelContent() {
 
   const handleVerificationAction = async (userId, action, rejectionReason = '') => {
     try {
+      // Cancel previous request
+      if (verificationUpdateAbortRef.current) {
+        verificationUpdateAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      verificationUpdateAbortRef.current = abortController;
+
       const response = await fetch('/api/admin/verification', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, action, rejectionReason })
+        body: JSON.stringify({ userId, action, rejectionReason }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         toast.success(`Verification ${action}ed successfully`);
@@ -150,6 +244,9 @@ function AdminPanelContent() {
         toast.error(data.message || `Failed to ${action} verification`);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error(`Error ${action} verification:`, error);
       toast.error(`Failed to ${action} verification`);
     }
@@ -157,9 +254,21 @@ function AdminPanelContent() {
 
   const handleUserAction = async (userId, action) => {
     try {
+      // Cancel previous request
+      if (userActionAbortRef.current) {
+        userActionAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      userActionAbortRef.current = abortController;
+
       const response = await fetch(`/api/admin/users/${userId}/${action}`, {
-        method: 'POST'
+        method: 'POST',
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         toast.success(`User ${action} successfully`);
@@ -168,6 +277,9 @@ function AdminPanelContent() {
         toast.error(`Failed to ${action} user`);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error(`Error ${action} user:`, error);
       toast.error(`Failed to ${action} user`);
     }
@@ -388,7 +500,7 @@ function AdminPanelContent() {
                             job.status === 'completed' ? 'bg-gray-100 text-gray-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
-                            {job.status.replace('_', ' ').toUpperCase()}
+                            {job.status?.replace('_', ' ').toUpperCase() || 'UNKNOWN'}
                           </span>
                           <span className="text-xs text-fixly-text-muted">
                             {job.applicationCount || 0} applications
@@ -549,7 +661,7 @@ function AdminPanelContent() {
                             job.status === 'completed' ? 'bg-gray-100 text-gray-800' :
                             'bg-yellow-100 text-yellow-800'
                           }`}>
-                            {job.status.replace('_', ' ').toUpperCase()}
+                            {job.status?.replace('_', ' ').toUpperCase() || 'UNKNOWN'}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-sm text-fixly-text">

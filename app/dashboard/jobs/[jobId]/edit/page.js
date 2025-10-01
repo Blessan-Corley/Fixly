@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -83,6 +83,20 @@ function EditJobContent({ params }) {
   const [skillResults, setSkillResults] = useState([]);
   const [showSkillDropdown, setShowSkillDropdown] = useState(false);
 
+  // AbortController refs
+  const fetchSubscriptionAbortRef = useRef(null);
+  const fetchJobAbortRef = useRef(null);
+  const updateJobAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchSubscriptionAbortRef.current) fetchSubscriptionAbortRef.current.abort();
+      if (fetchJobAbortRef.current) fetchJobAbortRef.current.abort();
+      if (updateJobAbortRef.current) updateJobAbortRef.current.abort();
+    };
+  }, []);
+
   useEffect(() => {
     fetchJobDetails();
     fetchSubscriptionInfo();
@@ -90,12 +104,29 @@ function EditJobContent({ params }) {
 
   const fetchSubscriptionInfo = async () => {
     try {
-      const response = await fetch('/api/subscription/hirer');
+      // Cancel previous request
+      if (fetchSubscriptionAbortRef.current) {
+        fetchSubscriptionAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchSubscriptionAbortRef.current = abortController;
+
+      const response = await fetch('/api/subscription/hirer', {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setSubscriptionInfo(data);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching subscription info:', error);
     } finally {
       setLoadingSubscription(false);
@@ -128,7 +159,21 @@ function EditJobContent({ params }) {
 
   const fetchJobDetails = async () => {
     try {
-      const response = await fetch(`/api/jobs/${jobId}`);
+      // Cancel previous request
+      if (fetchJobAbortRef.current) {
+        fetchJobAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchJobAbortRef.current = abortController;
+
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       const data = await response.json();
 
       if (response.ok) {
@@ -168,6 +213,9 @@ function EditJobContent({ params }) {
         router.push('/dashboard');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching job:', error);
       toast.error('Failed to load job details');
       router.push('/dashboard');
@@ -248,14 +296,26 @@ function EditJobContent({ params }) {
 
     setSaving(true);
     try {
+      // Cancel previous request
+      if (updateJobAbortRef.current) {
+        updateJobAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      updateJobAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'update_details',
           data: formData
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -266,6 +326,9 @@ function EditJobContent({ params }) {
         toast.error(data.message || 'Failed to update job');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error updating job:', error);
       toast.error('Failed to update job');
     } finally {
