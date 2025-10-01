@@ -3,7 +3,7 @@
  * Provides Ably real-time functionality throughout the app
  */
 
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { getClientAbly, ChannelManager, CHANNELS, EVENTS } from '@/lib/ably';
 import { useSession } from 'next-auth/react';
 import { webPushService } from '@/lib/services/webPushService';
@@ -40,27 +40,54 @@ export function AblyProvider({ children }) {
       setChannelManager(newChannelManager);
 
       return () => {
-        // Cleanup all subscriptions
-        cleanupRef.current.forEach(cleanup => cleanup());
+        // Cleanup all subscriptions first (in parallel for faster cleanup)
+        const currentCleanups = [...cleanupRef.current];
         cleanupRef.current = [];
 
-        // Cleanup the current channel manager
-        newChannelManager.cleanup();
+        // Run all cleanup functions in parallel using Promise.allSettled
+        Promise.allSettled(
+          currentCleanups.map(cleanup =>
+            Promise.resolve().then(() => {
+              if (typeof cleanup === 'function') {
+                cleanup();
+              }
+            })
+          )
+        ).catch(error => {
+          console.error('❌ Error during parallel cleanup:', error);
+        });
+
+        // Cleanup the channel manager
+        if (newChannelManager) {
+          try {
+            newChannelManager.cleanup();
+          } catch (error) {
+            console.error('❌ Error during channel manager cleanup:', error);
+          }
+        }
       };
     }
-  }, [ably, session?.user?.id, connectionStatus]); // ✅ Removed channelManager from deps
+  }, [ably, session?.user?.id, connectionStatus]);
 
   // Subscribe to user notifications when logged in
   useEffect(() => {
     if (session?.user?.id && channelManager && connectionStatus === 'connected') {
+      let isSubscriptionActive = true;
+      let timeoutId;
+      let unsubscribe;
+
       const subscribeToNotifications = async () => {
+        if (!isSubscriptionActive) return;
+
         try {
           console.log(`📧 Subscribing to notifications for user: ${session.user.id}`);
 
-          const unsubscribe = await channelManager.subscribeToChannel(
+          unsubscribe = await channelManager.subscribeToChannel(
             CHANNELS.userNotifications(session.user.id),
             EVENTS.NOTIFICATION_SENT,
             (message) => {
+              if (!isSubscriptionActive) return;
+
               console.log('📢 New notification:', message.data);
               setNotifications(prev => [message.data, ...prev.slice(0, 49)]);
 
@@ -89,18 +116,32 @@ export function AblyProvider({ children }) {
             }
           );
 
-          cleanupRef.current.push(unsubscribe);
-          console.log('✅ Successfully subscribed to notifications');
+          if (isSubscriptionActive && unsubscribe) {
+            cleanupRef.current.push(unsubscribe);
+            console.log('✅ Successfully subscribed to notifications');
+          }
         } catch (error) {
           console.error('Failed to subscribe to notifications:', error);
         }
       };
 
       // Add a small delay to ensure connection is stable
-      const timeoutId = setTimeout(subscribeToNotifications, 500);
+      timeoutId = setTimeout(subscribeToNotifications, 500);
 
       return () => {
-        clearTimeout(timeoutId);
+        isSubscriptionActive = false;
+
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+
+        if (unsubscribe && typeof unsubscribe === 'function') {
+          try {
+            unsubscribe();
+          } catch (error) {
+            console.error('❌ Error unsubscribing from notifications:', error);
+          }
+        }
       };
     }
   }, [session?.user?.id, channelManager, connectionStatus]);
@@ -132,29 +173,48 @@ export function AblyProvider({ children }) {
     }
   };
 
-  const subscribeToChannel = async (channelName, eventName, callback) => {
+  const subscribeToChannel = useCallback(async (channelName, eventName, callback) => {
     if (!channelManager) {
       console.error('Channel manager not initialized');
-      return null;
+      return () => {}; // Return empty cleanup function
     }
 
     // Validate channel name for null/undefined values
-    if (!channelName || channelName.includes('null') || channelName.includes('undefined')) {
+    if (!channelName ||
+        channelName.includes('null') ||
+        channelName.includes('undefined') ||
+        channelName.includes(':null:') ||
+        channelName.includes(':undefined:') ||
+        channelName.endsWith(':null') ||
+        channelName.endsWith(':undefined')) {
       console.warn(`⚠️ Invalid channel name: ${channelName} - skipping subscription`);
-      return null;
+      return () => {}; // Return empty cleanup function
     }
+
+    let isMounted = true;
 
     try {
       const unsubscribe = await channelManager.subscribeToChannel(channelName, eventName, callback);
-      cleanupRef.current.push(unsubscribe);
+
+      // Only add cleanup if component is still mounted
+      if (isMounted && typeof unsubscribe === 'function') {
+        cleanupRef.current.push(unsubscribe);
+      }
+
       setConnectionError(null); // Clear any previous errors on successful subscription
-      return unsubscribe;
+
+      return () => {
+        isMounted = false;
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
     } catch (error) {
       console.error('Failed to subscribe to channel:', error);
       setConnectionError(`Failed to subscribe to ${channelName}: ${error.message}`);
-      return null;
+      return () => {}; // Return empty cleanup function on error
     }
-  };
+  }, [channelManager]);
 
   const enterPresence = async (channelName, userData) => {
     if (!channelManager) return false;
@@ -269,7 +329,17 @@ export function useAblyChannel(channelName, eventName, callback, dependencies = 
   }, [callback]);
 
   useEffect(() => {
-    if (!channelName || !eventName) return;
+    // Early return if channel name is invalid or null
+    if (!channelName ||
+        !eventName ||
+        channelName.includes('null') ||
+        channelName.includes('undefined') ||
+        channelName.includes(':null:') ||
+        channelName.includes(':undefined:') ||
+        channelName.endsWith(':null') ||
+        channelName.endsWith(':undefined')) {
+      return;
+    }
 
     const wrappedCallback = (message) => {
       callbackRef.current(message);
@@ -284,8 +354,12 @@ export function useAblyChannel(channelName, eventName, callback, dependencies = 
     subscribe();
 
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
+      if (unsubscribe && typeof unsubscribe === 'function') {
+        try {
+          unsubscribe();
+        } catch (error) {
+          console.warn('Error during channel cleanup:', error);
+        }
       }
     };
   }, [channelName, eventName, subscribeToChannel, ...dependencies]);

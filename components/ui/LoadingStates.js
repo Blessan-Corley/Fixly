@@ -255,13 +255,9 @@ export function ProfileLoading() {
   return <PageLoading icon={User} title="Loading Profile" subtitle="Fetching user information..." />;
 }
 
-export function JobsLoading() {
-  return <PageLoading icon={Briefcase} title="Loading Jobs" subtitle="Finding available opportunities..." />;
-}
+// Duplicate JobsLoading removed - using the one with count parameter above
 
-export function MessagesLoading() {
-  return <PageLoading icon={MessageSquare} title="Loading Messages" subtitle="Syncing your conversations..." />;
-}
+// Duplicate MessagesLoading removed - using the one with count parameter above
 
 export function SearchLoading() {
   return <PageLoading icon={Search} title="Searching..." subtitle="Finding the best matches for you..." />;
@@ -325,8 +321,6 @@ export default {
   PageLoading,
   DashboardLoading,
   ProfileLoading,
-  JobsLoading,
-  MessagesLoading,
   SearchLoading,
   ButtonLoading,
   InlineLoading
