@@ -258,7 +258,7 @@ export default function SearchPage() {
           </div>
           <div className="flex items-center">
             <Eye className="h-4 w-4 mr-1" />
-            {job.views || 0}
+            {job.views?.count || 0}
           </div>
         </div>
         <div className="text-lg font-bold text-fixly-accent">

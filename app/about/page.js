@@ -162,7 +162,7 @@ export default function AboutUsPage() {
               About <span className="text-fixly-accent">Fixly</span>
             </h1>
             <p className="text-xl text-fixly-text-light mb-8 max-w-3xl mx-auto">
-              We're on a mission to connect skilled professionals with people who need their services, 
+              We&rsquo;re on a mission to connect skilled professionals with people who need their services, 
                creating opportunities and solving problems in communities across India.
             </p>
           </motion.div>
@@ -187,11 +187,11 @@ export default function AboutUsPage() {
               </p>
               <p className="text-lg text-fixly-text-light mb-6">
                 Founded in 2025 by three friends who experienced these challenges firsthand, Fixly started as 
-                a hyperlocal solution in Coimbatore. Today, we're proud to serve over 500 cities across India, 
+                a hyperlocal solution in Coimbatore. Today, we&rsquo;re proud to serve over 500 cities across India, 
                 connecting thousands of skilled professionals with customers who need their expertise.
               </p>
               <p className="text-lg text-fixly-text-light">
-                Our platform isn't just about transactions—it's about building trust,
+                Our platform isn&rsquo;t just about transactions—it&rsquo;s about building trust,
                  creating opportunities, 
                   and strengthening communities one successful job at a time.
               </p>
@@ -211,7 +211,7 @@ export default function AboutUsPage() {
           >
             <h2 className="text-3xl md:text-4xl font-bold text-fixly-text mb-4">Meet Our Founders</h2>
             <p className="text-xl text-fixly-text-light max-w-2xl mx-auto">
-              The passionate team behind Fixly's mission to transform how services are discovered and delivered.
+              The passionate team behind Fixly&rsquo;s mission to transform how services are discovered and delivered.
             </p>
           </motion.div>
 
@@ -255,7 +255,7 @@ export default function AboutUsPage() {
                         : 'translate-y-full opacity-0'
                     }`}>
                       <blockquote className="text-sm italic mb-3">
-                        "{founder.quote}"
+                        &ldquo;{founder.quote}&rdquo;
                       </blockquote>
                       <div className="text-xs opacity-90 mb-3">
                         <strong>Expertise:</strong> {founder.expertise}
@@ -379,7 +379,7 @@ export default function AboutUsPage() {
           >
             <h2 className="text-3xl md:text-4xl font-bold text-fixly-text mb-6">Get in Touch</h2>
             <p className="text-xl text-fixly-text-light mb-8">
-              Have questions or want to learn more about Fixly? We'd love to hear from you.
+              Have questions or want to learn more about Fixly? We&rsquo;d love to hear from you.
             </p>
 
             {/* First row - 3 primary contact methods */}
@@ -410,7 +410,7 @@ export default function AboutUsPage() {
                 <MessageSquare className="h-8 w-8 text-fixly-accent mb-3" />
                 <h3 className="font-semibold text-fixly-text mb-2">WhatsApp</h3>
                 <a
-                  href="https://wa.me/919976768211?text=Hi! I'd like to know more about Fixly."
+                  href="https://wa.me/919976768211?text=Hi! I&rsquo;d like to know more about Fixly."
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-fixly-accent hover:text-fixly-accent-dark transition-colors"
