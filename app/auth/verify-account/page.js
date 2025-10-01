@@ -370,7 +370,7 @@ export default function VerifyAccountPage() {
                     onClick={() => setShowPhoneEdit(true)}
                     className="text-xs text-fixly-accent hover:text-fixly-accent-dark underline"
                   >
-                    This isn't your number?
+                    This isn&apos;t your number?
                   </button>
                 )}
               </div>

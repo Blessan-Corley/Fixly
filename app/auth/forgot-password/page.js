@@ -299,7 +299,7 @@ export default function ForgotPasswordPage() {
                 </span>
               </div>
               <p className="text-sm text-fixly-text-light">
-                We've sent a 6-digit code to <strong>{email}</strong>
+                We&rsquo;ve sent a 6-digit code to <strong>{email}</strong>
               </p>
             </div>
 

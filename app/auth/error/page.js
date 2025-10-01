@@ -163,7 +163,7 @@ export default function AuthErrorPage() {
           {/* Additional Help */}
           <div className="mt-8 pt-6 border-t border-fixly-border">
             <p className="text-fixly-text-muted text-sm mb-4">
-              Still having trouble? We're here to help!
+              Still having trouble? We&rsquo;re here to help!
             </p>
             
             <div className="flex gap-2">
