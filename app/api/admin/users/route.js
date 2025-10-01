@@ -10,10 +10,20 @@ import { redisUtils } from '../../../../lib/redis';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Escape special regex characters to prevent ReDoS attacks
+ * @param {string} string - User input string
+ * @returns {string} Escaped string safe for regex
+ */
+function escapeRegex(string) {
+  if (typeof string !== 'string') return '';
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(request) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'admin_users', 100, 60 * 1000);
+    // Apply rate limiting (stricter for admin endpoints)
+    const rateLimitResult = await rateLimit(request, 'admin_users', 50, 60 * 1000); // 50 per minute
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many requests. Please try again later.' },
@@ -42,12 +52,13 @@ export async function GET(request) {
     // Build query
     const query = {};
 
-    // Search in name, email, username
+    // Search in name, email, username (with escaped regex to prevent ReDoS)
     if (search) {
+      const sanitizedSearch = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { username: { $regex: search, $options: 'i' } }
+        { name: { $regex: sanitizedSearch, $options: 'i' } },
+        { email: { $regex: sanitizedSearch, $options: 'i' } },
+        { username: { $regex: sanitizedSearch, $options: 'i' } }
       ];
     }
 
@@ -91,7 +102,7 @@ export async function GET(request) {
     // Execute query
     const [users, total] = await Promise.all([
       User.find(query)
-        .select('-passwordHash -notifications') // Exclude sensitive data
+        .select('-passwordHash -notifications -googleId -firebaseUid -resetPasswordToken -resetPasswordExpires -verificationToken -twoFactorSecret') // Exclude all sensitive data
         .sort(sort)
         .skip(skip)
         .limit(limit)

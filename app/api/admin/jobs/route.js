@@ -9,10 +9,18 @@ import { rateLimit } from '../../../../utils/rateLimiting';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Escape special regex characters to prevent ReDoS attacks
+ */
+function escapeRegex(string) {
+  if (typeof string !== 'string') return '';
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(request) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'admin_jobs', 100, 60 * 1000);
+    // Apply rate limiting (stricter for admin endpoints)
+    const rateLimitResult = await rateLimit(request, 'admin_jobs', 50, 60 * 1000); // 50 per minute
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many requests. Please try again later.' },
@@ -41,11 +49,12 @@ export async function GET(request) {
     // Build query
     const query = {};
 
-    // Search in title and description
+    // Search in title and description (with escaped regex to prevent ReDoS)
     if (search) {
+      const sanitizedSearch = escapeRegex(search);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { title: { $regex: sanitizedSearch, $options: 'i' } },
+        { description: { $regex: sanitizedSearch, $options: 'i' } }
       ];
     }
 
