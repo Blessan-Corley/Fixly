@@ -370,7 +370,7 @@ export default function SignupPage() {
     };
 
     checkExistingUser();
-  }, [hasCheckedSession]); // Only run when flag changes or on mount
+  }, [hasCheckedSession, router, searchParams, startFreshSignup]); // Add missing dependencies
 
   // Clear incomplete signup data when user navigates away from page
   useEffect(() => {
@@ -1684,7 +1684,7 @@ export default function SignupPage() {
                   Complete Address <span className="text-red-500">*</span>
                 </label>
                 <p className="text-xs text-fixly-text-light mb-4">
-                  Provide your complete address. We'll use GPS to help auto-fill details.
+                  Provide your complete address. We&apos;ll use GPS to help auto-fill details.
                 </p>
 
                 <EnhancedLocationSelector
