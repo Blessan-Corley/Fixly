@@ -5,6 +5,7 @@ import { authOptions } from '../../../../lib/auth';
 import { redisRateLimit } from '../../../../lib/redis';
 import { v2 as cloudinary } from 'cloudinary';
 import { ContentValidator } from '../../../../lib/validations/content-validator';
+import { FileValidator } from '../../../../lib/fileValidation';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -78,25 +79,36 @@ export async function POST(request) {
       );
     }
 
-    // Validate file types
-    if (isImage) {
-      const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp'];
-      if (!allowedImageTypes.includes(file.type)) {
-        return NextResponse.json(
-          { success: false, message: 'Only JPEG, PNG, and WebP images are allowed' },
-          { status: 400 }
-        );
-      }
+    // Comprehensive file validation
+    const fileValidation = await FileValidator.validateFile(file, {
+      maxImageSize: isImage ? 5 * 1024 * 1024 : undefined, // 5MB for images
+      maxVideoSize: isVideo ? 50 * 1024 * 1024 : undefined  // 50MB for videos
+    });
+
+    if (!fileValidation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: fileValidation.errors[0] || 'File validation failed',
+          errors: fileValidation.errors,
+          securityIssues: fileValidation.securityIssues
+        },
+        { status: 400 }
+      );
     }
 
-    if (isVideo) {
-      const allowedVideoTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/quicktime'];
-      if (!allowedVideoTypes.includes(file.type)) {
-        return NextResponse.json(
-          { success: false, message: 'Only MP4, MOV, and AVI videos are allowed' },
-          { status: 400 }
-        );
-      }
+    // Log security warnings if any
+    if (fileValidation.warnings.length > 0) {
+      console.warn('File upload warnings:', fileValidation.warnings);
+    }
+
+    // Log security issues for monitoring
+    if (fileValidation.securityIssues.length > 0) {
+      console.error('File security issues detected:', {
+        userId: session.user.id,
+        fileName: file.name,
+        issues: fileValidation.securityIssues
+      });
     }
 
     // Validate file size
