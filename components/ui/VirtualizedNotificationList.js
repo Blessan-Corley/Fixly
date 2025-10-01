@@ -77,39 +77,39 @@ const NOTIFICATION_CONFIG = {
 const NotificationItem = memo(({ index, style, data }) => {
   const { notifications, onNotificationClick, onMarkAsRead, isDesktop } = data;
   const notification = notifications[index];
-  
-  if (!notification) return null;
 
-  const config = NOTIFICATION_CONFIG[notification.type] || NOTIFICATION_CONFIG.default;
-  const IconComponent = config.icon;
-  
+  // Initialize hooks before any conditional returns
   const [isHovered, setIsHovered] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
 
   const handleClick = useCallback((e) => {
     e.preventDefault();
-    onNotificationClick(notification);
+    if (notification) {
+      onNotificationClick(notification);
+    }
   }, [notification, onNotificationClick]);
 
   const handleMarkAsRead = useCallback((e) => {
     e.stopPropagation();
-    onMarkAsRead(notification._id || notification.id);
+    if (notification) {
+      onMarkAsRead(notification._id || notification.id);
+    }
   }, [notification, onMarkAsRead]);
 
   const formatTime = useCallback((timestamp) => {
     const date = new Date(timestamp);
     const now = new Date();
     const diffInMinutes = Math.floor((now - date) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'Just now';
     if (diffInMinutes < 60) return `${diffInMinutes}m`;
-    
+
     const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24) return `${diffInHours}h`;
-    
+
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays < 7) return `${diffInDays}d`;
-    
+
     return date.toLocaleDateString();
   }, []);
 
@@ -118,14 +118,19 @@ const NotificationItem = memo(({ index, style, data }) => {
     const baseHeight = 72;
     const lineHeight = 20;
     const maxLines = 3;
-    
-    if (!notification.message) return baseHeight;
-    
+
+    if (!notification || !notification.message) return baseHeight;
+
     const estimatedLines = Math.ceil(notification.message.length / 50);
     const actualLines = Math.min(estimatedLines, maxLines);
-    
+
     return baseHeight + ((actualLines - 1) * lineHeight);
-  }, [notification.message]);
+  }, [notification]);
+
+  if (!notification) return null;
+
+  const config = NOTIFICATION_CONFIG[notification.type] || NOTIFICATION_CONFIG.default;
+  const IconComponent = config.icon;
 
   return (
     <div style={style}>

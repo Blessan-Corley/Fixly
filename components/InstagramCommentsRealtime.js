@@ -44,36 +44,35 @@ export default function InstagramCommentsRealtime({
 
   // Update comments when real-time data changes with smooth animations
   useEffect(() => {
+    console.log('📝 Real-time comments updated:', realTimeComments?.length || 0, 'comments');
     if (realTimeComments && Array.isArray(realTimeComments)) {
-      const newComments = realTimeComments;
-      const currentComments = comments;
+      setComments(prevComments => {
+        const newComments = realTimeComments;
 
-      // Check if there are new comments to animate in
-      if (newComments.length > currentComments.length) {
-        // Add new comments with entrance animation
-        setComments(newComments);
+        // Check if there are new comments to animate in
+        if (newComments.length > prevComments.length) {
+          console.log('✨ New comments detected, scrolling to bottom');
+          // Smooth scroll to new content if user is near bottom
+          setTimeout(() => {
+            const container = document.querySelector('.comments-container');
+            if (container) {
+              const { scrollTop, scrollHeight, clientHeight } = container;
+              const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
 
-        // Smooth scroll to new content if user is near bottom
-        setTimeout(() => {
-          const container = document.querySelector('.comments-container');
-          if (container) {
-            const { scrollTop, scrollHeight, clientHeight } = container;
-            const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
-
-            if (isNearBottom) {
-              container.scrollTo({
-                top: scrollHeight,
-                behavior: 'smooth'
-              });
+              if (isNearBottom) {
+                container.scrollTo({
+                  top: scrollHeight,
+                  behavior: 'smooth'
+                });
+              }
             }
-          }
-        }, 100);
-      } else {
-        // Just update existing comments (likes, replies, etc.)
-        setComments(newComments);
-      }
+          }, 100);
+        }
+
+        return newComments;
+      });
     }
-  }, [realTimeComments, comments]);
+  }, [realTimeComments]);
 
   // Delete confirmation modal
   const [deleteModal, setDeleteModal] = useState({ 
@@ -307,7 +306,7 @@ export default function InstagramCommentsRealtime({
 
         {/* Comments List */}
         <div className="flex-1 overflow-y-auto comments-container">
-          {loading ? (
+          {loading || realTimeLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fixly-accent"></div>
             </div>

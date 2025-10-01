@@ -92,34 +92,37 @@ export function useJobNotifications(jobId) {
   const [comments, setComments] = useState([]);
   const [applications, setApplications] = useState([]);
 
+  // Only subscribe if jobId is valid
+  const validJobId = jobId && jobId !== 'null' && jobId !== 'undefined' ? jobId : null;
+
   // Subscribe to job updates
   useAblyChannel(
-    `job:${jobId}:updates`,
+    validJobId ? `job:${validJobId}:updates` : null,
     'job_status_changed',
     (message) => {
       setJobUpdates(prev => [message.data, ...prev.slice(0, 9)]);
     },
-    [jobId]
+    [validJobId]
   );
 
   // Subscribe to job comments
   useAblyChannel(
-    `job:${jobId}:comments`,
+    validJobId ? `job:${validJobId}:comments` : null,
     'comment_posted',
     (message) => {
       setComments(prev => [message.data, ...prev.slice(0, 49)]);
     },
-    [jobId]
+    [validJobId]
   );
 
   // Subscribe to job applications (if user is job poster)
   useAblyChannel(
-    `job:${jobId}:applications`,
+    validJobId ? `job:${validJobId}:applications` : null,
     'application_submitted',
     (message) => {
       setApplications(prev => [message.data, ...prev.slice(0, 19)]);
     },
-    [jobId]
+    [validJobId]
   );
 
   return {
@@ -241,28 +244,146 @@ export function useJobComments(jobId) {
   const [comments, setComments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Only subscribe if jobId is valid
+  const validJobId = jobId && jobId !== 'null' && jobId !== 'undefined' ? jobId : null;
+
+  // Load initial comments when jobId changes
+  useEffect(() => {
+    if (!validJobId) {
+      console.log('💬 No valid job ID, clearing comments');
+      setComments([]);
+      return;
+    }
+
+    console.log(`💬 Loading comments for job: ${validJobId}`);
+    setIsLoading(true);
+    fetch(`/api/jobs/${validJobId}/comments`)
+      .then(res => res.json())
+      .then(data => {
+        console.log(`💬 Loaded ${data.comments?.length || 0} comments for job ${validJobId}`);
+        if (data.comments) {
+          setComments(data.comments);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to load comments:', error);
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [validJobId]);
+
   // Subscribe to comments
   useAblyChannel(
-    `job:${jobId}:comments`,
+    validJobId ? `job:${validJobId}:comments` : null,
     'comment_posted',
     (message) => {
-      setComments(prev => [message.data, ...prev]);
+      console.log('🔔 Received comment_posted event:', message.data);
+      const comment = message.data.comment;
+      if (!comment) {
+        console.warn('⚠️ No comment data in message');
+        return;
+      }
+
+      setComments(prev => {
+        // Check if comment already exists to prevent duplicates
+        const commentExists = prev.some(c => c._id === comment._id);
+        if (commentExists) {
+          console.log('💬 Comment already exists, skipping');
+          return prev;
+        }
+        console.log('✨ Adding new comment to list');
+        return [comment, ...prev];
+      });
     },
-    [jobId]
+    [validJobId]
   );
 
   // Subscribe to comment likes
   useAblyChannel(
-    `job:${jobId}:comments`,
+    validJobId ? `job:${validJobId}:comments` : null,
     'comment_liked',
     (message) => {
-      setComments(prev => prev.map(comment =>
-        comment.id === message.data.commentId
-          ? { ...comment, likes: message.data.newLikeCount, liked: message.data.likedBy === currentUser?.id }
-          : comment
-      ));
+      setComments(prev => prev.map(comment => {
+        if (comment._id === message.data.commentId) {
+          return {
+            ...comment,
+            likes: message.data.likes || comment.likes
+          };
+        }
+
+        // Also check replies for likes
+        if (comment.replies && comment.replies.length > 0) {
+          const updatedReplies = comment.replies.map(reply => {
+            if (reply._id === message.data.replyId) {
+              return {
+                ...reply,
+                likes: message.data.likes || reply.likes
+              };
+            }
+            return reply;
+          });
+
+          if (updatedReplies !== comment.replies) {
+            return { ...comment, replies: updatedReplies };
+          }
+        }
+
+        return comment;
+      }));
     },
-    [jobId, currentUser?.id]
+    [validJobId, currentUser?.id]
+  );
+
+  // Subscribe to comment replies
+  useAblyChannel(
+    validJobId ? `job:${validJobId}:comments` : null,
+    'comment_replied',
+    (message) => {
+      const { commentId, reply } = message.data;
+      if (!commentId || !reply) return;
+
+      setComments(prev => prev.map(comment => {
+        if (comment._id === commentId) {
+          // Check if reply already exists to prevent duplicates
+          const replyExists = (comment.replies || []).some(r => r._id === reply._id);
+          if (replyExists) return comment;
+
+          return {
+            ...comment,
+            replies: [...(comment.replies || []), reply]
+          };
+        }
+        return comment;
+      }));
+    },
+    [validJobId]
+  );
+
+  // Subscribe to comment deletions
+  useAblyChannel(
+    validJobId ? `job:${validJobId}:comments` : null,
+    'comment_deleted',
+    (message) => {
+      setComments(prev => {
+        if (message.data.replyId) {
+          // Deleting a reply
+          return prev.map(comment => {
+            if (comment._id === message.data.commentId) {
+              return {
+                ...comment,
+                replies: (comment.replies || []).filter(reply => reply._id !== message.data.replyId)
+              };
+            }
+            return comment;
+          });
+        } else {
+          // Deleting a comment
+          return prev.filter(comment => comment._id !== message.data.commentId);
+        }
+      });
+    },
+    [validJobId]
   );
 
   // Post comment
@@ -322,5 +443,57 @@ export function useJobComments(jobId) {
     isLoading,
     postComment,
     likeComment
+  };
+}
+
+export function useJobViewCount(jobId) {
+  const { subscribeToChannel } = useAbly();
+  const [viewCount, setViewCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Only subscribe if jobId is valid
+  const validJobId = jobId && jobId !== 'null' && jobId !== 'undefined' ? jobId : null;
+
+  // Subscribe to job view updates
+  useAblyChannel(
+    validJobId ? `job:${validJobId}:updates` : null,
+    'job_updated',
+    (message) => {
+      if (message.data.type === 'view_count') {
+        setViewCount(message.data.viewCount || 0);
+      }
+    },
+    [validJobId]
+  );
+
+  // Track a view
+  const trackView = async () => {
+    if (!validJobId) return false;
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/jobs/${validJobId}/view`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setViewCount(data.viewCount || 0);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to track view:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return {
+    viewCount,
+    isLoading,
+    trackView
   };
 }

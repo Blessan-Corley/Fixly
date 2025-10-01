@@ -66,9 +66,16 @@ export function useAblyConnection() {
     }
   }, []);
 
-  // Smart reconnection logic
+  // Smart reconnection logic with better limits
   const attemptReconnect = useCallback(() => {
     if (isReconnecting || connectionStatus === 'connected' || connectionStatus === 'disabled') {
+      return;
+    }
+
+    // Limit max reconnection attempts
+    if (connectionAttempts >= 5) {
+      console.log('⚠️ Max reconnection attempts reached. Stopping reconnection.');
+      setConnectionStatus('failed');
       return;
     }
 
@@ -80,12 +87,12 @@ export function useAblyConnection() {
       clearTimeout(reconnectTimeoutRef.current);
     }
 
-    // Exponential backoff with jitter
-    const baseDelay = Math.min(1000 * Math.pow(2, connectionAttempts), 30000);
+    // Exponential backoff with jitter but cap at 10 seconds
+    const baseDelay = Math.min(1000 * Math.pow(2, connectionAttempts), 10000);
     const jitter = Math.random() * 0.3 * baseDelay;
     const delay = baseDelay + jitter;
 
-    console.log(`🔄 Attempting to reconnect in ${Math.round(delay)}ms (attempt ${connectionAttempts + 1})`);
+    console.log(`🔄 Attempting to reconnect in ${Math.round(delay)}ms (attempt ${connectionAttempts + 1}/5)`);
 
     reconnectTimeoutRef.current = setTimeout(() => {
       if (ablyRef.current && ablyRef.current.connection.state !== 'connected') {
@@ -96,8 +103,10 @@ export function useAblyConnection() {
           setIsReconnecting(false);
 
           // Retry if we haven't exceeded max attempts
-          if (connectionAttempts < 10) {
-            setTimeout(attemptReconnect, 5000);
+          if (connectionAttempts < 4) {
+            setTimeout(attemptReconnect, 2000);
+          } else {
+            setConnectionStatus('failed');
           }
         }
       } else {
@@ -142,10 +151,30 @@ export function useAblyConnection() {
   useEffect(() => {
     const ably = connect();
 
+    // Cleanup function to prevent memory leaks
     return () => {
-      disconnect();
+      // Clear all timeouts
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+
+      // Remove all event listeners before disconnecting
+      if (ablyRef.current) {
+        try {
+          ablyRef.current.connection.off();
+          ablyRef.current.close();
+          ablyRef.current = null;
+        } catch (error) {
+          console.error('❌ Error during cleanup:', error);
+        }
+      }
+
+      setConnectionStatus('disconnected');
+      setIsReconnecting(false);
+      setConnectionAttempts(0);
     };
-  }, [connect, disconnect]);
+  }, []); // Remove dependencies to prevent reconnection loops
 
   // Health check
   const healthCheck = useCallback(() => {
@@ -162,13 +191,19 @@ export function useAblyConnection() {
     return isHealthy;
   }, [isReconnecting, attemptReconnect]);
 
-  // Periodic health check
+  // Periodic health check with proper cleanup
   useEffect(() => {
-    if (connectionStatus === 'connected') {
-      const healthCheckInterval = setInterval(healthCheck, 30000); // Every 30 seconds
+    let healthCheckInterval;
 
-      return () => clearInterval(healthCheckInterval);
+    if (connectionStatus === 'connected') {
+      healthCheckInterval = setInterval(healthCheck, 30000); // Every 30 seconds
     }
+
+    return () => {
+      if (healthCheckInterval) {
+        clearInterval(healthCheckInterval);
+      }
+    };
   }, [connectionStatus, healthCheck]);
 
   return {

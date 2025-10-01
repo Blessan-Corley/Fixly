@@ -208,17 +208,21 @@ export default function VirtualJobList({
     return matchingSkills.length / job.skillsRequired.length;
   };
 
-  // Real-time job updates
+  // Real-time job updates with proper cleanup
 useEffect(() => {
   if (!user || user.role !== 'fixer') return;
 
   let ably = null;
   let channels = [];
+  let isActive = true;
+  const abortController = new AbortController();
 
   const setupRealtimeConnection = async () => {
+    if (!isActive) return;
+
     try {
       ably = getClientAbly();
-      if (!ably) return;
+      if (!ably || !isActive) return;
 
       ably.options.clientId = `fixer-${user.id}`;
 
@@ -309,20 +313,36 @@ useEffect(() => {
       }
 
     } catch (error) {
-      console.error('❌ Real-time setup error:', error);
-      setConnectionStatus('failed');
+      if (!abortController.signal.aborted) {
+        console.error('❌ Real-time setup error:', error);
+        setConnectionStatus('failed');
+      }
     }
   };
 
   setupRealtimeConnection();
 
-  // Cleanup
+  // Cleanup with proper async handling
   return () => {
-    channels.forEach(channel => {
-      channel.unsubscribe(); // Remove all subscriptions from this channel
-    });
+    isActive = false;
+    abortController.abort();
+
+    // Cleanup all channels in parallel
+    Promise.allSettled(
+      channels.map(channel =>
+        Promise.resolve().then(() => {
+          try {
+            channel.unsubscribe();
+            channel.detach();
+          } catch (error) {
+            console.error('Channel cleanup error:', error);
+          }
+        })
+      )
+    );
+
     if (ably) {
-      ably.close(); // Only close if we created it
+      // Don't close shared ably connection - it's managed by AblyContext
     }
   };
 }, [user, JSON.stringify(filters)]); // Use JSON.stringify for deep comparison
@@ -596,13 +616,10 @@ export function VirtualJobGrid({
   }
 
   return (
-    <VirtualGrid
+    <VirtualList
       items={allJobs}
       height={height}
-      itemWidth={itemWidth}
       itemHeight={itemHeight}
-      columns={columns}
-      gap={16}
       renderItem={renderJobCard}
       className={className}
     />
@@ -690,4 +707,4 @@ export function VirtualJobListCompact({
   );
 }
 
-export default VirtualJobList;
+// Default export already declared in function definition above

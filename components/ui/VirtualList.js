@@ -589,4 +589,4 @@ export function VirtualGrid({
   );
 }
 
-export { VirtualList, useVirtualList, VariableHeightVirtualList, VirtualGrid };
+export { VirtualList };

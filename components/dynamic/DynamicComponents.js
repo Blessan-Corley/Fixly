@@ -41,26 +41,7 @@ export const AdminDashboard = dynamic(
   }
 );
 
-// Advanced Search - Load when search is opened
-export const AdvancedSearch = dynamic(
-  () => import('../search/AdvancedSearch'),
-  {
-    loading: () => (
-      <div className="bg-fixly-card dark:bg-gray-800 rounded-xl p-6 border border-fixly-border dark:border-gray-700">
-        <LoadingSkeleton className="h-6 w-32 mb-4" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="space-y-2">
-              <LoadingSkeleton className="h-4 w-20" />
-              <LoadingSkeleton className="h-10 w-full" />
-            </div>
-          ))}
-        </div>
-      </div>
-    ),
-    ssr: false
-  }
-);
+// Advanced Search component removed - not in use
 
 // Chart Components - Heavy D3/Chart libraries
 export const LineChart = dynamic(
@@ -374,7 +355,6 @@ export const SupportChat = dynamic(
 // Export all dynamic components
 export {
   AdminDashboard,
-  AdvancedSearch,
   LineChart,
   PieChart,
   InstagramCommentsRealtime,
@@ -400,7 +380,6 @@ export const preloadCriticalComponents = () => {
   const criticalComponents = [
     () => import('../jobs/VirtualJobList'),
     () => import('../ui/NotificationCenter'),
-    () => import('../search/AdvancedSearch'),
   ];
 
   // Use requestIdleCallback to preload during idle time
