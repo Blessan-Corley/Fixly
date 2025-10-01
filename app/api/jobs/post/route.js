@@ -107,6 +107,7 @@ export async function POST(request) {
       location,
       deadline,
       urgency,
+      type,
       attachments,
       scheduledDate,
       featured,
@@ -236,8 +237,9 @@ export async function POST(request) {
         lat: location?.lat || null,
         lng: location?.lng || null
       },
-      deadline: deadline ? new Date(deadline) : (scheduledDate ? new Date(scheduledDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+      deadline: urgency === 'scheduled' ? null : new Date(deadline),
       urgency: urgency || 'flexible',
+      type: type || 'one-time',
       createdBy: user._id,
       status: 'open',
       featured: featured && user.plan?.type === 'pro' ? true : false,
@@ -500,7 +502,7 @@ export async function GET(request) {
           .sort(sort)
           .skip(skip)
           .limit(limit)
-          .populate('assignedTo', 'name username photoURL rating')
+          .populate('assignedTo', 'name username profilePhoto picture rating')
           .lean(),
         Job.countDocuments(query)
       ]);

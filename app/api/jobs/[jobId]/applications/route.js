@@ -8,6 +8,7 @@ import User from '../../../../../models/User';
 import { rateLimit } from '../../../../../utils/rateLimiting';
 import { MessageService } from '../../../../../lib/services/messageService';
 import { getServerAbly, CHANNELS, EVENTS } from '../../../../../lib/ably';
+import mongoose from 'mongoose';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,9 +35,8 @@ export async function GET(request, { params }) {
 
     await connectDB();
 
-    const job = await Job.findById(jobId)
-      .populate('applications.fixer', 'name username photoURL rating skillsAndExperience')
-      .lean();
+    // First check if job exists and user has permission (without populating)
+    const job = await Job.findById(jobId).select('createdBy applications').lean();
 
     if (!job) {
       return NextResponse.json(
@@ -45,17 +45,28 @@ export async function GET(request, { params }) {
       );
     }
 
-    // Check if user is the job client
-    if (job.client.toString() !== session.user.id) {
+    // Check if user is the job creator (using createdBy instead of client)
+    if (job.createdBy.toString() !== session.user.id) {
       return NextResponse.json(
-        { message: 'Only job client can view applications' },
+        { message: 'Only job creator can view applications' },
         { status: 403 }
       );
     }
 
+    // Only populate applications AFTER authorization check
+    // Use aggregation pipeline for better performance with many applications
+    const jobWithApps = await Job.findById(jobId)
+      .select('applications')
+      .populate({
+        path: 'applications.fixer',
+        select: 'name username photoURL rating skillsAndExperience location',
+        options: { lean: true }
+      })
+      .lean();
+
     return NextResponse.json({
       success: true,
-      applications: job.applications || []
+      applications: jobWithApps?.applications || []
     });
 
   } catch (error) {
@@ -120,41 +131,75 @@ export async function PUT(request, { params }) {
     application.responseMessage = message;
     application.respondedAt = new Date();
 
-    // If accepted, assign fixer and reject other applications
+    // If accepted, use transaction to ensure atomicity (job + credit deduction)
     if (status === 'accepted') {
-      job.fixer = application.fixer;
-      job.status = 'in_progress';
-      job.acceptedApplication = applicationId;
-      
-      // Check if fixer can be assigned (credit check) and deduct credit
-      const acceptedFixer = await User.findById(application.fixer);
-      if (!acceptedFixer.canBeAssignedJob()) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        job.fixer = application.fixer;
+        job.status = 'in_progress';
+        job.acceptedApplication = applicationId;
+
+        // Check if fixer can be assigned (credit check) and deduct credit
+        const acceptedFixer = await User.findById(application.fixer).session(session);
+        if (!acceptedFixer) {
+          await session.abortTransaction();
+          session.endSession();
+          return NextResponse.json(
+            { message: 'Fixer not found' },
+            { status: 404 }
+          );
+        }
+
+        if (!acceptedFixer.canBeAssignedJob()) {
+          await session.abortTransaction();
+          session.endSession();
+          return NextResponse.json(
+            { message: 'Selected fixer has reached their job limit. Please select another applicant.' },
+            { status: 400 }
+          );
+        }
+
+        // Deduct credit for the accepted fixer (only when application is accepted)
+        if (acceptedFixer && acceptedFixer.plan?.type !== 'pro') {
+          if (!acceptedFixer.plan) {
+            acceptedFixer.plan = { type: 'free', creditsUsed: 0, status: 'active' };
+          }
+          acceptedFixer.plan.creditsUsed = (acceptedFixer.plan.creditsUsed || 0) + 1;
+          await acceptedFixer.save({ session });
+        }
+
+        // Reject other applications
+        job.applications.forEach(app => {
+          if (app._id.toString() !== applicationId && app.status === 'pending') {
+            app.status = 'rejected';
+            app.responseMessage = 'Another applicant was selected';
+            app.respondedAt = new Date();
+          }
+        });
+
+        // Save job with transaction
+        await job.save({ session });
+
+        // Commit transaction
+        await session.commitTransaction();
+        session.endSession();
+
+      } catch (transactionError) {
+        // Rollback transaction on error
+        await session.abortTransaction();
+        session.endSession();
+        console.error('Transaction error:', transactionError);
         return NextResponse.json(
-          { message: 'Selected fixer has reached their job limit. Please select another applicant.' },
-          { status: 400 }
+          { message: 'Failed to update application. Please try again.' },
+          { status: 500 }
         );
       }
-
-      // Deduct credit for the accepted fixer (only when application is accepted)
-      if (acceptedFixer && acceptedFixer.plan?.type !== 'pro') {
-        if (!acceptedFixer.plan) {
-          acceptedFixer.plan = { type: 'free', creditsUsed: 0, status: 'active' };
-        }
-        acceptedFixer.plan.creditsUsed = (acceptedFixer.plan.creditsUsed || 0) + 1;
-        await acceptedFixer.save();
-      }
-      
-      // Reject other applications
-      job.applications.forEach(app => {
-        if (app._id.toString() !== applicationId && app.status === 'pending') {
-          app.status = 'rejected';
-          app.responseMessage = 'Another applicant was selected';
-          app.respondedAt = new Date();
-        }
-      });
+    } else {
+      // For non-accepted status, just save normally
+      await job.save();
     }
-
-    await job.save();
 
     // If application accepted, create private conversation with automated message
     if (status === 'accepted') {

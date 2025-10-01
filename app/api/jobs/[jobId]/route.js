@@ -9,8 +9,8 @@ import { rateLimit } from '../../../../utils/rateLimiting';
 
 export async function GET(request, { params }) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'job_details', 100, 60); // 100 requests per minute
+    // Apply rate limiting (stricter to prevent enumeration)
+    const rateLimitResult = await rateLimit(request, 'job_details', 20, 60 * 1000); // 20 per minute
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many requests. Please try again later.' },
@@ -47,12 +47,11 @@ export async function GET(request, { params }) {
     // Note: Allow all authenticated users to view job details
     // Restriction on applying will be handled in the frontend based on canApplyToJob()
 
-    // Fetch job with populated data
+    // Fetch job with populated data (optimized - exclude comments initially for performance)
     const job = await Job.findById(jobId)
+      .select('-comments') // Exclude comments to prevent loading all nested data
       .populate('createdBy', 'name username photoURL rating location isVerified')
       .populate('assignedTo', 'name username photoURL rating')
-      .populate('comments.author', 'name username photoURL')
-      .populate('comments.replies.author', 'name username photoURL')
       .lean();
 
     if (!job) {
