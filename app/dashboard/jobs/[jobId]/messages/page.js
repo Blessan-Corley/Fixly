@@ -34,6 +34,24 @@ export default function MessagesPage({ params }) {
   const messagesEndRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
+  // AbortController refs
+  const fetchJobAbortRef = useRef(null);
+  const fetchUserAbortRef = useRef(null);
+  const fetchMessagesAbortRef = useRef(null);
+  const sendMessageAbortRef = useRef(null);
+  const pollMessagesAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchJobAbortRef.current) fetchJobAbortRef.current.abort();
+      if (fetchUserAbortRef.current) fetchUserAbortRef.current.abort();
+      if (fetchMessagesAbortRef.current) fetchMessagesAbortRef.current.abort();
+      if (sendMessageAbortRef.current) sendMessageAbortRef.current.abort();
+      if (pollMessagesAbortRef.current) pollMessagesAbortRef.current.abort();
+    };
+  }, []);
+
   // Real-time messages using Ably
   const {
     messages: realTimeMessages,
@@ -103,9 +121,23 @@ export default function MessagesPage({ params }) {
       } else {
         setSilentLoading(true);
       }
-      
+
+      // Cancel previous job request
+      if (fetchJobAbortRef.current) {
+        fetchJobAbortRef.current.abort();
+      }
+      const jobAbortController = new AbortController();
+      fetchJobAbortRef.current = jobAbortController;
+
       // Fetch job details
-      const jobResponse = await fetch(`/api/jobs/${jobId}`);
+      const jobResponse = await fetch(`/api/jobs/${jobId}`, {
+        signal: jobAbortController.signal
+      });
+
+      if (jobAbortController.signal.aborted) {
+        return;
+      }
+
       if (jobResponse.ok) {
         const jobData = await jobResponse.json();
         setJob(jobData.job);
@@ -117,7 +149,21 @@ export default function MessagesPage({ params }) {
           
           if (otherUserData) {
             try {
-              const userResponse = await fetch(`/api/user/profile/${otherUserData.username}`);
+              // Cancel previous user request
+              if (fetchUserAbortRef.current) {
+                fetchUserAbortRef.current.abort();
+              }
+              const userAbortController = new AbortController();
+              fetchUserAbortRef.current = userAbortController;
+
+              const userResponse = await fetch(`/api/user/profile/${otherUserData.username}`, {
+                signal: userAbortController.signal
+              });
+
+              if (userAbortController.signal.aborted) {
+                return;
+              }
+
               if (userResponse.ok) {
                 const userData = await userResponse.json();
                 setOtherUser(userData.user);
@@ -129,6 +175,9 @@ export default function MessagesPage({ params }) {
                 setOnlineStatus(lastActivity > fiveMinutesAgo);
               }
             } catch (error) {
+              if (error.name === 'AbortError') {
+                return;
+              }
               console.error('Error fetching user status:', error);
               // Fallback to basic info from job data
               setOtherUser(otherUserData);
@@ -138,8 +187,22 @@ export default function MessagesPage({ params }) {
         }
       }
 
+      // Cancel previous messages request
+      if (fetchMessagesAbortRef.current) {
+        fetchMessagesAbortRef.current.abort();
+      }
+      const messagesAbortController = new AbortController();
+      fetchMessagesAbortRef.current = messagesAbortController;
+
       // Fetch messages
-      const messagesResponse = await fetch(`/api/jobs/${jobId}/messages`);
+      const messagesResponse = await fetch(`/api/jobs/${jobId}/messages`, {
+        signal: messagesAbortController.signal
+      });
+
+      if (messagesAbortController.signal.aborted) {
+        return;
+      }
+
       if (messagesResponse.ok) {
         const messagesData = await messagesResponse.json();
         setMessages(messagesData.messages || []);
@@ -151,6 +214,9 @@ export default function MessagesPage({ params }) {
         }
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching messages:', error);
       if (!silent) {
         toastMessages.message.failed();
@@ -187,13 +253,25 @@ export default function MessagesPage({ params }) {
     setMessages(prev => [...prev, optimisticMessage]);
 
     try {
+      // Cancel previous send request
+      if (sendMessageAbortRef.current) {
+        sendMessageAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      sendMessageAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: messageText
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -209,6 +287,9 @@ export default function MessagesPage({ params }) {
         toastMessages.message.failed();
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error sending message:', error);
       // Remove optimistic message on error
       setMessages(prev => prev.filter(msg => msg._id !== optimisticMessage._id));
@@ -223,7 +304,21 @@ export default function MessagesPage({ params }) {
     // Poll for new messages every 5 seconds (reduced frequency)
     pollIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`/api/jobs/${jobId}/messages`);
+        // Cancel previous poll request
+        if (pollMessagesAbortRef.current) {
+          pollMessagesAbortRef.current.abort();
+        }
+        const abortController = new AbortController();
+        pollMessagesAbortRef.current = abortController;
+
+        const response = await fetch(`/api/jobs/${jobId}/messages`, {
+          signal: abortController.signal
+        });
+
+        if (abortController.signal.aborted) {
+          return;
+        }
+
         if (response.ok) {
           const data = await response.json();
           const newMessages = data.messages || [];
@@ -236,6 +331,9 @@ export default function MessagesPage({ params }) {
           }
         }
       } catch (error) {
+        if (error.name === 'AbortError') {
+          return;
+        }
         // Silent fail for polling
         console.error('Polling error:', error);
       }

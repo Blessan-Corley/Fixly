@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -57,6 +57,18 @@ function EarningsContent() {
   const [timeFilter, setTimeFilter] = useState('this_month');
   const [showChart, setShowChart] = useState('earnings');
 
+  // AbortController refs
+  const statsAbortRef = useRef(null);
+  const jobsAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (statsAbortRef.current) statsAbortRef.current.abort();
+      if (jobsAbortRef.current) jobsAbortRef.current.abort();
+    };
+  }, []);
+
   useEffect(() => {
     fetchEarningsData();
   }, [timeFilter]);
@@ -64,9 +76,23 @@ function EarningsContent() {
   const fetchEarningsData = async () => {
     try {
       setLoading(true);
-      
+
+      // Cancel previous stats request
+      if (statsAbortRef.current) {
+        statsAbortRef.current.abort();
+      }
+      const statsController = new AbortController();
+      statsAbortRef.current = statsController;
+
       // Fetch earnings stats
-      const statsResponse = await fetch(`/api/dashboard/stats?role=fixer&period=${timeFilter}`);
+      const statsResponse = await fetch(`/api/dashboard/stats?role=fixer&period=${timeFilter}`, {
+        signal: statsController.signal
+      });
+
+      if (statsController.signal.aborted) {
+        return;
+      }
+
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setEarnings({
@@ -85,8 +111,22 @@ function EarningsContent() {
         });
       }
 
+      // Cancel previous jobs request
+      if (jobsAbortRef.current) {
+        jobsAbortRef.current.abort();
+      }
+      const jobsController = new AbortController();
+      jobsAbortRef.current = jobsController;
+
       // Fetch recent completed jobs
-      const jobsResponse = await fetch('/api/dashboard/recent-jobs?role=fixer&limit=10&status=completed');
+      const jobsResponse = await fetch('/api/dashboard/recent-jobs?role=fixer&limit=10&status=completed', {
+        signal: jobsController.signal
+      });
+
+      if (jobsController.signal.aborted) {
+        return;
+      }
+
       if (jobsResponse.ok) {
         const jobsData = await jobsResponse.json();
         setRecentJobs(jobsData.jobs || []);
@@ -96,6 +136,9 @@ function EarningsContent() {
       setEarningsHistory(generateMockEarningsHistory());
 
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching earnings data:', error);
       toast.error('Failed to fetch earnings data');
     } finally {

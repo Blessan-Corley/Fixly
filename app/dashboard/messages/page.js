@@ -44,7 +44,35 @@ export default function MessagesPage() {
   const searchParams = useSearchParams();
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  
+
+  // AbortController refs
+  const fetchConversationsAbortRef = useRef(null);
+  const fetchMessagesAbortRef = useRef(null);
+  const sendMessageAbortRef = useRef(null);
+  const editMessageAbortRef = useRef(null);
+  const deleteMessageAbortRef = useRef(null);
+
+  // Cleanup: abort all pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchConversationsAbortRef.current) {
+        fetchConversationsAbortRef.current.abort();
+      }
+      if (fetchMessagesAbortRef.current) {
+        fetchMessagesAbortRef.current.abort();
+      }
+      if (sendMessageAbortRef.current) {
+        sendMessageAbortRef.current.abort();
+      }
+      if (editMessageAbortRef.current) {
+        editMessageAbortRef.current.abort();
+      }
+      if (deleteMessageAbortRef.current) {
+        deleteMessageAbortRef.current.abort();
+      }
+    };
+  }, []);
+
   // URL parameters
   const conversationParam = searchParams.get('conversation');
   const userParam = searchParams.get('user');
@@ -91,11 +119,26 @@ export default function MessagesPage() {
 
   // Fetch conversations (background refresh)
   const fetchConversations = async (isInitial = false) => {
+    // Cancel previous request
+    if (fetchConversationsAbortRef.current) {
+      fetchConversationsAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    fetchConversationsAbortRef.current = abortController;
+
     try {
       if (isInitial) {
         startLoading('Loading conversations...');
       }
-      const response = await fetch('/api/messages');
+      const response = await fetch('/api/messages', {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       const data = await response.json();
       
       if (data.success) {
@@ -110,6 +153,10 @@ export default function MessagesPage() {
         }
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       if (isInitial) {
         console.error('Error fetching conversations:', error);
         toast.error('Failed to load conversations');
@@ -125,11 +172,26 @@ export default function MessagesPage() {
 
   // Fetch messages for selected conversation (background refresh)
   const fetchMessages = async (conversationId, page = 1, isInitial = false) => {
+    // Cancel previous request
+    if (fetchMessagesAbortRef.current) {
+      fetchMessagesAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    fetchMessagesAbortRef.current = abortController;
+
     try {
       if (isInitial && page === 1) {
         setLoadingMessages(true);
       }
-      const response = await fetch(`/api/messages?conversationId=${conversationId}&page=${page}`);
+      const response = await fetch(`/api/messages?conversationId=${conversationId}&page=${page}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       const data = await response.json();
       
       if (data.success) {
@@ -146,6 +208,10 @@ export default function MessagesPage() {
         }
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       if (isInitial) {
         console.error('Error fetching messages:', error);
         toast.error('Failed to load messages');
@@ -166,6 +232,14 @@ export default function MessagesPage() {
     setNewMessage('');
     setSendingMessage(true);
 
+    // Cancel previous send request
+    if (sendMessageAbortRef.current) {
+      sendMessageAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    sendMessageAbortRef.current = abortController;
+
     try {
       const response = await fetch('/api/messages', {
         method: 'POST',
@@ -177,7 +251,12 @@ export default function MessagesPage() {
           content: messageContent,
           messageType: 'text'
         }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
       
@@ -203,6 +282,10 @@ export default function MessagesPage() {
         setNewMessage(messageContent); // Restore message
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
       setNewMessage(messageContent); // Restore message
@@ -228,6 +311,14 @@ export default function MessagesPage() {
 
   // Start conversation with specific user
   const startConversationWithUser = async (userId) => {
+    // Cancel previous request
+    if (editMessageAbortRef.current) {
+      editMessageAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    editMessageAbortRef.current = abortController;
+
     try {
       const response = await fetch('/api/messages', {
         method: 'POST',
@@ -239,7 +330,12 @@ export default function MessagesPage() {
           content: 'Hello! I would like to discuss the job with you.',
           messageType: 'text'
         }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
       
@@ -254,6 +350,10 @@ export default function MessagesPage() {
         toast.error(data.message || 'Failed to start conversation');
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error starting conversation:', error);
       toast.error('Failed to start conversation');
     }
@@ -261,6 +361,14 @@ export default function MessagesPage() {
 
   // Mark messages as read
   const markAsRead = async (conversationId) => {
+    // Cancel previous request
+    if (deleteMessageAbortRef.current) {
+      deleteMessageAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    deleteMessageAbortRef.current = abortController;
+
     try {
       await fetch('/api/messages', {
         method: 'PATCH',
@@ -268,8 +376,17 @@ export default function MessagesPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ conversationId }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error marking messages as read:', error);
     }
   };

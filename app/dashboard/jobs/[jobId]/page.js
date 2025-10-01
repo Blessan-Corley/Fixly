@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { canApplyToJob, getRemainingApplications } from '@/utils/creditUtils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -103,6 +103,46 @@ export default function JobDetailsPage({ params }) {
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
+  // AbortController refs for all fetch operations
+  const fetchJobAbortRef = useRef(null);
+  const trackViewAbortRef = useRef(null);
+  const fetchApplicationsAbortRef = useRef(null);
+  const fetchCommentsAbortRef = useRef(null);
+  const submitApplicationAbortRef = useRef(null);
+  const withdrawApplicationAbortRef = useRef(null);
+  const updateJobStatusAbortRef = useRef(null);
+  const submitRatingAbortRef = useRef(null);
+  const addCommentAbortRef = useRef(null);
+  const addReplyAbortRef = useRef(null);
+  const likeCommentAbortRef = useRef(null);
+  const unlikeCommentAbortRef = useRef(null);
+  const deleteCommentAbortRef = useRef(null);
+  const reportCommentAbortRef = useRef(null);
+  const assignApplicationAbortRef = useRef(null);
+  const updateApplicationStatusAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchJobAbortRef.current) fetchJobAbortRef.current.abort();
+      if (trackViewAbortRef.current) trackViewAbortRef.current.abort();
+      if (fetchApplicationsAbortRef.current) fetchApplicationsAbortRef.current.abort();
+      if (fetchCommentsAbortRef.current) fetchCommentsAbortRef.current.abort();
+      if (submitApplicationAbortRef.current) submitApplicationAbortRef.current.abort();
+      if (withdrawApplicationAbortRef.current) withdrawApplicationAbortRef.current.abort();
+      if (updateJobStatusAbortRef.current) updateJobStatusAbortRef.current.abort();
+      if (submitRatingAbortRef.current) submitRatingAbortRef.current.abort();
+      if (addCommentAbortRef.current) addCommentAbortRef.current.abort();
+      if (addReplyAbortRef.current) addReplyAbortRef.current.abort();
+      if (likeCommentAbortRef.current) likeCommentAbortRef.current.abort();
+      if (unlikeCommentAbortRef.current) unlikeCommentAbortRef.current.abort();
+      if (deleteCommentAbortRef.current) deleteCommentAbortRef.current.abort();
+      if (reportCommentAbortRef.current) reportCommentAbortRef.current.abort();
+      if (assignApplicationAbortRef.current) assignApplicationAbortRef.current.abort();
+      if (updateApplicationStatusAbortRef.current) updateApplicationStatusAbortRef.current.abort();
+    };
+  }, []);
+
   useEffect(() => {
     fetchJobDetails();
     trackJobView();
@@ -111,7 +151,22 @@ export default function JobDetailsPage({ params }) {
   const fetchJobDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/jobs/${jobId}`);
+
+      // Cancel previous request
+      if (fetchJobAbortRef.current) {
+        fetchJobAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchJobAbortRef.current = abortController;
+
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       const data = await response.json();
 
       if (response.ok) {
@@ -129,6 +184,9 @@ export default function JobDetailsPage({ params }) {
         router.push('/dashboard');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching job:', error);
       toast.error('Connection error');
       router.push('/dashboard');
@@ -139,32 +197,83 @@ export default function JobDetailsPage({ params }) {
 
   const trackJobView = async () => {
     try {
-      await fetch(`/api/jobs/${jobId}/view`, { method: 'POST' });
+      // Cancel previous request
+      if (trackViewAbortRef.current) {
+        trackViewAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      trackViewAbortRef.current = abortController;
+
+      await fetch(`/api/jobs/${jobId}/view`, {
+        method: 'POST',
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error tracking view:', error);
     }
   };
 
   const fetchApplications = async () => {
     try {
-      const response = await fetch(`/api/jobs/${jobId}/apply`);
+      // Cancel previous request
+      if (fetchApplicationsAbortRef.current) {
+        fetchApplicationsAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchApplicationsAbortRef.current = abortController;
+
+      const response = await fetch(`/api/jobs/${jobId}/apply`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setApplications(data.applications || []);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching applications:', error);
     }
   };
 
   const fetchComments = async () => {
     try {
-      const response = await fetch(`/api/jobs/${jobId}/comments`);
+      // Cancel previous request
+      if (fetchCommentsAbortRef.current) {
+        fetchCommentsAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchCommentsAbortRef.current = abortController;
+
+      const response = await fetch(`/api/jobs/${jobId}/comments`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setComments(data.comments || []);
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching comments:', error);
     }
   };
@@ -186,15 +295,27 @@ export default function JobDetailsPage({ params }) {
     
     try {
       const defaultAmount = job.budget.type === 'negotiable' ? 1000 : job.budget.amount || 1000;
-      
+
+      // Cancel previous request
+      if (submitApplicationAbortRef.current) {
+        submitApplicationAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      submitApplicationAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           proposedAmount: defaultAmount,
           coverLetter: 'I am interested in this job and would like to discuss the details.'
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -214,6 +335,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Application failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error applying:', error);
       toast.error('Connection error');
     } finally {
@@ -234,11 +358,23 @@ export default function JobDetailsPage({ params }) {
 
     setApplying(true);
     try {
+      // Cancel previous request (uses same ref as quick apply since only one can happen at a time)
+      if (submitApplicationAbortRef.current) {
+        submitApplicationAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      submitApplicationAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(applicationData)
+        body: JSON.stringify(applicationData),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -256,6 +392,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Submission failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error submitting application:', error);
       toast.error('Connection error');
     } finally {
@@ -266,14 +405,26 @@ export default function JobDetailsPage({ params }) {
 
   const handleJobAction = async (action) => {
     try {
+      // Cancel previous request
+      if (updateJobStatusAbortRef.current) {
+        updateJobStatusAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      updateJobStatusAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: action,
           data: {}
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -305,6 +456,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Status update failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error updating job:', error);
       toast.error('Connection error');
     }
@@ -362,6 +516,13 @@ export default function JobDetailsPage({ params }) {
 
   const handleSubmitRating = async () => {
     try {
+      // Cancel previous request
+      if (submitRatingAbortRef.current) {
+        submitRatingAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      submitRatingAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/rating`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -370,8 +531,13 @@ export default function JobDetailsPage({ params }) {
           review: ratingData.review,
           categories: ratingData.categories,
           ratedBy: user.role // 'hirer' or 'fixer'
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         toast.success('✅ Rating submitted');
@@ -394,6 +560,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Rating failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error submitting rating:', error);
       toast.error('Connection error');
     }
@@ -401,7 +570,7 @@ export default function JobDetailsPage({ params }) {
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
-    
+
     // Check for sensitive information
     if (containsSensitiveInfo(newComment)) {
       toast.error('⚠️ No personal info in comments - use private messages');
@@ -410,11 +579,23 @@ export default function JobDetailsPage({ params }) {
 
     setSubmittingComment(true);
     try {
+      // Cancel previous request
+      if (addCommentAbortRef.current) {
+        addCommentAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      addCommentAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: newComment })
+        body: JSON.stringify({ message: newComment }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         setNewComment('');
@@ -425,9 +606,12 @@ export default function JobDetailsPage({ params }) {
         toast.error('Comment failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error posting comment:', error);
       toast.error('Connection error');
-    } finally {
+    } finally{
       setSubmittingComment(false);
     }
   };
@@ -443,11 +627,23 @@ export default function JobDetailsPage({ params }) {
 
     setSubmittingReply(true);
     try {
+      // Cancel previous request
+      if (addReplyAbortRef.current) {
+        addReplyAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      addReplyAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentId, message: replyText })
+        body: JSON.stringify({ commentId, message: replyText }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         setReplyText('');
@@ -459,6 +655,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Reply failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error posting reply:', error);
       toast.error('Connection error');
     } finally {
@@ -468,30 +667,60 @@ export default function JobDetailsPage({ params }) {
 
   const handleLikeComment = async (commentId) => {
     try {
+      // Cancel previous request
+      if (likeCommentAbortRef.current) {
+        likeCommentAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      likeCommentAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/like`, {
-        method: 'POST'
+        method: 'POST',
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         fetchComments();
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error liking comment:', error);
     }
   };
 
   const handleLikeReply = async (commentId, replyId) => {
     try {
+      // Cancel previous request
+      if (unlikeCommentAbortRef.current) {
+        unlikeCommentAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      unlikeCommentAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}/like`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ replyId })
+        body: JSON.stringify({ replyId }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         fetchComments();
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error liking reply:', error);
     }
   };
@@ -500,9 +729,21 @@ export default function JobDetailsPage({ params }) {
     if (!confirm('Are you sure you want to delete this comment?')) return;
 
     try {
+      // Cancel previous request
+      if (deleteCommentAbortRef.current) {
+        deleteCommentAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      deleteCommentAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/comments/${commentId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         fetchComments();
@@ -511,6 +752,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Delete failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error deleting comment:', error);
       toast.error('Connection error');
     }
@@ -520,11 +764,23 @@ export default function JobDetailsPage({ params }) {
     if (!confirm('Are you sure you want to delete this reply?')) return;
 
     try {
+      // Cancel previous request (reusing deleteCommentAbortRef for replies too)
+      if (deleteCommentAbortRef.current) {
+        deleteCommentAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      deleteCommentAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/comments`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentId, replyId })
+        body: JSON.stringify({ commentId, replyId }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         fetchComments();
@@ -533,6 +789,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Delete failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error deleting reply:', error);
       toast.error('Connection error');
     }
@@ -545,14 +804,26 @@ export default function JobDetailsPage({ params }) {
     }
 
     try {
+      // Cancel previous request
+      if (assignApplicationAbortRef.current) {
+        assignApplicationAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      assignApplicationAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'accept_application',
           data: { applicationId }
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const result = await response.json();
 
@@ -564,6 +835,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Accept failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error accepting application:', error);
       toast.error('Connection error');
     }
@@ -575,14 +849,26 @@ export default function JobDetailsPage({ params }) {
     }
 
     try {
+      // Cancel previous request
+      if (updateApplicationStatusAbortRef.current) {
+        updateApplicationStatusAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      updateApplicationStatusAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'reject_application',
           data: { applicationId }
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const result = await response.json();
 
@@ -593,6 +879,9 @@ export default function JobDetailsPage({ params }) {
         toast.error('Reject failed');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error rejecting application:', error);
       toast.error('Connection error');
     }
@@ -744,7 +1033,7 @@ export default function JobDetailsPage({ params }) {
                 job.status === 'completed' ? 'bg-gray-100 text-gray-800' :
                 'bg-orange-100 text-orange-800'
               }`}>
-                {job.status.replace('_', ' ').toUpperCase()}
+                {job.status?.replace('_', ' ').toUpperCase() || 'UNKNOWN'}
               </span>
             </div>
             
@@ -987,7 +1276,7 @@ export default function JobDetailsPage({ params }) {
                   job.status === 'completed' ? 'bg-green-100 text-green-800' :
                   'bg-gray-100 text-gray-800'
                 }`}>
-                  {job.status.replace('_', ' ').toUpperCase()}
+                  {job.status?.replace('_', ' ').toUpperCase() || 'UNKNOWN'}
                 </span>
               </div>
               
@@ -1386,7 +1675,7 @@ export default function JobDetailsPage({ params }) {
                         <span className="text-fixly-text-muted">Job Type</span>
                       </div>
                       <span className="font-medium text-fixly-text capitalize">
-                        {job.type.replace('-', ' ')}
+                        {job.type?.replace('-', ' ') || 'Not specified'}
                       </span>
                     </div>
                     
@@ -1410,7 +1699,7 @@ export default function JobDetailsPage({ params }) {
                         <span className="text-fixly-text-muted">Views</span>
                       </div>
                       <span className="font-medium text-fixly-text">
-                        {job.views || 0} views
+                        {job.views?.count || 0} views
                       </span>
                     </div>
                   </div>
@@ -1569,7 +1858,7 @@ export default function JobDetailsPage({ params }) {
                     <div className="flex items-center justify-between">
                       <span className="text-fixly-text-muted">Views</span>
                       <span className="text-sm text-fixly-text">
-                        {job.views || 0}
+                        {job.views?.count || 0}
                       </span>
                     </div>
                     
@@ -1583,7 +1872,7 @@ export default function JobDetailsPage({ params }) {
                     <div className="flex items-center justify-between">
                       <span className="text-fixly-text-muted">Type</span>
                       <span className="text-sm text-fixly-text capitalize">
-                        {job.type.replace('_', ' ')}
+                        {job.type?.replace('_', ' ') || 'Not specified'}
                       </span>
                     </div>
                   </div>

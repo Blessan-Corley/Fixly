@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -54,6 +54,18 @@ function JobApplyContent() {
   const [submitting, setSubmitting] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [showRefreshMessage, setShowRefreshMessage] = useState(false);
+
+  // AbortController refs
+  const fetchJobAbortRef = useRef(null);
+  const submitApplicationAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchJobAbortRef.current) fetchJobAbortRef.current.abort();
+      if (submitApplicationAbortRef.current) submitApplicationAbortRef.current.abort();
+    };
+  }, []);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -114,14 +126,28 @@ function JobApplyContent() {
             setShowRefreshMessage(true);
           }
         }, 5000); // Show message after 5 seconds
-        
-        const response = await fetch(`/api/jobs/${jobId}?forApplication=true`);
+
+        // Cancel previous request
+        if (fetchJobAbortRef.current) {
+          fetchJobAbortRef.current.abort();
+        }
+        const abortController = new AbortController();
+        fetchJobAbortRef.current = abortController;
+
+        const response = await fetch(`/api/jobs/${jobId}?forApplication=true`, {
+          signal: abortController.signal
+        });
+
+        if (abortController.signal.aborted) {
+          return;
+        }
+
         console.log('📡 API Response status:', response.status);
-        
+
         if (!response.ok) {
           throw new Error('Job not found');
         }
-        
+
         const data = await response.json();
         setJob(data.job);
         
@@ -148,11 +174,14 @@ function JobApplyContent() {
           }));
         }
       } catch (error) {
+        if (error.name === 'AbortError') {
+          return;
+        }
         console.error('Error fetching job:', error);
         console.error('Job ID:', jobId);
         console.error('User:', user);
         toast.error('Failed to load job details: ' + error.message);
-        
+
         // Don't redirect immediately, let user see the error
         setTimeout(() => {
           router.push('/dashboard/browse-jobs');
@@ -204,16 +233,28 @@ function JobApplyContent() {
     }
 
     setSubmitting(true);
-    
+
     try {
+      // Cancel previous request
+      if (submitApplicationAbortRef.current) {
+        submitApplicationAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      submitApplicationAbortRef.current = abortController;
+
       const response = await fetch(`/api/jobs/${jobId}/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
           proposedAmount: amount
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -234,6 +275,9 @@ function JobApplyContent() {
         }
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error submitting application:', error);
       toastMessages.job.applicationFailed('Network error occurred');
     } finally {

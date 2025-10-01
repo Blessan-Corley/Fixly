@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -51,6 +51,22 @@ function BrowseJobsContent() {
     hasMore: true,
     total: 0
   });
+
+  // AbortController refs
+  const fetchJobsAbortRef = useRef(null);
+  const checkJobAbortRef = useRef(null);
+
+  // Cleanup: abort all pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchJobsAbortRef.current) {
+        fetchJobsAbortRef.current.abort();
+      }
+      if (checkJobAbortRef.current) {
+        checkJobAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   // Location state
   const [userLocation, setUserLocation] = useState(null);
@@ -131,13 +147,21 @@ function BrowseJobsContent() {
 
   const fetchJobs = async (reset = false) => {
     let timeoutId;
-    
+
+    // Cancel previous request
+    if (fetchJobsAbortRef.current) {
+      fetchJobsAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    fetchJobsAbortRef.current = abortController;
+
     try {
       if (reset) {
         setLoading(true);
         setShowRefreshMessage(false);
         setPagination(prev => ({ ...prev, page: 1 }));
-        
+
         // Show refresh message if loading takes too long
         timeoutId = setTimeout(() => {
           setShowRefreshMessage(true);
@@ -148,7 +172,7 @@ function BrowseJobsContent() {
         page: reset ? '1' : pagination.page.toString(),
         limit: '12',
         ...Object.fromEntries(
-          Object.entries(filters).filter(([_, value]) => 
+          Object.entries(filters).filter(([_, value]) =>
             value !== '' && (Array.isArray(value) ? value.length > 0 : true)
           )
         )
@@ -158,7 +182,13 @@ function BrowseJobsContent() {
         params.set('skills', filters.skills.join(','));
       }
 
-      const response = await fetch(`/api/jobs/browse?${params}`);
+      const response = await fetch(`/api/jobs/browse?${params}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
       
       // Check if response has content before parsing JSON
       const text = await response.text();
@@ -243,6 +273,10 @@ function BrowseJobsContent() {
         toast.error(data.message || 'Failed to fetch jobs');
       }
     } catch (error) {
+      // Ignore abort errors - these are intentional
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching jobs:', error);
       toast.error('Failed to fetch jobs');
     } finally {
@@ -290,7 +324,7 @@ function BrowseJobsContent() {
       toast.error('Invalid job ID. Please try again.');
       return;
     }
-    
+
     if (!canUserApplyToJob(user)) {
       toast.error('You have used all free applications. Upgrade to Pro for unlimited access.');
       router.push('/dashboard/subscription');
@@ -300,20 +334,39 @@ function BrowseJobsContent() {
     // Set loading state for this specific job
     setApplyingJobs(prev => new Set([...prev, jobId]));
 
+    // Cancel previous check request
+    if (checkJobAbortRef.current) {
+      checkJobAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    checkJobAbortRef.current = abortController;
+
     try {
       const targetUrl = `/dashboard/jobs/${jobId}/apply`;
-      
+
       // First check if the job exists by making a quick API call
-      const checkResponse = await fetch(`/api/jobs/${jobId}?forApplication=true`);
+      const checkResponse = await fetch(`/api/jobs/${jobId}?forApplication=true`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (!checkResponse.ok) {
         throw new Error(`Job not found or not accessible: ${checkResponse.status}`);
       }
-      
+
       // Navigate to the application page
       router.push(targetUrl);
       toast.success('Opening application form...');
-      
+
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       toast.error(`Failed to open application form: ${error.message}`);
       
       // Remove loading state on error

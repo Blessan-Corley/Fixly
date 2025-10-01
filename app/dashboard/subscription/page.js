@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -69,9 +69,21 @@ export default function SubscriptionPage() {
 function HirerSubscriptionContent() {
   const { user, updateUser } = useApp();
   const router = useRouter();
-  
+
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('monthly');
+
+  // AbortController refs
+  const createOrderAbortRef = useRef(null);
+  const verifyPaymentAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (createOrderAbortRef.current) createOrderAbortRef.current.abort();
+      if (verifyPaymentAbortRef.current) verifyPaymentAbortRef.current.abort();
+    };
+  }, []);
 
   // Load Razorpay script
   useEffect(() => {
@@ -159,12 +171,24 @@ function HirerSubscriptionContent() {
 
     setLoading(true);
     try {
+      // Cancel previous create order request
+      if (createOrderAbortRef.current) {
+        createOrderAbortRef.current.abort();
+      }
+      const createController = new AbortController();
+      createOrderAbortRef.current = createController;
+
       // Create Razorpay order
       const response = await fetch('/api/subscription/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: planType })
+        body: JSON.stringify({ plan: planType }),
+        signal: createController.signal
       });
+
+      if (createController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -172,9 +196,14 @@ function HirerSubscriptionContent() {
         throw new Error(data.message || 'Failed to create order');
       }
 
+      // Validate Razorpay configuration
+      if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID) {
+        throw new Error('Razorpay is not configured. Please contact support.');
+      }
+
       // Open Razorpay checkout
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_mock', // Mock key for development
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: data.order.amount,
         currency: data.order.currency,
         order_id: data.order.id,
@@ -192,6 +221,13 @@ function HirerSubscriptionContent() {
         handler: async (response) => {
           // Verify payment
           try {
+            // Cancel previous verify request
+            if (verifyPaymentAbortRef.current) {
+              verifyPaymentAbortRef.current.abort();
+            }
+            const verifyController = new AbortController();
+            verifyPaymentAbortRef.current = verifyController;
+
             const verifyResponse = await fetch('/api/subscription/verify-payment', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -200,14 +236,19 @@ function HirerSubscriptionContent() {
                 razorpayPaymentId: response.razorpay_payment_id,
                 razorpaySignature: response.razorpay_signature,
                 planType: planType
-              })
+              }),
+              signal: verifyController.signal
             });
+
+            if (verifyController.signal.aborted) {
+              return;
+            }
 
             const verifyData = await verifyResponse.json();
 
             if (verifyResponse.ok) {
               toast.success('Subscription activated successfully! 🎉');
-              
+
               // Update user context
               updateUser({
                 plan: {
@@ -224,6 +265,9 @@ function HirerSubscriptionContent() {
               throw new Error(verifyData.message || 'Payment verification failed');
             }
           } catch (error) {
+            if (error.name === 'AbortError') {
+              return;
+            }
             console.error('Payment verification error:', error);
             toast.error('Payment verification failed. Please contact support.');
           }
@@ -239,6 +283,9 @@ function HirerSubscriptionContent() {
       rzp.open();
 
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Upgrade error:', error);
       toast.error(error.message || 'Failed to initiate payment');
       setLoading(false);
@@ -594,9 +641,19 @@ function HirerSubscriptionContent() {
 function FixerSubscriptionContent() {
   const { user, updateUser } = useApp();
   const router = useRouter();
-  
+
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('monthly');
+
+  // AbortController ref
+  const subscribeAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (subscribeAbortRef.current) subscribeAbortRef.current.abort();
+    };
+  }, []);
 
   const plans = [
     {
@@ -672,15 +729,27 @@ function FixerSubscriptionContent() {
 
     setLoading(true);
     try {
+      // Cancel previous request
+      if (subscribeAbortRef.current) {
+        subscribeAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      subscribeAbortRef.current = abortController;
+
       // For fixers, we can use a different API endpoint or same with role detection
       const response = await fetch('/api/subscription/fixer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           action: 'subscribe',
           duration: planType
-        })
+        }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -698,6 +767,9 @@ function FixerSubscriptionContent() {
         throw new Error(data.message || 'Failed to activate subscription');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Subscription error:', error);
       toast.error(error.message || 'Failed to activate subscription');
     } finally {

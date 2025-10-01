@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -44,6 +44,22 @@ export default function DashboardPage() {
   // Mobile device detection
   const deviceInfo = useMobileDevice();
 
+  // AbortController refs for fetch operations
+  const statsAbortRef = useRef(null);
+  const jobsAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (statsAbortRef.current) {
+        statsAbortRef.current.abort();
+      }
+      if (jobsAbortRef.current) {
+        jobsAbortRef.current.abort();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (user) {
       fetchDashboardData();
@@ -53,15 +69,29 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
   try {
     startLoading('Loading dashboard data...');
-    
+
+    // Cancel previous stats request if exists
+    if (statsAbortRef.current) {
+      statsAbortRef.current.abort();
+    }
+    const statsController = new AbortController();
+    statsAbortRef.current = statsController;
+
     // ✅ Fetch dashboard stats - API gets role from session/database
     const statsResponse = await fetch('/api/dashboard/stats', {
       method: 'GET',
       credentials: 'include', // Include cookies for session
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      signal: statsController.signal
     });
+
+    // Check if aborted
+    if (statsController.signal.aborted) {
+      return;
+    }
+
     if (statsResponse.ok) {
       const statsData = await statsResponse.json();
       setStats(statsData);
@@ -73,14 +103,28 @@ export default function DashboardPage() {
       }
     }
 
-    // ✅ Fetch recent jobs - API gets role from session/database  
+    // Cancel previous jobs request if exists
+    if (jobsAbortRef.current) {
+      jobsAbortRef.current.abort();
+    }
+    const jobsController = new AbortController();
+    jobsAbortRef.current = jobsController;
+
+    // ✅ Fetch recent jobs - API gets role from session/database
     const jobsResponse = await fetch('/api/dashboard/recent-jobs', {
       method: 'GET',
       credentials: 'include', // Include cookies for session
       headers: {
         'Content-Type': 'application/json',
-      }
+      },
+      signal: jobsController.signal
     });
+
+    // Check if aborted
+    if (jobsController.signal.aborted) {
+      return;
+    }
+
     if (jobsResponse.ok) {
       const jobsData = await jobsResponse.json();
       setRecentJobs(jobsData.jobs || []);
@@ -93,6 +137,10 @@ export default function DashboardPage() {
     }
 
   } catch (error) {
+    // Ignore abort errors
+    if (error.name === 'AbortError') {
+      return;
+    }
     console.error('Error fetching dashboard data:', error);
     toast.error('Failed to load dashboard data');
   } finally {

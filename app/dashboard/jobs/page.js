@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -89,8 +89,39 @@ function JobsContent() {
     setFilters(prev => ({ ...prev, status: activeTab }));
   }, [activeTab]);
 
+  const abortControllerRef = useRef(null);
+  const earningsAbortRef = useRef(null);
+  const deleteAbortRef = useRef(null);
+  const repostAbortRef = useRef(null);
+
+  // Cleanup: abort all pending requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (earningsAbortRef.current) {
+        earningsAbortRef.current.abort();
+      }
+      if (deleteAbortRef.current) {
+        deleteAbortRef.current.abort();
+      }
+      if (repostAbortRef.current) {
+        repostAbortRef.current.abort();
+      }
+    };
+  }, []);
+
   const fetchJobs = async (reset = false) => {
     if (!checkConnection()) return;
+
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       if (reset) {
@@ -107,7 +138,14 @@ function JobsContent() {
         )
       });
 
-      const response = await fetch(`/api/jobs/post?${params}`);
+      const response = await fetch(`/api/jobs/post?${params}`, {
+        signal: abortController.signal
+      });
+
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        return;
+      }
       const text = await response.text();
       let data;
       
@@ -129,6 +167,10 @@ function JobsContent() {
         toast.error(data.message || 'Failed to fetch jobs');
       }
     } catch (error) {
+      // Ignore abort errors - these are intentional
+      if (error.name === 'AbortError') {
+        return;
+      }
       handleNetworkError(error);
     } finally {
       setLoading(false);
@@ -144,13 +186,32 @@ function JobsContent() {
   };
 
   const fetchEarnings = async () => {
+    // Cancel previous request
+    if (earningsAbortRef.current) {
+      earningsAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    earningsAbortRef.current = abortController;
+
     try {
-      const response = await fetch('/api/user/earnings');
+      const response = await fetch('/api/user/earnings', {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setEarnings(data.earnings);
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching earnings:', error);
     }
   };
@@ -175,10 +236,23 @@ function JobsContent() {
 
     setDeleteModal(prev => ({ ...prev, loading: true }));
 
+    // Cancel previous request
+    if (deleteAbortRef.current) {
+      deleteAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    deleteAbortRef.current = abortController;
+
     try {
       const response = await fetch(`/api/jobs/${deleteModal.jobId}`, {
         method: 'DELETE',
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       if (response.ok) {
         toast.success('Job deleted successfully', {
@@ -193,6 +267,10 @@ function JobsContent() {
         });
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       handleNetworkError(error);
     } finally {
       setDeleteModal(prev => ({ ...prev, loading: false }));
@@ -211,6 +289,14 @@ function JobsContent() {
     if (!checkConnection()) return;
 
     setRepostModal(prev => ({ ...prev, loading: true }));
+
+    // Cancel previous request
+    if (repostAbortRef.current) {
+      repostAbortRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    repostAbortRef.current = abortController;
 
     try {
       const response = await fetch('/api/jobs/post', {
@@ -234,7 +320,12 @@ function JobsContent() {
           deadline: new Date(formData.deadline),
           scheduledDate: repostModal.job.scheduledDate ? new Date(Date.now() + 24 * 60 * 60 * 1000) : undefined
         }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -251,6 +342,10 @@ function JobsContent() {
         });
       }
     } catch (error) {
+      // Ignore abort errors
+      if (error.name === 'AbortError') {
+        return;
+      }
       handleNetworkError(error);
     } finally {
       setRepostModal(prev => ({ ...prev, loading: false }));
@@ -569,7 +664,7 @@ function JobsContent() {
                   </div>
                   <div className="flex items-center">
                     <Eye className="h-4 w-4 mr-1" />
-                    {job.views || 0} views
+                    {job.views?.count || 0} views
                   </div>
                 </div>
 

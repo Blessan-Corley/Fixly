@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -47,6 +47,22 @@ export default function NotificationsPage() {
   });
   const [activeTab, setActiveTab] = useState('all');
 
+  // AbortController refs
+  const fetchAbortRef = useRef(null);
+  const markAsReadAbortRef = useRef(null);
+  const markAllAbortRef = useRef(null);
+  const deleteAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchAbortRef.current) fetchAbortRef.current.abort();
+      if (markAsReadAbortRef.current) markAsReadAbortRef.current.abort();
+      if (markAllAbortRef.current) markAllAbortRef.current.abort();
+      if (deleteAbortRef.current) deleteAbortRef.current.abort();
+    };
+  }, []);
+
   useEffect(() => {
     fetchNotifications();
   }, [filters]);
@@ -54,6 +70,14 @@ export default function NotificationsPage() {
   const fetchNotifications = async () => {
     try {
       setLoading(true);
+
+      // Cancel previous request
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchAbortRef.current = abortController;
+
       const params = new URLSearchParams({
         type: filters.type !== 'all' ? filters.type : '',
         status: filters.status !== 'all' ? filters.status : '',
@@ -61,7 +85,14 @@ export default function NotificationsPage() {
         limit: '50'
       });
 
-      const response = await fetch(`/api/user/notifications?${params}`);
+      const response = await fetch(`/api/user/notifications?${params}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       const data = await response.json();
 
       if (response.ok) {
@@ -70,6 +101,9 @@ export default function NotificationsPage() {
         toastMessages.error.generic();
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching notifications:', error);
       toastMessages.error.network();
     } finally {
@@ -80,19 +114,31 @@ export default function NotificationsPage() {
   const markAsRead = async (notificationId) => {
     try {
       setMarkingAsRead(prev => new Set([...prev, notificationId]));
-      
+
+      // Cancel previous request
+      if (markAsReadAbortRef.current) {
+        markAsReadAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      markAsReadAbortRef.current = abortController;
+
       const response = await fetch(`/api/user/notifications/read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ notificationId }),
+        signal: abortController.signal
       });
 
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
-        setNotifications(prev => 
-          prev.map(notification => 
-            notification._id === notificationId 
+        setNotifications(prev =>
+          prev.map(notification =>
+            notification._id === notificationId
               ? { ...notification, read: true, readAt: new Date() }
               : notification
           )
@@ -104,6 +150,9 @@ export default function NotificationsPage() {
         });
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error marking notification as read:', error);
       toastMessages.error.network();
     } finally {
@@ -117,20 +166,32 @@ export default function NotificationsPage() {
 
   const markAllAsRead = async () => {
     try {
+      // Cancel previous request
+      if (markAllAbortRef.current) {
+        markAllAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      markAllAbortRef.current = abortController;
+
       const response = await fetch(`/api/user/notifications/read`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ markAll: true }),
+        signal: abortController.signal
       });
 
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
-        setNotifications(prev => 
-          prev.map(notification => ({ 
-            ...notification, 
-            read: true, 
-            readAt: new Date() 
+        setNotifications(prev =>
+          prev.map(notification => ({
+            ...notification,
+            read: true,
+            readAt: new Date()
           }))
         );
         toast.success('All notifications marked as read ✅', {
@@ -143,6 +204,9 @@ export default function NotificationsPage() {
         });
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error marking all notifications as read:', error);
       toastMessages.error.network();
     }
@@ -150,16 +214,28 @@ export default function NotificationsPage() {
 
   const deleteNotification = async (notificationId) => {
     try {
+      // Cancel previous request
+      if (deleteAbortRef.current) {
+        deleteAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      deleteAbortRef.current = abortController;
+
       const response = await fetch(`/api/user/notifications`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ notificationId }),
+        signal: abortController.signal
       });
 
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       if (response.ok) {
-        setNotifications(prev => 
+        setNotifications(prev =>
           prev.filter(notification => notification._id !== notificationId)
         );
         toast.success('Notification deleted', {
@@ -172,6 +248,9 @@ export default function NotificationsPage() {
         });
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error deleting notification:', error);
       toastMessages.error.network();
     }

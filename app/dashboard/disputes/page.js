@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
@@ -47,6 +47,16 @@ export default function DisputesPage() {
     hasMore: false
   });
 
+  // AbortController ref
+  const fetchAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchAbortRef.current) fetchAbortRef.current.abort();
+    };
+  }, []);
+
   useEffect(() => {
     if (session) {
       fetchDisputes();
@@ -57,6 +67,13 @@ export default function DisputesPage() {
     try {
       if (page === 1) setLoading(true);
       else setLoadingMore(true);
+
+      // Cancel previous request
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchAbortRef.current = abortController;
 
       const params = new URLSearchParams({
         page: page.toString(),
@@ -69,7 +86,14 @@ export default function DisputesPage() {
       if (filters.category !== 'all') params.append('category', filters.category);
       if (filters.search) params.append('search', filters.search);
 
-      const response = await fetch(`/api/disputes?${params}`);
+      const response = await fetch(`/api/disputes?${params}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
@@ -84,6 +108,9 @@ export default function DisputesPage() {
         toast.error(data.message || 'Failed to fetch disputes');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching disputes:', error);
       toast.error('Failed to fetch disputes');
     } finally {

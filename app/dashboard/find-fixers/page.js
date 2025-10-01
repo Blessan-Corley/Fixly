@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -83,8 +83,20 @@ function FindFixersContent() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showMessageModal, setShowMessageModal] = useState(false);
 
+  // AbortController refs
+  const fetchAbortRef = useRef(null);
+  const messageAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchAbortRef.current) fetchAbortRef.current.abort();
+      if (messageAbortRef.current) messageAbortRef.current.abort();
+    };
+  }, []);
+
   const skillOptions = [
-    'Plumbing', 'Electrical', 'Carpentry', 'Painting', 'Cleaning', 
+    'Plumbing', 'Electrical', 'Carpentry', 'Painting', 'Cleaning',
     'AC Repair', 'Appliance Repair', 'Gardening', 'Moving', 'Handyman',
     'Pest Control', 'Home Security', 'Interior Design', 'Masonry'
   ];
@@ -102,6 +114,13 @@ function FindFixersContent() {
         setSearching(true);
       }
 
+      // Cancel previous request
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchAbortRef.current = abortController;
+
       const params = new URLSearchParams({
         page: reset ? '1' : pagination.page.toString(),
         limit: '12',
@@ -118,8 +137,14 @@ function FindFixersContent() {
         params.set('skills', filters.skills.join(','));
       }
 
-      const response = await fetch(`/api/user/profile/search?${params}`);
-      
+      const response = await fetch(`/api/user/profile/search?${params}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       // Handle empty responses
       const text = await response.text();
       let data;
@@ -141,6 +166,9 @@ function FindFixersContent() {
         toast.error(data.message || 'Failed to fetch fixers');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching fixers:', error);
       toast.error('Failed to fetch fixers');
     } finally {
@@ -679,6 +707,14 @@ function ProfileModal({ fixer, onClose, onContact }) {
 function MessageModal({ fixer, onClose }) {
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const sendAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (sendAbortRef.current) sendAbortRef.current.abort();
+    };
+  }, []);
 
   const handleSendMessage = async () => {
     if (!message.trim()) {
@@ -688,6 +724,13 @@ function MessageModal({ fixer, onClose }) {
 
     setSending(true);
     try {
+      // Cancel previous request
+      if (sendAbortRef.current) {
+        sendAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      sendAbortRef.current = abortController;
+
       const response = await fetch('/api/messages', {
         method: 'POST',
         headers: {
@@ -698,7 +741,12 @@ function MessageModal({ fixer, onClose }) {
           message: message.trim(),
           type: 'initial_contact'
         }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -709,6 +757,9 @@ function MessageModal({ fixer, onClose }) {
         toast.error(data.message || 'Failed to send message');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
     } finally {

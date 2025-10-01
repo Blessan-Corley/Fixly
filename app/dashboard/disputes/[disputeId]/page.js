@@ -54,6 +54,20 @@ export default function DisputeDetailPage() {
     }
   });
 
+  // AbortController refs
+  const fetchDisputeAbortRef = useRef(null);
+  const sendMessageAbortRef = useRef(null);
+  const submitResponseAbortRef = useRef(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (fetchDisputeAbortRef.current) fetchDisputeAbortRef.current.abort();
+      if (sendMessageAbortRef.current) sendMessageAbortRef.current.abort();
+      if (submitResponseAbortRef.current) submitResponseAbortRef.current.abort();
+    };
+  }, []);
+
   useEffect(() => {
     if (session && disputeId) {
       fetchDispute();
@@ -66,7 +80,20 @@ export default function DisputeDetailPage() {
 
   const fetchDispute = async () => {
     try {
-      const response = await fetch(`/api/disputes/${disputeId}`);
+      // Cancel previous request
+      if (fetchDisputeAbortRef.current) {
+        fetchDisputeAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      fetchDisputeAbortRef.current = abortController;
+
+      const response = await fetch(`/api/disputes/${disputeId}`, {
+        signal: abortController.signal
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
       const data = await response.json();
 
       if (data.success) {
@@ -83,6 +110,9 @@ export default function DisputeDetailPage() {
         router.push('/dashboard/disputes');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching dispute:', error);
       toast.error('Failed to fetch dispute');
       router.push('/dashboard/disputes');
@@ -103,6 +133,13 @@ export default function DisputeDetailPage() {
     setSendingMessage(true);
 
     try {
+      // Cancel previous request
+      if (sendMessageAbortRef.current) {
+        sendMessageAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      sendMessageAbortRef.current = abortController;
+
       const response = await fetch(`/api/disputes/${disputeId}`, {
         method: 'POST',
         headers: {
@@ -111,7 +148,12 @@ export default function DisputeDetailPage() {
         body: JSON.stringify({
           content: messageContent
         }),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -124,6 +166,9 @@ export default function DisputeDetailPage() {
         setNewMessage(messageContent); // Restore message
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
       setNewMessage(messageContent); // Restore message
@@ -141,13 +186,25 @@ export default function DisputeDetailPage() {
     setSubmittingResponse(true);
 
     try {
+      // Cancel previous request
+      if (submitResponseAbortRef.current) {
+        submitResponseAbortRef.current.abort();
+      }
+      const abortController = new AbortController();
+      submitResponseAbortRef.current = abortController;
+
       const response = await fetch(`/api/disputes/${disputeId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(responseData),
+        signal: abortController.signal
       });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const data = await response.json();
 
@@ -159,6 +216,9 @@ export default function DisputeDetailPage() {
         toast.error(data.message || 'Failed to submit response');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
       console.error('Error submitting response:', error);
       toast.error('Failed to submit response');
     } finally {
