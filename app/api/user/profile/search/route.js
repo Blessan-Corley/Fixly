@@ -8,10 +8,18 @@ import { rateLimit } from '../../../../../utils/rateLimiting';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Escape special regex characters to prevent ReDoS attacks
+ */
+function escapeRegex(string) {
+  if (typeof string !== 'string') return '';
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(request) {
   try {
-    // Apply rate limiting
-    const rateLimitResult = await rateLimit(request, 'profile_search', 100, 60 * 1000);
+    // Apply rate limiting (stricter to prevent scraping)
+    const rateLimitResult = await rateLimit(request, 'profile_search', 30, 60 * 1000); // 30 per minute
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { message: 'Too many requests. Please try again later.' },
@@ -48,12 +56,13 @@ export async function GET(request) {
       banned: { $ne: true }
     };
 
-    // Search in name and skills
+    // Search in name and skills (with escaped regex to prevent ReDoS)
     if (search) {
+      const sanitizedSearch = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { skills: { $in: [new RegExp(search, 'i')] } },
-        { 'bio': { $regex: search, $options: 'i' } }
+        { name: { $regex: sanitizedSearch, $options: 'i' } },
+        { skills: { $in: [new RegExp(sanitizedSearch, 'i')] } },
+        { 'bio': { $regex: sanitizedSearch, $options: 'i' } }
       ];
     }
 
@@ -62,11 +71,12 @@ export async function GET(request) {
       query.skills = { $in: skills };
     }
 
-    // Filter by location
+    // Filter by location (with escaped regex to prevent ReDoS)
     if (location) {
+      const sanitizedLocation = escapeRegex(location);
       query.$or = [
-        { 'location.city': { $regex: location, $options: 'i' } },
-        { 'location.state': { $regex: location, $options: 'i' } }
+        { 'location.city': { $regex: sanitizedLocation, $options: 'i' } },
+        { 'location.state': { $regex: sanitizedLocation, $options: 'i' } }
       ];
     }
 

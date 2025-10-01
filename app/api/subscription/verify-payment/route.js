@@ -86,26 +86,49 @@ export async function POST(request) {
       );
     }
 
-    // For development (mock Razorpay), skip signature verification
-    let isValidSignature = true;
-    
-    if (process.env.NODE_ENV === 'production' && process.env.RAZORPAY_KEY_SECRET) {
-      // Real Razorpay signature verification
-      const body = razorpayOrderId + '|' + razorpayPaymentId;
-      const expectedSignature = crypto
-        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-        .update(body.toString())
-        .digest('hex');
-      
-      isValidSignature = expectedSignature === razorpaySignature;
-    } else {
-      // Mock verification for development
-      console.log('Using mock payment verification for development');
+    // ALWAYS verify payment signature - use test keys in development
+    const RAZORPAY_SECRET = process.env.NODE_ENV === 'production'
+      ? process.env.RAZORPAY_KEY_SECRET
+      : process.env.RAZORPAY_TEST_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET;
+
+    if (!RAZORPAY_SECRET) {
+      console.error('CRITICAL: Razorpay secret key not configured');
+      return NextResponse.json(
+        { message: 'Payment verification service unavailable. Please contact support.' },
+        { status: 503 }
+      );
     }
 
+    // Verify Razorpay payment signature
+    const signatureBody = razorpayOrderId + '|' + razorpayPaymentId;
+    const expectedSignature = crypto
+      .createHmac('sha256', RAZORPAY_SECRET)
+      .update(signatureBody.toString())
+      .digest('hex');
+
+    const isValidSignature = expectedSignature === razorpaySignature;
+
+    // Log all verification attempts for security audit
+    console.log('Payment verification attempt:', {
+      orderId: razorpayOrderId,
+      paymentId: razorpayPaymentId,
+      userId: user._id,
+      verified: isValidSignature,
+      environment: process.env.NODE_ENV,
+      timestamp: new Date().toISOString()
+    });
+
     if (!isValidSignature) {
+      // Log failed verification for security monitoring
+      console.error('Payment signature verification FAILED:', {
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        userId: user._id,
+        userEmail: user.email
+      });
+
       return NextResponse.json(
-        { message: 'Invalid payment signature' },
+        { message: 'Invalid payment signature. Payment verification failed.' },
         { status: 400 }
       );
     }
