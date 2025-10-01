@@ -8,6 +8,14 @@ import { rateLimit } from '@/utils/rateLimiting';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Escape special regex characters to prevent ReDoS attacks
+ */
+function escapeRegex(string) {
+  if (typeof string !== 'string') return '';
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function GET(request) {
   try {
     // Apply rate limiting
@@ -54,11 +62,12 @@ export async function GET(request) {
       matchQuery['applications.status'] = status;
     }
 
-    // Add search filter if provided
+    // Add search filter if provided (with escaped regex to prevent ReDoS)
     if (search) {
+      const sanitizedSearch = escapeRegex(search);
       matchQuery.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { title: { $regex: sanitizedSearch, $options: 'i' } },
+        { description: { $regex: sanitizedSearch, $options: 'i' } }
       ];
     }
 

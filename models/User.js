@@ -87,7 +87,6 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Email is required'],
     unique: true,
     lowercase: true,
-    match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email address'],
     validate: {
       validator: function(email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -106,12 +105,13 @@ const userSchema = new mongoose.Schema({
       validator: function(phone) {
         // If phone not provided and not required – accept
         if (!phone) return this.authMethod !== 'email';
-        
+
         // For development/testing, allow any phone number
         if (process.env.NODE_ENV === 'development') return true;
-        
-        const cleanPhone = phone.replace(/[^\d]/g, '');
-        const indianPhoneRegex = /^(\+91)?[6-9]\d{9}$/;
+
+        const cleanPhone = phone.replace(/[^\d+]/g, '');
+        // Allow international format with +91 or just 10 digits
+        const indianPhoneRegex = /^(\+91[6-9]\d{9}|[6-9]\d{9})$/;
         return indianPhoneRegex.test(cleanPhone);
       },
       message: 'Please enter a valid Indian phone number (10 digits starting with 6-9)'
@@ -119,7 +119,13 @@ const userSchema = new mongoose.Schema({
     set: function(phone) {
       if (!phone) return phone;
       const cleanPhone = phone.replace(/[^\d]/g, '');
-      return cleanPhone.startsWith('91') ? `+${cleanPhone}` : `+91${cleanPhone}`;
+      // Only format if not already formatted
+      if (cleanPhone.startsWith('91') && cleanPhone.length === 12) {
+        return `+${cleanPhone}`;
+      } else if (cleanPhone.length === 10) {
+        return `+91${cleanPhone}`;
+      }
+      return phone; // Return as-is if already formatted
     }
   },
   passwordHash: {

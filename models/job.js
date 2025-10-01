@@ -16,8 +16,18 @@ const jobSchema = new mongoose.Schema({
     minlength: [30, 'Job description must be at least 30 characters'],
     maxlength: [2000, 'Job description cannot exceed 2000 characters']
   },
-  
-  // Urgency (removed job type and recurring options)
+
+  // Job Type
+  type: {
+    type: String,
+    enum: {
+      values: ['one-time', 'recurring', 'contract', 'project'],
+      message: 'Invalid job type'
+    },
+    default: 'one-time'
+  },
+
+  // Urgency
   urgency: {
     type: String,
     enum: {
@@ -28,8 +38,13 @@ const jobSchema = new mongoose.Schema({
   },
   scheduledDate: {
     type: Date,
+    required: function() {
+      // Scheduled date only required for 'scheduled' urgency
+      return this.urgency === 'scheduled';
+    },
     validate: {
       validator: function(date) {
+        // Must be in future if provided
         return !date || date > new Date();
       },
       message: 'Scheduled date must be in the future'
@@ -74,7 +89,7 @@ const jobSchema = new mongoose.Schema({
     },
     filename: {
       type: String,
-      required: [true, 'Filename is required'],
+      required: false, // Make optional for backward compatibility with JobDraft
       maxlength: [100, 'Filename cannot exceed 100 characters']
     },
     type: {
@@ -177,13 +192,18 @@ const jobSchema = new mongoose.Schema({
     }
   },
   
-  // Timing
+  // Timing - flexible validation based on urgency
   deadline: {
     type: Date,
-    required: [true, 'Deadline is required'],
+    required: function() {
+      // Deadline only required for 'asap' and 'flexible' urgency
+      return this.urgency !== 'scheduled';
+    },
     validate: {
       validator: function(date) {
-        return date > new Date();
+        // Skip validation if deadline not provided for scheduled jobs
+        if (!date && this.urgency === 'scheduled') return true;
+        return !date || date > new Date();
       },
       message: 'Deadline must be in the future'
     }
@@ -1506,7 +1526,7 @@ jobSchema.statics.findWithFilters = function(filters = {}) {
   }
   
   return this.find(query)
-    .populate('createdBy', 'name username photoURL rating location')
+    .populate('createdBy', 'name username profilePhoto picture rating location')
     .sort(sort);
 };
 
@@ -1518,7 +1538,7 @@ jobSchema.statics.findUrgentJobs = function() {
   return this.find({
     status: 'open',
     deadline: { $lte: tomorrow }
-  }).populate('createdBy', 'name username photoURL rating location');
+  }).populate('createdBy', 'name username profilePhoto picture rating location');
 };
 
 // NEW: Static method to find jobs by user
@@ -1526,8 +1546,8 @@ jobSchema.statics.findByUser = function(userId, role = 'created') {
   const query = role === 'created' ? { createdBy: userId } : { assignedTo: userId };
   
   return this.find(query)
-    .populate('createdBy', 'name username photoURL rating location')
-    .populate('assignedTo', 'name username photoURL rating location')
+    .populate('createdBy', 'name username profilePhoto picture rating location')
+    .populate('assignedTo', 'name username profilePhoto picture rating location')
     .sort({ createdAt: -1 });
 };
 
