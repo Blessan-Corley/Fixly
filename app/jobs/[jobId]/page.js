@@ -267,7 +267,7 @@ export default function JobDetailsPage() {
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center space-x-2">
                   <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(job.status)}`}>
-                    {job.status.replace('_', ' ').charAt(0).toUpperCase() + job.status.slice(1)}
+                    {job.status?.replace('_', ' ').charAt(0).toUpperCase() + job.status?.slice(1) || 'Unknown'}
                   </span>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getUrgencyColor(job.urgency)}`}>
                     {job.urgency.charAt(0).toUpperCase() + job.urgency.slice(1)} Priority
@@ -312,7 +312,7 @@ export default function JobDetailsPage() {
                 </div>
                 <div className="flex items-center text-fixly-text-light">
                   <Eye className="h-4 w-4 mr-2" />
-                  <span className="text-sm">{job.views || 0} views</span>
+                  <span className="text-sm">{job.views?.count || 0} views</span>
                 </div>
                 <div className="flex items-center text-fixly-text-light">
                   <Users className="h-4 w-4 mr-2" />
@@ -775,7 +775,7 @@ export default function JobDetailsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-fixly-text-light">Views</span>
-                  <span className="text-fixly-text">{job.views || 0}</span>
+                  <span className="text-fixly-text">{job.views?.count || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-fixly-text-light">Comments</span>

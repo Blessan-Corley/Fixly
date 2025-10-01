@@ -198,7 +198,7 @@ export default function ContactPage() {
             Get in Touch
           </h1>
           <p className="text-xl text-fixly-text-light max-w-3xl mx-auto mb-8">
-            Have questions, feedback, or need help? We're here to assist you.
+            Have questions, feedback, or need help? We&apos;re here to assist you.
             Our friendly support team is ready to help you get the most out of Fixly.
           </p>
         </motion.div>
