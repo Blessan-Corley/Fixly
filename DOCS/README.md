@@ -1,8 +1,8 @@
-# 🔧 Fixly - Local Service Marketplace
+#  Fixly - Local Service Marketplace
 
 A modern platform connecting customers with local service professionals. Built with Next.js 14, MongoDB, and designed for India's growing service economy.
 
-## ✨ What is Fixly?
+##  What is Fixly?
 
 **For Customers (Hirers):**
 - Post service requests (plumbing, electrical, cleaning, etc.)
@@ -15,17 +15,17 @@ A modern platform connecting customers with local service professionals. Built w
 - Build reputation with customer reviews
 - Pro plan (₹99/month) for unlimited applications
 
-## 🚀 Key Features
+## Key Features
 
-- **📱 Modern Interface** - Clean, responsive design with dark/light/system themes
-- **🔐 Secure Authentication** - Google OAuth + email login
-- **⚡ Real-time Updates** - Live notifications and messaging
-- **📍 Location-based** - Connect with local professionals
-- **💳 Pro Subscriptions** - Enhanced features for service providers
-- **⭐ Review System** - Build trust through ratings and reviews
-- **📊 Dashboard** - Comprehensive management for all users
+- **Modern Interface** - Clean, responsive design with dark/light/system themes
+- **Secure Authentication** - Google OAuth + email login
+- ** Real-time Updates** - Live notifications and messaging
+- ** Location-based** - Connect with local professionals
+- ** Pro Subscriptions** - Enhanced features for service providers
+- ** Review System** - Build trust through ratings and reviews
+- ** Dashboard** - Comprehensive management for all users
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 - **Frontend:** Next.js 14, Tailwind CSS, Framer Motion
 - **Backend:** Next.js API Routes, NextAuth.js
@@ -34,7 +34,7 @@ A modern platform connecting customers with local service professionals. Built w
 - **Styling:** Tailwind CSS with custom design system
 - **Deployment Ready:** Optimized for production
 
-## 📦 Quick Setup
+##  Quick Setup
 
 1. **Clone & Install**
    ```bash
@@ -70,25 +70,25 @@ A modern platform connecting customers with local service professionals. Built w
 
 4. **Visit** http://localhost:3000
 
-## 🌟 Production Ready
+##  Production Ready
 
-- ✅ Security audited and production-optimized
-- ✅ Environment variables properly configured
-- ✅ Error handling and logging
-- ✅ Performance optimized
-- ✅ Mobile responsive design
-- ✅ Dark mode support with system detection
+-  Security audited and production-optimized
+-  Environment variables properly configured
+-  Error handling and logging
+-  Performance optimized
+-  Mobile responsive design
+-  Dark mode support with system detection
 
-## 📞 Contact & Support
+##  Contact & Support
 
 - **Email:** blessancorley@gmail.com
 - **Phone:** +91 9976768211
 - **Location:** Coimbatore, Tamil Nadu, India
 
-## 🏷️ License
+##  License
 
 © 2025 Fixly Platform. All rights reserved.
 
 ---
 
-**Ready to connect customers with trusted local professionals? Get started with Fixly today!** 🚀
+**Ready to connect customers with trusted local professionals? Get started with Fixly today!** 
