@@ -7,6 +7,7 @@ import User from '../../../../../models/User';
 import Job from '../../../../../models/Job';
 import Review from '../../../../../models/Review';
 import { rateLimit } from '../../../../../utils/rateLimiting';
+import { redisUtils } from '../../../../../lib/redis';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,11 +26,37 @@ export async function GET(request, { params }) {
     const { username } = params;
     const session = await getServerSession(authOptions);
 
+    // ✅ REDIS CACHING: Try cache first
+    const cacheKey = `user:profile:${username}`;
+    const cacheTTL = 15 * 60; // 15 minutes for user profiles
+
+    try {
+      const cachedProfile = await redisUtils.get(cacheKey);
+      if (cachedProfile) {
+        try {
+          const parsedData = JSON.parse(cachedProfile);
+          console.log('✅ Cache HIT for profile:', username);
+          return NextResponse.json(parsedData, {
+            headers: {
+              'X-Cache': 'HIT',
+              'Cache-Control': `max-age=${cacheTTL}`
+            }
+          });
+        } catch (parseError) {
+          console.warn('⚠️ Invalid cached data, clearing:', username);
+          await redisUtils.del(cacheKey);
+        }
+      }
+      console.log('❌ Cache MISS for profile:', username);
+    } catch (cacheError) {
+      console.error('⚠️ Profile cache read error:', cacheError);
+    }
+
     await connectDB();
 
     // Find user by username
     const user = await User.findOne({ username })
-      .select('-password -email -notifications -preferences -privacy -createdAt -updatedAt +lastActivityAt')
+      .select('-passwordHash -password -email -notifications -preferences -privacy -createdAt -updatedAt -__v')
       .lean();
 
     if (!user) {
@@ -83,9 +110,24 @@ export async function GET(request, { params }) {
       delete profileData.address;
     }
 
-    return NextResponse.json({
+    const response = {
       success: true,
       user: profileData
+    };
+
+    // ✅ REDIS CACHING: Store profile in cache
+    try {
+      await redisUtils.set(cacheKey, JSON.stringify(response), cacheTTL);
+      console.log('✅ Profile cached successfully:', username);
+    } catch (cacheError) {
+      console.error('⚠️ Profile cache write error:', cacheError);
+    }
+
+    return NextResponse.json(response, {
+      headers: {
+        'X-Cache': 'MISS',
+        'Cache-Control': `max-age=${cacheTTL}`
+      }
     });
 
   } catch (error) {
