@@ -1586,9 +1586,9 @@ function PostJobContent() {
                     )}
                     
                     {/* File info overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2">
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 dark:bg-black/80 text-white p-2">
                       <p className="text-xs truncate">{attachment.name}</p>
-                      <p className="text-xs text-gray-300">
+                      <p className="text-xs text-gray-300 dark:text-gray-400">
                         {(attachment.size / 1024 / 1024).toFixed(1)} MB
                       </p>
                     </div>
@@ -1737,7 +1737,7 @@ function PostJobContent() {
                         <FileText className="h-6 w-6 text-fixly-accent" />
                       </div>
                     )}
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-1">
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 dark:bg-black/80 text-white p-1">
                       <p className="text-xs truncate">{attachment.name}</p>
                     </div>
                   </div>
@@ -1748,14 +1748,14 @@ function PostJobContent() {
         </div>
       </div>
 
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
         <div className="flex items-start">
-          <AlertCircle className="h-5 w-5 text-yellow-600 mr-2 mt-0.5" />
+          <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mr-2 mt-0.5" />
           <div className="text-sm">
-            <p className="font-medium text-yellow-800">
+            <p className="font-medium text-yellow-800 dark:text-yellow-400">
               Rate Limit Notice
             </p>
-            <p className="text-yellow-700 mt-1">
+            <p className="text-yellow-700 dark:text-yellow-300 mt-1">
               Free users can post another job in 3 hours. Upgrade to Pro for unlimited posting!
             </p>
           </div>
@@ -1865,16 +1865,16 @@ function PostJobContent() {
 
       {/* Comprehensive Validation Summary */}
       {Object.keys(errors).length > 0 && (
-        <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
           <div className="flex items-start">
             <div className="flex-shrink-0">
-              <AlertTriangle className="h-5 w-5 text-red-400" />
+              <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400" />
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-400">
                 Please fix the following issues:
               </h3>
-              <div className="mt-2 text-sm text-red-700">
+              <div className="mt-2 text-sm text-red-700 dark:text-red-300">
                 <ul className="list-disc pl-5 space-y-1">
                   {Object.entries(errors).map(([field, message]) => {
                     // Better field name formatting
@@ -2005,13 +2005,13 @@ function PostJobContent() {
       
       {/* Subscription Info Banner */}
       {subscriptionInfo && !subscriptionInfo.isPro && !subscriptionInfo.canPostJob && (
-        <div className="card mb-6 bg-yellow-50 border-yellow-200">
-          <div className="flex items-center text-yellow-800">
+        <div className="card mb-6 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+          <div className="flex items-center text-yellow-800 dark:text-yellow-400">
             <Clock className="h-5 w-5 mr-3" />
             <div className="flex-1">
               <p className="font-medium">Job posting limit reached</p>
-              <p className="text-sm">
-                {subscriptionInfo.nextJobPostTime 
+              <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                {subscriptionInfo.nextJobPostTime
                   ? `Next job can be posted at ${new Date(subscriptionInfo.nextJobPostTime).toLocaleTimeString()}`
                   : 'Upgrade to Pro for unlimited posting'
                 }
@@ -2150,7 +2150,7 @@ function PostJobContent() {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+              className="bg-fixly-card rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
             >
               {/* Header */}
               <div className="bg-gradient-to-r from-red-500 to-red-600 p-6 text-white">
@@ -2175,10 +2175,10 @@ function PostJobContent() {
                   ? This will permanently remove all progress and cannot be recovered.
                 </p>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6">
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-6">
                   <div className="flex items-start space-x-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-sm text-amber-700">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
                       All attachments and form data will be permanently deleted.
                     </p>
                   </div>
@@ -2186,7 +2186,7 @@ function PostJobContent() {
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+              <div className="px-6 py-4 bg-fixly-surface border-t border-fixly-border">
                 <div className="flex items-center justify-end space-x-3">
                   <button
                     onClick={() => {

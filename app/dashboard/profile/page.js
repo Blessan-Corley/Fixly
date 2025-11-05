@@ -1,4 +1,4 @@
-// app/dashboard/profile/page.js
+// app/dashboard/profile/page.js - OPTIMIZED VERSION
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
@@ -37,6 +37,125 @@ import EnhancedLocationSelector from '../../../components/LocationPicker/Enhance
 import FirebasePhoneAuth from '../../../components/auth/FirebasePhoneAuth';
 import SmartAvatar from '../../../components/ui/SmartAvatar';
 
+// ✅ CRITICAL FIX: Move memoized components OUTSIDE main component
+const NameInputField = memo(({ value, onChange }) => (
+  <div>
+    <label className="block text-sm font-medium text-fixly-text mb-2">
+      Full Name
+    </label>
+    <input
+      type="text"
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value)}
+      className="input-field"
+      autoComplete="name"
+      autoFocus={false}
+    />
+  </div>
+));
+NameInputField.displayName = 'NameInputField';
+
+const BioInputField = memo(({ value, onChange }) => {
+  const [bioValidation, setBioValidation] = useState({ isValid: true, violations: [] });
+  const [validating, setValidating] = useState(false);
+  const validationTimeoutRef = useRef(null);
+
+  const validateBio = useCallback(async (text) => {
+    if (!text || text.trim().length === 0) {
+      setBioValidation({ isValid: true, violations: [] });
+      return;
+    }
+
+    setValidating(true);
+    try {
+      const validation = await validateContent(text, 'profile');
+      setBioValidation(validation);
+    } catch (error) {
+      console.warn('Bio validation failed:', error);
+      setBioValidation({ isValid: true, violations: [] });
+    } finally {
+      setValidating(false);
+    }
+  }, []);
+
+  // ✅ CRITICAL FIX: Debounce validation to prevent excessive API calls
+  useEffect(() => {
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current);
+    }
+
+    validationTimeoutRef.current = setTimeout(() => {
+      if (value) {
+        validateBio(value);
+      } else {
+        setBioValidation({ isValid: true, violations: [] });
+      }
+    }, 800); // Increased to 800ms for better UX
+
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current);
+      }
+    };
+  }, [value, validateBio]);
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-fixly-text mb-2">
+        Bio
+        {validating && (
+          <span className="ml-2 text-xs text-fixly-text-muted">
+            <Loader className="inline h-3 w-3 animate-spin mr-1" />
+            Validating...
+          </span>
+        )}
+      </label>
+      <textarea
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Tell others about yourself... (avoid sharing phone numbers, addresses, or external contact info)"
+        className={`textarea-field h-24 ${!bioValidation.isValid ? 'border-red-500 focus:border-red-500' : ''}`}
+        maxLength={500}
+        autoComplete="off"
+      />
+      <div className="mt-1 flex items-center justify-between">
+        <div>
+          {!bioValidation.isValid && bioValidation.violations.length > 0 && (
+            <div className="text-xs text-red-500">
+              <AlertCircle className="inline h-3 w-3 mr-1" />
+              {bioValidation.violations[0].message}
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-fixly-text-muted">
+          {(value || '').length}/500 characters
+        </p>
+      </div>
+    </div>
+  );
+});
+BioInputField.displayName = 'BioInputField';
+
+// ✅ CRITICAL FIX: Memoize ProfileSection component
+const ProfileSection = memo(({ title, children, editable = false, editing, onEdit }) => (
+  <div className="card">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-lg font-semibold text-fixly-text">{title}</h3>
+      {editable && !editing && (
+        <button
+          onClick={onEdit}
+          className="btn-ghost text-sm"
+        >
+          <Edit className="h-4 w-4 mr-1" />
+          Edit
+        </button>
+      )}
+    </div>
+    {children}
+  </div>
+));
+ProfileSection.displayName = 'ProfileSection';
+
 export default function ProfilePage() {
   const { user, updateUser } = useApp();
   const {
@@ -73,20 +192,18 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  // Form data
-  const [formData, setFormData] = useState({
-    name: '',
-    bio: '',
-    location: null,
-    skills: [],
-    availableNow: true,
-    serviceRadius: 10,
-    preferences: {
-      emailNotifications: true,
-      smsNotifications: true,
-      jobAlerts: true,
-      marketingEmails: false
-    }
+  // ✅ CRITICAL FIX: Separate state for each field to prevent cross-contamination
+  const [name, setName] = useState('');
+  const [bio, setBio] = useState('');
+  const [location, setLocation] = useState(null);
+  const [skills, setSkills] = useState([]);
+  const [availableNow, setAvailableNow] = useState(true);
+  const [serviceRadius, setServiceRadius] = useState(10);
+  const [preferences, setPreferences] = useState({
+    emailNotifications: true,
+    smsNotifications: true,
+    jobAlerts: true,
+    marketingEmails: false
   });
 
   // Search states
@@ -134,19 +251,17 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user && !initialized) {
-      setFormData({
-        name: user.name || '',
-        bio: user.bio || '',
-        location: user.location || null,
-        skills: user.skills || [],
-        availableNow: user.availableNow ?? true,
-        serviceRadius: user.serviceRadius || 10,
-        preferences: {
-          emailNotifications: user.preferences?.emailNotifications ?? true,
-          smsNotifications: user.preferences?.smsNotifications ?? true,
-          jobAlerts: user.preferences?.jobAlerts ?? true,
-          marketingEmails: user.preferences?.marketingEmails ?? false
-        }
+      setName(user.name || '');
+      setBio(user.bio || '');
+      setLocation(user.location || null);
+      setSkills(user.skills || []);
+      setAvailableNow(user.availableNow ?? true);
+      setServiceRadius(user.serviceRadius || 10);
+      setPreferences({
+        emailNotifications: user.preferences?.emailNotifications ?? true,
+        smsNotifications: user.preferences?.smsNotifications ?? true,
+        jobAlerts: user.preferences?.jobAlerts ?? true,
+        marketingEmails: user.preferences?.marketingEmails ?? false
       });
       setInitialized(true);
     }
@@ -164,31 +279,34 @@ export default function ProfilePage() {
     }
   }, [citySearch]);
 
-  const handleInputChange = useCallback((field, value) => {
-    setFormData(prev => {
-      if (field.includes('.')) {
-        const keys = field.split('.');
-        return {
-          ...prev,
-          [keys[0]]: {
-            ...prev[keys[0]],
-            [keys[1]]: value
-          }
-        };
-      } else {
-        return { ...prev, [field]: value };
-      }
-    });
+  // ✅ CRITICAL FIX: Simplified change handlers that don't cause re-renders
+  const handleNameChange = useCallback((value) => {
+    setName(value);
+  }, []);
+
+  const handleBioChange = useCallback((value) => {
+    setBio(value);
+  }, []);
+
+  const handleSkillsChange = useCallback((value) => {
+    setSkills(value);
+  }, []);
+
+  const handlePreferenceChange = useCallback((key, value) => {
+    setPreferences(prev => ({
+      ...prev,
+      [key]: value
+    }));
   }, []);
 
   const selectCity = useCallback((city) => {
-    handleInputChange('location', city);
+    setLocation(city);
     setCitySearch('');
     setShowCityDropdown(false);
-  }, [handleInputChange]);
+  }, []);
 
   // Password change functions
-  const validatePassword = (password) => {
+  const validatePassword = useCallback((password) => {
     const minLength = password.length >= 8;
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasNumber = /\d/.test(password);
@@ -203,7 +321,7 @@ export default function ProfilePage() {
         hasSpecial
       }
     };
-  };
+  }, []);
 
   const handlePasswordChange = async () => {
     // Validate current password
@@ -315,12 +433,13 @@ export default function ProfilePage() {
     handlePasswordChange();
   };
 
-  // Location picker functions
-  const handleLocationSelect = (location) => {
-    handleInputChange('location', location);
+  // ✅ CRITICAL FIX: Location picker with proper state management
+  const handleLocationSelect = useCallback((selectedLoc) => {
+    console.log('📍 Location selected:', selectedLoc);
+    setLocation(selectedLoc);
     setShowLocationPicker(false);
-    toast.success('Location updated successfully');
-  };
+    toast.success('Location selected - Click "Save Changes" to update your profile');
+  }, []);
 
   const handlePhotoUpload = async (event) => {
     const file = event.target.files[0];
@@ -382,10 +501,19 @@ export default function ProfilePage() {
     setLoading(true);
     startLoading('Saving profile changes...');
     try {
+      console.log('💾 Saving profile with location:', location);
       const response = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          name,
+          bio,
+          location,
+          skills,
+          availableNow,
+          serviceRadius,
+          preferences
+        })
       });
 
       const data = await response.json();
@@ -396,7 +524,14 @@ export default function ProfilePage() {
         setInitialized(false); // Allow re-initialization with updated data
         toast.success('Profile updated successfully');
       } else {
-        toast.error(data.message || 'Failed to update profile');
+        // ✅ Enhanced error handling for rate limiting
+        if (data.rateLimited) {
+          toast.error(data.message || 'Location update rate limit exceeded', {
+            duration: 6000, // Show for longer since it has important info
+          });
+        } else {
+          toast.error(data.message || 'Failed to update profile');
+        }
       }
     } catch (error) {
       console.error('Profile update error:', error);
@@ -407,116 +542,14 @@ export default function ProfilePage() {
     }
   };
 
-  const ProfileSection = memo(({ title, children, editable = false }) => (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-fixly-text">{title}</h3>
-        {editable && !editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="btn-ghost text-sm"
-          >
-            <Edit className="h-4 w-4 mr-1" />
-            Edit
-          </button>
-        )}
-      </div>
-      {children}
-    </div>
-  ), [editing]);
+  const handleCancelEdit = useCallback(() => {
+    setEditing(false);
+    setInitialized(false); // Reset to reload user data
+  }, []);
 
-  // Memoize form inputs to prevent unnecessary re-renders
-  const NameInput = memo(() => (
-    <div>
-      <label className="block text-sm font-medium text-fixly-text mb-2">
-        Full Name
-      </label>
-      <input
-        key="name-input"
-        type="text"
-        value={formData.name || ''}
-        onChange={(e) => handleInputChange('name', e.target.value)}
-        className="input-field"
-        autoComplete="name"
-        autoFocus={false}
-      />
-    </div>
-  ), [formData.name]);
-
-  const BioInput = memo(() => {
-    const [bioValidation, setBioValidation] = useState({ isValid: true, violations: [] });
-    const [validating, setValidating] = useState(false);
-
-    const validateBio = useCallback(async (text) => {
-      if (!text || text.trim().length === 0) {
-        setBioValidation({ isValid: true, violations: [] });
-        return;
-      }
-
-      setValidating(true);
-      try {
-        const validation = await validateContent(text, 'profile');
-        setBioValidation(validation);
-      } catch (error) {
-        console.warn('Bio validation failed:', error);
-        setBioValidation({ isValid: true, violations: [] });
-      } finally {
-        setValidating(false);
-      }
-    }, []);
-
-    const handleBioChange = useCallback((e) => {
-      const text = e.target.value;
-      handleInputChange('bio', text);
-    }, []);
-
-    // Debounce bio validation
-    useEffect(() => {
-      const timeoutId = setTimeout(() => {
-        if (formData.bio) {
-          validateBio(formData.bio);
-        }
-      }, 500);
-
-      return () => clearTimeout(timeoutId);
-    }, [formData.bio, validateBio]);
-
-    return (
-      <div>
-        <label className="block text-sm font-medium text-fixly-text mb-2">
-          Bio
-          {validating && (
-            <span className="ml-2 text-xs text-fixly-text-muted">
-              <Loader className="inline h-3 w-3 animate-spin mr-1" />
-              Validating...
-            </span>
-          )}
-        </label>
-        <textarea
-          key="bio-input"
-          value={formData.bio || ''}
-          onChange={handleBioChange}
-          placeholder="Tell others about yourself... (avoid sharing phone numbers, addresses, or external contact info)"
-          className={`textarea-field h-24 ${!bioValidation.isValid ? 'border-red-500 focus:border-red-500' : ''}`}
-          maxLength={500}
-          autoComplete="off"
-        />
-        <div className="mt-1 flex items-center justify-between">
-          <div>
-            {!bioValidation.isValid && bioValidation.violations.length > 0 && (
-              <div className="text-xs text-red-500">
-                <AlertCircle className="inline h-3 w-3 mr-1" />
-                {bioValidation.violations[0].message}
-              </div>
-            )}
-          </div>
-          <p className="text-xs text-fixly-text-muted">
-            {(formData.bio || '').length}/500 characters
-          </p>
-        </div>
-      </div>
-    );
-  }, [formData.bio]);
+  const handleStartEdit = useCallback(() => {
+    setEditing(true);
+  }, []);
 
   if (!user) {
     return (
@@ -720,7 +753,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto min-h-screen">
+    <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto min-h-screen">
       {/* Header */}
       <div className="mb-6 md:mb-8">
         <h1 className="text-xl md:text-2xl font-bold text-fixly-text mb-2">
@@ -731,7 +764,7 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 lg:gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Left Column - Profile Photo & Basic Info */}
         <div className="space-y-4 md:space-y-6">
           {/* Profile Photo */}
@@ -847,11 +880,16 @@ export default function ProfilePage() {
         {/* Right Column - Detailed Information */}
         <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Basic Information */}
-          <ProfileSection title="Basic Information" editable={true}>
+          <ProfileSection
+            title="Basic Information"
+            editable={true}
+            editing={editing}
+            onEdit={handleStartEdit}
+          >
             {editing ? (
               <div className="space-y-4">
-                <NameInput />
-                <BioInput />
+                <NameInputField value={name} onChange={handleNameChange} />
+                <BioInputField value={bio} onChange={handleBioChange} />
               </div>
             ) : (
               <div className="space-y-4">
@@ -930,30 +968,40 @@ export default function ProfilePage() {
           </ProfileSection>
 
           {/* Location */}
-          <ProfileSection title="Location" editable={true}>
+          <ProfileSection
+            title="Location"
+            editable={true}
+            editing={editing}
+            onEdit={handleStartEdit}
+          >
             {editing ? (
               <div>
                 <label className="block text-sm font-medium text-fixly-text mb-2">
                   Location
                 </label>
                 <div className="space-y-3">
-                  {formData.location ? (
+                  {location ? (
                     <div className="flex items-center justify-between p-3 bg-fixly-bg-secondary rounded-lg">
                       <div className="flex items-center">
                         <MapPin className="h-4 w-4 text-fixly-accent mr-2" />
                         <div>
                           <div className="font-medium text-fixly-text">
-                            {formData.location.name || formData.location.city}
+                            {location.name || location.city || location.homeAddress?.city}
                           </div>
-                          {formData.location.state && (
+                          {location.state && (
                             <div className="text-sm text-fixly-text-muted">
-                              {formData.location.state}
+                              {location.state}
+                            </div>
+                          )}
+                          {location.homeAddress?.formattedAddress && (
+                            <div className="text-xs text-fixly-text-muted mt-1">
+                              {location.homeAddress.formattedAddress}
                             </div>
                           )}
                         </div>
                       </div>
                       <button
-                        onClick={() => handleInputChange('location', null)}
+                        onClick={() => setLocation(null)}
                         className="text-fixly-text-muted hover:text-fixly-error"
                       >
                         <X className="h-4 w-4" />
@@ -971,7 +1019,7 @@ export default function ProfilePage() {
                     className="w-full btn-primary"
                   >
                     <Target className="h-4 w-4 mr-2" />
-                    {formData.location ? 'Change Location' : 'Select Location'}
+                    {location ? 'Change Location' : 'Select Location'}
                   </button>
                 </div>
               </div>
@@ -1053,13 +1101,18 @@ export default function ProfilePage() {
 
           {/* Skills (for fixers) */}
           {user.role === 'fixer' && (
-            <ProfileSection title="Skills & Services" editable={true}>
+            <ProfileSection
+              title="Skills & Services"
+              editable={true}
+              editing={editing}
+              onEdit={handleStartEdit}
+            >
               {editing ? (
                 <div className="space-y-4">
                   <SkillSelector
                     isModal={false}
-                    selectedSkills={formData.skills}
-                    onSkillsChange={(skills) => handleInputChange('skills', skills)}
+                    selectedSkills={skills}
+                    onSkillsChange={handleSkillsChange}
                     maxSkills={30}
                     minSkills={1}
                     required={false}
@@ -1078,8 +1131,8 @@ export default function ProfilePage() {
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={formData.availableNow}
-                          onChange={(e) => handleInputChange('availableNow', e.target.checked)}
+                          checked={availableNow}
+                          onChange={(e) => setAvailableNow(e.target.checked)}
                           className="sr-only peer"
                         />
                         <div className={`w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent`}></div>
@@ -1094,13 +1147,13 @@ export default function ProfilePage() {
                         type="range"
                         min="1"
                         max="50"
-                        value={formData.serviceRadius || 10}
-                        onChange={(e) => handleInputChange('serviceRadius', parseInt(e.target.value))}
+                        value={serviceRadius || 10}
+                        onChange={(e) => setServiceRadius(parseInt(e.target.value))}
                         className="w-full"
                       />
                       <div className="flex justify-between text-sm text-fixly-text-muted">
                         <span>1 km</span>
-                        <span>{formData.serviceRadius} km</span>
+                        <span>{serviceRadius} km</span>
                         <span>50 km</span>
                       </div>
                     </div>
@@ -1296,7 +1349,12 @@ export default function ProfilePage() {
           </ProfileSection>
 
           {/* Preferences */}
-          <ProfileSection title="Notification Preferences" editable={true}>
+          <ProfileSection
+            title="Notification Preferences"
+            editable={true}
+            editing={editing}
+            onEdit={handleStartEdit}
+          >
             {editing ? (
               <div className="space-y-4">
                 {Object.entries({
@@ -1318,8 +1376,8 @@ export default function ProfilePage() {
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={formData.preferences[key]}
-                        onChange={(e) => handleInputChange(`preferences.${key}`, e.target.checked)}
+                        checked={preferences[key]}
+                        onChange={(e) => handlePreferenceChange(key, e.target.checked)}
                         className="sr-only peer"
                       />
                       <div className={`w-11 h-6 bg-fixly-bg-secondary peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-fixly-accent/25 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-fixly-card after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-fixly-card after:border-fixly-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-fixly-accent`}></div>
@@ -1331,7 +1389,7 @@ export default function ProfilePage() {
               <div className="space-y-3">
                 {Object.entries({
                   emailNotifications: 'Email Notifications',
-                  smsNotifications: 'SMS Notifications', 
+                  smsNotifications: 'SMS Notifications',
                   jobAlerts: 'Job Alerts',
                   marketingEmails: 'Marketing Emails'
                 }).map(([key, label]) => (
@@ -1364,11 +1422,7 @@ export default function ProfilePage() {
                 Save Changes
               </button>
               <button
-                onClick={() => {
-                  setEditing(false);
-                  setInitialized(false); // Reset initialization flag
-                  // Reset form data will happen via useEffect when initialized becomes false
-                }}
+                onClick={handleCancelEdit}
                 className="btn-ghost"
               >
                 Cancel
@@ -1486,7 +1540,7 @@ export default function ProfilePage() {
             <div className="mb-4">
               <EnhancedLocationSelector
                 onLocationSelect={handleLocationSelect}
-                initialLocation={formData.location}
+                initialLocation={location}
                 showLabel={false}
                 required={false}
                 className="w-full"
