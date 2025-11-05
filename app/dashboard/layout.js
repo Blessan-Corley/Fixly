@@ -37,6 +37,8 @@ import ThemeToggle from '../../components/ui/ThemeToggle';
 import ProBadge from '../../components/ui/ProBadge';
 import MobileNav, { MobileBottomNav, useMobileNav } from '../../components/ui/MobileNav';
 import { useMobileDevice } from '../../components/ui/mobile';
+import ConfirmationModal from '../../components/ui/ConfirmationModal';
+import SmartAvatar from '../../components/ui/SmartAvatar';
 
 // Enhanced Collapsible Sidebar Component
 function CollapsibleSidebar({ user, subscriptionInfo, navigationItems, router, pathname, badgeStyle, onHoverChange }) {
@@ -123,11 +125,16 @@ function CollapsibleSidebar({ user, subscriptionInfo, navigationItems, router, p
         {/* User info */}
         <div className="p-4 border-b border-fixly-border">
           <div className={`flex items-center ${!showExpanded ? 'justify-center' : ''}`}>
-            <motion.img
-              src={user?.photoURL || '/default-avatar.png'}
-              alt={user?.name}
-              className="h-10 w-10 rounded-full object-cover flex-shrink-0"
-              title={!showExpanded ? `${user?.name} (${user?.role})` : ''}
+            <SmartAvatar
+              user={{
+                ...user,
+                image: user?.photoURL,
+                profilePhoto: { url: user?.photoURL }
+              }}
+              size="default"
+              showBorder={false}
+              className="flex-shrink-0"
+              showTooltip={!showExpanded}
             />
 
             <AnimatePresence>
@@ -166,7 +173,7 @@ function CollapsibleSidebar({ user, subscriptionInfo, navigationItems, router, p
                     ? 'bg-fixly-accent text-fixly-text'
                     : 'bg-orange-100 text-orange-800'
                 }`}>
-                  {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (parseInt(user?.plan?.creditsUsed) || 0))} free credits left`}
+                  {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (Number(user?.plan?.creditsUsed) || 0))} free credits left`}
                 </div>
               </motion.div>
             )}
@@ -214,12 +221,12 @@ function CollapsibleSidebar({ user, subscriptionInfo, navigationItems, router, p
                       transition={{ duration: 0.2 }}
                       className="ml-auto flex items-center space-x-1"
                     >
-                      {item.count > 0 && (
+                      {(Number(item.count) || 0) > 0 && (
                         badgeStyle === 'dots' ? (
                           <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                         ) : (
                           <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                            {item.count > 9 ? '9+' : item.count}
+                            {(Number(item.count) || 0) > 9 ? '9+' : (Number(item.count) || 0)}
                           </span>
                         )
                       )}
@@ -233,7 +240,7 @@ function CollapsibleSidebar({ user, subscriptionInfo, navigationItems, router, p
                 </AnimatePresence>
 
                 {/* Notification dot for collapsed state */}
-                {!showExpanded && (item.count > 0) && (
+                {!showExpanded && ((Number(item.count) || 0) > 0) && (
                   <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-fixly-card"></div>
                 )}
               </button>
@@ -242,9 +249,9 @@ function CollapsibleSidebar({ user, subscriptionInfo, navigationItems, router, p
               {!showExpanded && (
                 <div className="absolute left-full ml-3 top-1/2 transform -translate-y-1/2 bg-fixly-text text-fixly-bg text-xs px-3 py-2 rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-lg border border-fixly-border">
                   {item.name}
-                  {(item.count > 0 || item.badge) && (
+                  {((Number(item.count) || 0) > 0 || item.badge) && (
                     <span className="ml-2 text-fixly-accent">
-                      {item.count > 0 && `(${item.count})`}
+                      {(Number(item.count) || 0) > 0 && `(${Number(item.count) || 0})`}
                       {item.badge && ` • ${item.badge}`}
                     </span>
                   )}
@@ -332,7 +339,13 @@ function DashboardContent({ children }) {
     }
     // Navigate to notification action if available
     if (notification.actions && notification.actions[0]) {
-      router.push(notification.actions[0].url);
+      const url = notification.actions[0].url;
+      // Ensure URL is a string
+      if (typeof url === 'string' && url.trim()) {
+        router.push(url);
+      } else {
+        console.warn('Invalid notification URL:', url);
+      }
     }
   };
   const router = useRouter();
@@ -343,6 +356,7 @@ function DashboardContent({ children }) {
   const [notificationCounts, setNotificationCounts] = useState({});
   const [badgeStyle, setBadgeStyle] = useState('numbers'); // Load from cookies
   const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
   
   // Enhanced mobile support
   const deviceInfo = useMobileDevice();
@@ -381,26 +395,31 @@ function DashboardContent({ children }) {
   useEffect(() => {
     const fetchNotificationCounts = async () => {
       try {
-        const unreadNotifications = notifications.filter(n => !n.read);
-        
+        const unreadNotifications = Array.isArray(notifications) ? notifications.filter(n => !n.read) : [];
+
         const counts = {
-          messages: unreadNotifications.filter(n => n.type === 'new_message').length,
-          applications: unreadNotifications.filter(n => 
+          messages: Number(unreadNotifications.filter(n => n.type === 'new_message').length) || 0,
+          applications: Number(unreadNotifications.filter(n =>
             n.type === 'job_applied' || n.type === 'application_accepted' || n.type === 'application_rejected'
-          ).length,
-          jobs: unreadNotifications.filter(n => 
+          ).length) || 0,
+          jobs: Number(unreadNotifications.filter(n =>
             n.type === 'job_question' || n.type === 'comment_reply'
-          ).length
+          ).length) || 0
         };
-        
+
         setNotificationCounts(counts);
       } catch (error) {
         console.error('Error fetching notification counts:', error);
+        // Set default values on error
+        setNotificationCounts({ messages: 0, applications: 0, jobs: 0 });
       }
     };
 
-    if (notifications.length > 0) {
+    if (Array.isArray(notifications) && notifications.length > 0) {
       fetchNotificationCounts();
+    } else {
+      // Reset to 0 if no notifications
+      setNotificationCounts({ messages: 0, applications: 0, jobs: 0 });
     }
   }, [notifications]);
 
@@ -422,9 +441,10 @@ function DashboardContent({ children }) {
   const handleSignOut = async () => {
     try {
       await signOut({ callbackUrl: '/' });
+      toast.success('Signed out successfully');
     } catch (error) {
       console.error('Sign out error:', error);
-      toastMessages.error.generic();
+      toast.error('Failed to sign out. Please try again.');
     }
   };
 
@@ -441,7 +461,7 @@ function DashboardContent({ children }) {
         href: '/dashboard/messages',
         icon: MessageSquare,
         current: pathname.startsWith('/dashboard/messages'),
-        count: notificationCounts.messages || 0
+        count: Number(notificationCounts.messages) || 0
       },
       {
         name: 'Profile',
@@ -466,7 +486,7 @@ function DashboardContent({ children }) {
           href: '/dashboard/jobs',
           icon: Briefcase,
           current: pathname.startsWith('/dashboard/jobs'),
-          count: notificationCounts.jobs || 0
+          count: Number(notificationCounts.jobs) || 0
         },
         {
           name: 'Find Fixers',
@@ -493,7 +513,7 @@ function DashboardContent({ children }) {
           href: '/dashboard/applications',
           icon: Briefcase,
           current: pathname.startsWith('/dashboard/applications'),
-          count: notificationCounts.applications || 0
+          count: Number(notificationCounts.applications) || 0
         },
         {
           name: 'Earnings',
@@ -547,7 +567,7 @@ function DashboardContent({ children }) {
   };
 
   const navigationItems = getNavigationItems();
-  const unreadNotifications = notifications.filter(n => !n.read).length;
+  const unreadNotifications = Number((Array.isArray(notifications) ? notifications.filter(n => !n.read).length : 0)) || 0;
 
   return (
     <div className="min-h-screen bg-fixly-bg">
@@ -619,10 +639,14 @@ function DashboardContent({ children }) {
           {/* User info */}
           <div className="p-6 border-b border-fixly-border">
             <div className="flex items-center">
-              <img
-                src={user?.photoURL || '/default-avatar.png'}
-                alt={user?.name}
-                className="h-10 w-10 rounded-full object-cover"
+              <SmartAvatar
+                user={{
+                  ...user,
+                  image: user?.photoURL,
+                  profilePhoto: { url: user?.photoURL }
+                }}
+                size="default"
+                showBorder={false}
               />
               <div className="ml-3 flex-1 min-w-0">
                 <p className="text-sm font-medium text-fixly-text truncate flex items-center">
@@ -643,7 +667,7 @@ function DashboardContent({ children }) {
                     ? 'bg-fixly-accent text-fixly-text'
                     : 'bg-orange-100 text-orange-800'
                 }`}>
-                  {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (parseInt(user?.plan?.creditsUsed) || 0))} free credits left`}
+                  {user?.plan?.type === 'pro' ? '⭐ Pro Member' : `${Math.max(0, 3 - (Number(user?.plan?.creditsUsed) || 0))} free credits left`}
                 </div>
               </div>
             )}
@@ -664,12 +688,12 @@ function DashboardContent({ children }) {
               >
                 <item.icon className="h-5 w-5 mr-3" />
                 <span className="flex-1 text-left">{item.name}</span>
-                {item.count && item.count > 0 && (
+                {(Number(item.count) || 0) > 0 && (
                   badgeStyle === 'dots' ? (
                     <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                   ) : (
                     <span className="text-xs bg-red-500 text-white px-2 py-1 rounded-full min-w-[20px] text-center">
-                      {item.count > 9 ? '9+' : item.count}
+                      {(Number(item.count) || 0) > 9 ? '9+' : (Number(item.count) || 0)}
                     </span>
                   )
                 )}
@@ -750,12 +774,12 @@ function DashboardContent({ children }) {
                   </div>
                   
                   {/* Notification badge with improved styling */}
-                  {unreadCount > 0 && (
+                  {(Number(unreadCount) || 0) > 0 && (
                     badgeStyle === 'dots' ? (
                       <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full shadow-lg animate-pulse"></div>
                     ) : (
                       <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium shadow-lg animate-pulse">
-                        {unreadCount > 99 ? '99+' : unreadCount}
+                        {(Number(unreadCount) || 0) > 99 ? '99+' : (Number(unreadCount) || 0)}
                       </span>
                     )
                   )}
@@ -914,10 +938,14 @@ function DashboardContent({ children }) {
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
                   className="flex items-center space-x-2 p-2 hover:bg-fixly-accent/10 rounded-lg transition-colors"
                 >
-                  <img
-                    src={user?.photoURL || '/default-avatar.png'}
-                    alt={user?.name}
-                    className="h-8 w-8 rounded-full object-cover"
+                  <SmartAvatar
+                    user={{
+                      ...user,
+                      image: user?.photoURL,
+                      profilePhoto: { url: user?.photoURL }
+                    }}
+                    size="sm"
+                    showBorder={false}
                   />
                   <ChevronDown className="h-4 w-4 text-fixly-text-muted" />
                 </button>
@@ -976,7 +1004,10 @@ function DashboardContent({ children }) {
                       </div>
                       <div className="border-t border-fixly-border py-2">
                         <button
-                          onClick={handleSignOut}
+                          onClick={() => {
+                            setShowSignOutModal(true);
+                            setProfileDropdownOpen(false);
+                          }}
                           className="w-full px-4 py-2 text-left hover:bg-red-50 text-red-600 flex items-center"
                         >
                           <LogOut className="h-4 w-4 mr-3" />
@@ -1004,6 +1035,20 @@ function DashboardContent({ children }) {
           />
         )}
       </div>
+
+      {/* Sign Out Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showSignOutModal}
+        onClose={() => setShowSignOutModal(false)}
+        onConfirm={handleSignOut}
+        title="Sign Out"
+        message="Are you sure you want to sign out? You will need to sign in again to access your account."
+        confirmText="Yes, Sign Out"
+        cancelText="Cancel"
+        confirmButtonClass="bg-red-600 hover:bg-red-700"
+        icon={LogOut}
+        iconColor="text-red-600"
+      />
     </div>
   );
 }

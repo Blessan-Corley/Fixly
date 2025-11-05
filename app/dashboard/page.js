@@ -94,13 +94,37 @@ export default function DashboardPage() {
 
     if (statsResponse.ok) {
       const statsData = await statsResponse.json();
-      setStats(statsData);
+      // Ensure all numeric fields are valid numbers
+      const sanitizedStats = {
+        totalJobs: Number(statsData?.totalJobs) || 0,
+        completedJobs: Number(statsData?.completedJobs) || 0,
+        activeJobs: Number(statsData?.activeJobs) || 0,
+        totalSpent: Number(statsData?.totalSpent) || 0,
+        totalApplications: Number(statsData?.totalApplications) || 0,
+        totalUsers: Number(statsData?.totalUsers) || 0,
+        activeUsers: Number(statsData?.activeUsers) || 0,
+        revenue: Number(statsData?.revenue) || 0,
+      };
+      setStats(sanitizedStats);
     } else {
       const errorText = await statsResponse.text();
       console.error('Stats API error:', statsResponse.status, errorText);
       if (statsResponse.status === 401) {
         toast.error('Please sign in to view dashboard');
+      } else {
+        toast.error('Failed to load dashboard stats');
       }
+      // Set default values on error
+      setStats({
+        totalJobs: 0,
+        completedJobs: 0,
+        activeJobs: 0,
+        totalSpent: 0,
+        totalApplications: 0,
+        totalUsers: 0,
+        activeUsers: 0,
+        revenue: 0,
+      });
     }
 
     // Cancel previous jobs request if exists
@@ -127,13 +151,16 @@ export default function DashboardPage() {
 
     if (jobsResponse.ok) {
       const jobsData = await jobsResponse.json();
-      setRecentJobs(jobsData.jobs || []);
+      setRecentJobs(Array.isArray(jobsData.jobs) ? jobsData.jobs : []);
     } else {
       const errorText = await jobsResponse.text();
       console.error('Jobs API error:', jobsResponse.status, errorText);
       if (jobsResponse.status === 401) {
         toast.error('Please sign in to view recent jobs');
+      } else {
+        toast.error('Failed to load recent jobs');
       }
+      setRecentJobs([]);
     }
 
   } catch (error) {
@@ -142,7 +169,20 @@ export default function DashboardPage() {
       return;
     }
     console.error('Error fetching dashboard data:', error);
-    toast.error('Failed to load dashboard data');
+    toast.error('Failed to load dashboard data. Please refresh the page.');
+
+    // Set safe default values on error
+    setStats({
+      totalJobs: 0,
+      completedJobs: 0,
+      activeJobs: 0,
+      totalSpent: 0,
+      totalApplications: 0,
+      totalUsers: 0,
+      activeUsers: 0,
+      revenue: 0,
+    });
+    setRecentJobs([]);
   } finally {
     stopLoading();
   }
@@ -319,7 +359,7 @@ export default function DashboardPage() {
           </div>
           <div className="ml-4">
             <div className="text-2xl font-bold text-fixly-text">
-              ₹{stats?.totalSpent?.toLocaleString() || 0}
+              ₹{(stats?.totalSpent || 0).toLocaleString()}
             </div>
             <div className="text-sm text-fixly-text-muted">Total Spent</div>
           </div>
@@ -365,7 +405,7 @@ export default function DashboardPage() {
           </div>
           <div className="ml-4">
             <div className="text-2xl font-bold text-fixly-text">
-              {user?.rating?.average?.toFixed(1) || '0.0'}
+              {(user?.rating?.average || 0).toFixed(1)}
             </div>
             <div className="text-sm text-fixly-text-muted">
               Rating ({user?.rating?.count || 0} reviews)
@@ -381,7 +421,7 @@ export default function DashboardPage() {
           </div>
           <div className="ml-4">
             <div className="text-2xl font-bold text-fixly-text">
-              ₹{user?.totalEarnings?.toLocaleString() || 0}
+              ₹{(user?.totalEarnings || 0).toLocaleString()}
             </div>
             <div className="text-sm text-fixly-text-muted">Total Earnings</div>
           </div>
@@ -441,7 +481,7 @@ export default function DashboardPage() {
           </div>
           <div className="ml-4">
             <div className="text-2xl font-bold text-fixly-text">
-              ₹{stats?.revenue?.toLocaleString() || 0}
+              ₹{(stats?.revenue || 0).toLocaleString()}
             </div>
             <div className="text-sm text-fixly-text-muted">Platform Revenue</div>
           </div>
@@ -713,7 +753,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="ml-4 text-right">
                         <div className="font-semibold text-fixly-text">
-                          ₹{job.budget?.amount?.toLocaleString() || 'Negotiable'}
+                          {job.budget?.amount ? `₹${job.budget.amount.toLocaleString()}` : 'Negotiable'}
                         </div>
                         <div className={`text-xs px-2 py-1 rounded-full ${
                           job.status === 'open' ? 'bg-green-100 text-green-800' :
@@ -770,12 +810,12 @@ export default function DashboardPage() {
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-fixly-text-muted">Free Credits Used</span>
-                    <span className="text-fixly-text">{user?.plan?.creditsUsed || 0}/3</span>
+                    <span className="text-fixly-text">{Number(user?.plan?.creditsUsed) || 0}/3</span>
                   </div>
                   <div className="progress-bar">
-                    <div 
+                    <div
                       className="progress-fill"
-                      style={{ width: `${((user?.plan?.creditsUsed || 0) / 3) * 100}%` }}
+                      style={{ width: `${Math.min(100, ((Number(user?.plan?.creditsUsed) || 0) / 3) * 100)}%` }}
                     />
                   </div>
                 </div>

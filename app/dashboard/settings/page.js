@@ -24,7 +24,11 @@ import {
   Sun,
   Moon,
   Monitor,
-  Check
+  Check,
+  CheckCircle,
+  Star,
+  X,
+  Plus
 } from 'lucide-react';
 import { useApp, RoleGuard } from '../../providers';
 import { toast } from 'sonner';
