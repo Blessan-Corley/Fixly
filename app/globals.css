@@ -379,7 +379,23 @@
   
   /* Form Components - Clean and Accessible */
   .input-field {
-    @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 placeholder:text-fixly-text-light;
+    @apply w-full px-4 py-3 bg-fixly-card text-fixly-text border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 placeholder:text-fixly-text-light;
+  }
+
+  /* Fix autofill colors for both light and dark mode */
+  .input-field:-webkit-autofill,
+  .input-field:-webkit-autofill:hover,
+  .input-field:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--card)) inset !important;
+    -webkit-text-fill-color: rgb(var(--foreground)) !important;
+    caret-color: rgb(var(--foreground)) !important;
+    border-color: rgb(var(--border)) !important;
+  }
+
+  /* Prevent browser purple/blue autofill background */
+  .input-field:autofill {
+    background-color: rgb(var(--card)) !important;
+    color: rgb(var(--foreground)) !important;
   }
 
   /* Input field with icon - Enhanced mobile padding */
@@ -441,11 +457,20 @@
   }
   
   .textarea-field {
-    @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 resize-none placeholder:text-fixly-text-light;
+    @apply w-full px-4 py-3 bg-fixly-card text-fixly-text border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 resize-none placeholder:text-fixly-text-light;
   }
-  
+
+  /* Fix textarea autofill */
+  .textarea-field:-webkit-autofill,
+  .textarea-field:-webkit-autofill:hover,
+  .textarea-field:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--card)) inset !important;
+    -webkit-text-fill-color: rgb(var(--foreground)) !important;
+    caret-color: rgb(var(--foreground)) !important;
+  }
+
   .select-field {
-    @apply w-full px-4 py-3 bg-fixly-card border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 cursor-pointer;
+    @apply w-full px-4 py-3 bg-fixly-card text-fixly-text border border-fixly-border rounded-xl focus:outline-none focus:ring-2 focus:ring-fixly-primary-light focus:border-fixly-primary transition-all duration-200 cursor-pointer;
     -webkit-appearance: none;
     -moz-appearance: none;
     appearance: none;
@@ -454,6 +479,12 @@
     background-position: right 12px center;
     background-size: 20px;
     padding-right: 40px;
+  }
+
+  /* Fix select autofill */
+  .select-field:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--card)) inset !important;
+    -webkit-text-fill-color: rgb(var(--foreground)) !important;
   }
   
   /* Dropdown Components - Rounded and Professional */

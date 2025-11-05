@@ -44,7 +44,7 @@ function AppProviderContent({ children }) {
     if (typeof window === 'undefined') {
       return;
     }
-    
+
     // ✅ CRITICAL FIX: Don't fetch for temporary session IDs
     if (!sessionUserId || sessionUserId.startsWith('temp_')) {
       console.log('⏭️ Skipping fetch for temporary session');
@@ -52,6 +52,29 @@ function AppProviderContent({ children }) {
       setError('Session not properly established. Please sign in again.');
       setLoading(false);
       return;
+    }
+
+    // Check cache first (30 second TTL)
+    const cacheKey = `user_profile_${sessionUserId}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const { data, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+
+        // Use cache if less than 30 seconds old
+        if (age < 30000) {
+          console.log('💾 Using cached user profile');
+          setUser(data);
+          setError(null);
+          lastUserId.current = data._id;
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        // Invalid cache, continue to fetch
+        localStorage.removeItem(cacheKey);
+      }
     }
 
     // Cancel previous request
@@ -64,9 +87,12 @@ function AppProviderContent({ children }) {
 
     try {
       console.log('📡 Fetching user profile');
-      
+
       const response = await fetch('/api/user/profile', {
-        signal: userFetchController.current.signal
+        signal: userFetchController.current.signal,
+        headers: {
+          'Cache-Control': 'no-cache' // Ensure we get fresh data when needed
+        }
       });
 
       if (response.ok) {
@@ -74,13 +100,27 @@ function AppProviderContent({ children }) {
         console.log('✅ User profile fetched');
         setUser(userData.user);
         setError(null);
-        
+
         // Update last user ID for notifications
         lastUserId.current = userData.user._id;
+
+        // Cache the result
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({
+            data: userData.user,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          // Storage full or disabled, ignore
+          console.warn('Could not cache user profile:', e.message);
+        }
       } else {
         const errorData = await response.json();
         console.error('❌ Failed to fetch user profile:', response.status, errorData);
-        
+
+        // Clear invalid cache
+        localStorage.removeItem(cacheKey);
+
         if (response.status === 401 && errorData.needsReauth) {
           setError('Session expired. Please sign in again.');
           setUser(null);

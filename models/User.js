@@ -576,7 +576,11 @@ const userSchema = new mongoose.Schema({
           if (!url) return true; // Allow null/empty values
           // Allow relative paths for default avatars
           if (url.startsWith('/')) return true;
-          // Validate full URLs
+          // Allow Google profile photos (lh3.googleusercontent.com)
+          if (url.includes('googleusercontent.com')) return true;
+          // Allow Cloudinary URLs
+          if (url.includes('cloudinary.com')) return true;
+          // Validate full URLs with image extensions
           const urlRegex = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i;
           return urlRegex.test(url);
         },
