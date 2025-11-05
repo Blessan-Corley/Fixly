@@ -126,20 +126,25 @@ export default function SmartAvatar({
 
   // Get image source with priority order
   const getImageSource = () => {
-    if (user?.profilePhoto?.url) return user.profilePhoto.url;
-    if (user?.image) return user.image;
-    if (user?.picture) return user.picture;
-    return null;
+    // Check for actual photo URLs, skip default placeholders
+    const photoUrl = user?.profilePhoto?.url || user?.image || user?.picture || user?.photoURL;
+
+    // Don't use default avatar images - we'll show initials instead
+    if (!photoUrl || photoUrl.includes('/default-avatar') || photoUrl.includes('default.png')) {
+      return null;
+    }
+
+    return photoUrl;
   };
 
   const imageSource = getImageSource();
-  const userName = user?.name || user?.username || 'Unknown User';
+  const userName = user?.name || user?.username || 'User';
   const initials = getInitials(userName);
   const bgColor = getBackgroundColor(userName);
 
   // Determine what to show
   const showImage = imageSource && imageLoaded && !imageError;
-  const showInitials = !showImage && userName && initials !== 'U';
+  const showInitials = !showImage && userName && initials;
   const showIcon = !showImage && !showInitials;
 
   const containerClasses = `

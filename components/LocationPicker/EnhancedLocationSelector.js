@@ -198,13 +198,18 @@ const EnhancedLocationSelector = ({
         lat,
         lng,
         address: `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-        formatted: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        formatted: `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        formatted_address: `Location at ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        // ✅ CRITICAL FIX: Flatten commonly used fields for easier access
+        city: 'GPS Location',
+        state: '',
+        name: 'GPS Location',
         coordinates: { lat, lng },
         components: {},
         isInIndia: isLocationInIndia(lat, lng)
       };
       setSelectedLocation(basicLocation);
-      onLocationSelect(basicLocation);
+      // ✅ CRITICAL FIX: Don't call onLocationSelect here - wait for user to confirm
       return;
     }
 
@@ -221,7 +226,7 @@ const EnhancedLocationSelector = ({
         if (isValid) {
           console.log('Using cached geocoding result');
           setSelectedLocation(data);
-          onLocationSelect(data);
+          // ✅ CRITICAL FIX: Don't call onLocationSelect here - wait for user to confirm
           return;
         } else {
           localStorage.removeItem(cacheKey); // Remove expired cache
@@ -248,6 +253,12 @@ const EnhancedLocationSelector = ({
         lng,
         address: response.formatted_address,
         formatted: response.formatted_address,
+        formatted_address: response.formatted_address,
+        // ✅ CRITICAL FIX: Flatten commonly used fields for easier access
+        // Use formatted address as fallback if city is not available
+        city: components.city || response.formatted_address.split(',')[0] || '',
+        state: components.state || '',
+        name: components.city || response.formatted_address.split(',')[0] || 'Selected Location',
         coordinates: {
           lat,
           lng
@@ -276,7 +287,7 @@ const EnhancedLocationSelector = ({
       }
 
       setSelectedLocation(location);
-      onLocationSelect(location);
+      // ✅ CRITICAL FIX: Don't call onLocationSelect here - wait for user to confirm
     } catch (error) {
       console.error('Reverse geocoding failed:', error);
       // Don't show toast for geocoding failures, it's not critical
@@ -290,7 +301,10 @@ const EnhancedLocationSelector = ({
       const types = component.types;
       if (types.includes('street_number')) result.streetNumber = component.long_name;
       if (types.includes('route')) result.street = component.long_name;
+      // ✅ CRITICAL FIX: Handle multiple city-level address types
       if (types.includes('locality')) result.city = component.long_name;
+      if (types.includes('sublocality') && !result.city) result.city = component.long_name;
+      if (types.includes('administrative_area_level_2') && !result.city) result.city = component.long_name;
       if (types.includes('administrative_area_level_1')) result.state = component.long_name;
       if (types.includes('postal_code')) result.pincode = component.long_name;
       if (types.includes('country')) result.country = component.long_name;
@@ -369,6 +383,12 @@ const EnhancedLocationSelector = ({
           lng,
           address: place.formatted_address,
           formatted: place.formatted_address,
+          formatted_address: place.formatted_address,
+          // ✅ CRITICAL FIX: Flatten commonly used fields for easier access
+          // Use formatted address as fallback if city is not available
+          city: components.city || place.formatted_address.split(',')[0] || '',
+          state: components.state || '',
+          name: components.city || place.formatted_address.split(',')[0] || 'Selected Location',
           coordinates: {
             lat,
             lng
@@ -594,11 +614,12 @@ const EnhancedLocationSelector = ({
   // Confirm map selection
   const confirmMapSelection = useCallback(() => {
     if (selectedLocation) {
+      onLocationSelect(selectedLocation); // ✅ CRITICAL FIX: Call parent callback on confirmation
       setShowMapModal(false);
       setCurrentStep('initial');
       toast.success('Location confirmed');
     }
-  }, [selectedLocation]);
+  }, [selectedLocation, onLocationSelect]);
 
   // Reset to initial state
   const resetSelection = useCallback(() => {
