@@ -785,24 +785,30 @@ export default function SignupPage() {
   const handleGoogleAuth = async () => {
     setLoading(true);
     try {
-      console.log('🔄 Starting Google authentication...');
+      console.log('🔄 Starting Google authentication for SIGNUP...');
 
-      // Save role to sessionStorage to preserve it through OAuth flow
+      // Save context to sessionStorage to preserve it through OAuth flow
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('selectedRole', formData.role);
       }
 
+      // Set auth context cookie before starting OAuth
+      await fetch('/api/auth/set-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context: 'signup' })
+      });
+
       // Clear any existing session
       await signOut({ redirect: false });
 
-      // Start Google OAuth (no toast needed - user will see the redirect)
+      // Start Google OAuth
       await signIn('google', {
         callbackUrl: `/auth/signup?role=${formData.role}&method=google`
       });
 
     } catch (error) {
       console.error('Google auth error:', error);
-      // Only show toast for actual errors
       toast.error('Authentication failed. Please try again.');
       setLoading(false);
     }

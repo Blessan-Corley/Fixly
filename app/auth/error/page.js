@@ -70,6 +70,47 @@ export default function AuthErrorPage() {
           action: 'Back to Sign In',
           actionPath: '/auth/signin'
         };
+      case 'SignupFailed':
+        return {
+          title: 'Sign Up Temporarily Unavailable',
+          description: 'We couldn\'t complete your Google sign up at this time. Please try again in a moment.',
+          solutions: [
+            'Wait a moment and try signing in with Google again',
+            'Check your internet connection',
+            'If you already have an account, try signing in instead',
+            'Contact support if the issue continues'
+          ],
+          action: 'Try Again',
+          actionPath: '/auth/signup'
+        };
+      case 'ServiceUnavailable':
+        return {
+          title: 'Service Temporarily Unavailable',
+          description: 'Our service is temporarily unavailable. We\'re working to restore it as quickly as possible.',
+          solutions: [
+            'Please try again in a few minutes',
+            'Check your internet connection',
+            'Our team has been notified and is working on it',
+            'Contact support if this persists for more than 10 minutes'
+          ],
+          action: 'Try Again',
+          actionPath: '/auth/signin'
+        };
+      case 'DatabaseError':
+      case 'DatabaseConnectionFailed':
+        // Redirect these internal errors to user-friendly message
+        return {
+          title: 'Service Temporarily Unavailable',
+          description: 'We\'re experiencing technical difficulties. Please try again shortly.',
+          solutions: [
+            'Wait a few minutes and try again',
+            'Our technical team has been automatically notified',
+            'Your data is safe - this is just a temporary connectivity issue',
+            'Contact support if you continue to see this message'
+          ],
+          action: 'Try Again',
+          actionPath: '/auth/signin'
+        };
       default:
         return {
           title: 'Authentication Error',

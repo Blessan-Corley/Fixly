@@ -189,13 +189,14 @@ export async function POST(request) {
         console.log('🆕 Creating complete Google user record during signup completion');
 
         const userData = {
-          name: session.user.name,
+          name: body.name || session.user.name,
           email: session.user.email,
           username: body.username,
           role: body.role,
           authMethod: 'google',
           googleId: session.user.id,
           picture: session.user.image,
+          profilePhoto: session.user.image ? { url: session.user.image } : undefined,
           providers: ['google'],
           isVerified: true,
           emailVerified: true,
@@ -242,12 +243,19 @@ export async function POST(request) {
         lastActivityAt: new Date()
       };
 
+      if (body.name) {
+        updateData.name = body.name;
+      }
       if (body.phone) {
         // Just store the phone as-is, let the User model handle formatting
         updateData.phone = body.phone;
       }
       if (body.username) {
         updateData.username = body.username.toLowerCase().trim();
+      }
+      if (session.user.image && !user.profilePhoto?.url) {
+        updateData.profilePhoto = { url: session.user.image };
+        updateData.picture = session.user.image;
       }
       if (body.location) {
         console.log('🗺️ Processing location data:', JSON.stringify(body.location, null, 2));

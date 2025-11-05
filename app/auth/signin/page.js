@@ -154,16 +154,23 @@ export default function SignInPage() {
 
   const handleGoogleSignIn = async () => {
     if (googleLoading) return;
-    
+
     setGoogleLoading(true);
     try {
-      console.log('🔄 Starting Google signin...');
-      
+      console.log('🔄 Starting Google signin for SIGNIN...');
+
+      // Set auth context cookie before starting OAuth
+      await fetch('/api/auth/set-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context: 'signin' })
+      });
+
       // Use NextAuth's signIn with proper redirect
-      await signIn('google', { 
+      await signIn('google', {
         callbackUrl: '/dashboard'
       });
-      
+
       // This will redirect, so we don't need to handle the response
     } catch (error) {
       console.error('💥 Google signin error:', error);
