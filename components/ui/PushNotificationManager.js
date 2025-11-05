@@ -4,112 +4,109 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Bell, BellOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAbly } from '../../contexts/AblyContext';
 
 export default function PushNotificationManager() {
   const { data: session } = useSession();
+  const { isConnected } = useAbly();
   const [supported, setSupported] = useState(false);
-  const [subscribed, setSubscribed] = useState(false);
+  const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    checkPushSupport();
+    checkNotificationSupport();
   }, []);
 
-  const checkPushSupport = async () => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
+  const checkNotificationSupport = async () => {
+    // Check if browser supports Notifications API
+    if ('Notification' in window) {
       setSupported(true);
-      
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
-        setSubscribed(!!subscription);
-      } catch (error) {
-        console.error('Error checking push subscription:', error);
-      }
+
+      // Check current permission status
+      const permission = await Notification.permission;
+      setEnabled(permission === 'granted');
     }
   };
 
-  const subscribeToPush = async () => {
+  const enableNotifications = async () => {
     if (!supported || !session) return;
 
     setLoading(true);
     try {
       // Request notification permission
       const permission = await Notification.requestPermission();
-      
+
       if (permission !== 'granted') {
-        toast.error('Push notifications permission denied');
+        toast.error('Browser notifications permission denied');
         setLoading(false);
         return;
       }
 
-      // Get service worker registration
-      const registration = await navigator.serviceWorker.ready;
-      
-      // Subscribe to push notifications
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '')
-      });
-
-      // Send subscription to server
-      const response = await fetch('/api/user/push-subscription', {
+      // Save preference to user settings
+      const response = await fetch('/api/user/notification-preferences', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          subscription: subscription.toJSON()
+          browserNotifications: true
         })
       });
 
       if (response.ok) {
-        setSubscribed(true);
-        toast.success('Push notifications enabled!');
+        setEnabled(true);
+
+        // Show a test notification
+        new Notification('Fixly Notifications Enabled', {
+          body: 'You will now receive real-time notifications for jobs, messages, and updates!',
+          icon: '/fixly-logo.png',
+          badge: '/fixly-badge.png',
+          tag: 'welcome-notification'
+        });
+
+        toast.success('Browser notifications enabled! You\'ll receive real-time alerts via Ably.');
       } else {
-        throw new Error('Failed to save subscription');
+        throw new Error('Failed to save notification preferences');
       }
     } catch (error) {
-      console.error('Error subscribing to push:', error);
-      toast.error('Failed to enable push notifications');
+      console.error('Error enabling notifications:', error);
+      toast.error('Failed to enable notifications');
     }
     setLoading(false);
   };
 
-  const unsubscribeFromPush = async () => {
+  const disableNotifications = async () => {
     if (!supported || !session) return;
 
     setLoading(true);
     try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      
-      if (subscription) {
-        await subscription.unsubscribe();
-        
-        // Remove subscription from server
-        await fetch('/api/user/push-subscription', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
-        
-        setSubscribed(false);
-        toast.success('Push notifications disabled');
+      // Save preference to user settings
+      const response = await fetch('/api/user/notification-preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          browserNotifications: false
+        })
+      });
+
+      if (response.ok) {
+        setEnabled(false);
+        toast.success('Browser notifications disabled');
       }
     } catch (error) {
-      console.error('Error unsubscribing from push:', error);
-      toast.error('Failed to disable push notifications');
+      console.error('Error disabling notifications:', error);
+      toast.error('Failed to disable notifications');
     }
     setLoading(false);
   };
 
   const handleToggle = () => {
-    if (subscribed) {
-      unsubscribeFromPush();
+    if (enabled) {
+      disableNotifications();
     } else {
-      subscribeToPush();
+      enableNotifications();
     }
   };
 
@@ -119,47 +116,39 @@ export default function PushNotificationManager() {
   }
 
   return (
-    <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+    <div className="flex items-center gap-3 p-4 bg-fixly-surface dark:bg-fixly-card rounded-lg border border-fixly-border">
       <div className="flex-1">
-        <h4 className="font-medium text-gray-900">Push Notifications</h4>
-        <p className="text-sm text-gray-600">
-          Get instant alerts for jobs, messages, and updates
+        <div className="flex items-center gap-2 mb-1">
+          <h4 className="font-medium text-fixly-text">Browser Notifications</h4>
+          {isConnected && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 text-xs rounded-full">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+              Live via Ably
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-fixly-text-muted">
+          Get instant browser alerts for jobs, messages, and updates in real-time
         </p>
       </div>
       <button
         onClick={handleToggle}
         disabled={loading}
         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-          subscribed 
-            ? 'bg-red-100 text-red-700 hover:bg-red-200' 
-            : 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+          enabled
+            ? 'bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/30'
+            : 'bg-fixly-primary-bg text-fixly-primary hover:bg-fixly-primary-bg/80'
         } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         {loading ? (
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-        ) : subscribed ? (
+        ) : enabled ? (
           <BellOff className="w-4 h-4" />
         ) : (
           <Bell className="w-4 h-4" />
         )}
-        {subscribed ? 'Disable' : 'Enable'}
+        {enabled ? 'Disable' : 'Enable'}
       </button>
     </div>
   );
-}
-
-// Helper function to convert VAPID key
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
 }
