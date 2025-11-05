@@ -39,6 +39,7 @@ export async function POST(request) {
         email: user.email,
         username: user.username,
         role: user.role,
+        photoURL: user.profilePhoto?.url || user.picture || null,
         isVerified: user.isVerified,
         isRegistered: !!(user.role && user.location && user.username && !user.username.startsWith('temp_')),
         authMethod: user.authMethod
