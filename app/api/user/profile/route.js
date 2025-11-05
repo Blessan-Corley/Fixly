@@ -143,10 +143,49 @@ export async function GET(request) {
 
     if (!user) {
       console.error('❌ User not found for ID:', userId);
-      return NextResponse.json(
-        { message: 'User not found' },
-        { status: 404 }
-      );
+      console.error('📧 Session email:', session.user?.email);
+
+      // Try to find by email as fallback
+      if (session.user?.email) {
+        console.log('🔍 Attempting to find user by email:', session.user.email);
+        user = await User.findOne({ email: session.user.email }).select(`
+          name
+          username
+          email
+          phone
+          role
+          profilePhoto
+          picture
+          isRegistered
+          banned
+          location
+          skills
+          rating
+          jobsCompleted
+          totalEarnings
+          plan
+          notifications
+          preferences
+          createdAt
+          lastLoginAt
+          authMethod
+          emailVerified
+          phoneVerified
+          googleId
+        `);
+
+        if (user) {
+          console.log('✅ User found by email, session ID mismatch fixed');
+          // The session will be updated on next request
+        }
+      }
+
+      if (!user) {
+        return NextResponse.json(
+          { message: 'User not found. Please sign out and sign in again.' },
+          { status: 404 }
+        );
+      }
     }
 
     // Check if user is banned
@@ -176,7 +215,8 @@ export async function GET(request) {
       email: user.email,
       phone: user.phone,
       role: user.role,
-      profilePhoto: user.profilePhoto || null,
+      profilePhoto: user.profilePhoto?.url || user.picture || null,
+      photoURL: user.profilePhoto?.url || user.picture || null, // Support both field names
       isRegistered: user.isRegistered || false,
       banned: user.banned || false,
       
@@ -219,9 +259,16 @@ export async function GET(request) {
 
     console.log('✅ User profile fetched successfully');
 
+    // Add cache headers for better performance
     return NextResponse.json({
       success: true,
       user: profileData
+    }, {
+      headers: {
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        'CDN-Cache-Control': 'max-age=60',
+        'Vary': 'Cookie'
+      }
     });
 
   } catch (error) {
@@ -298,20 +345,33 @@ export async function PUT(request) {
 
     await connectDB();
 
-    // ✅ CRITICAL FIX: Validate ObjectId format
-    if (!userId.match(/^[0-9a-fA-F]{24}$/)) {
-      return NextResponse.json(
-        { message: 'Invalid user session. Please sign in again.' },
-        { status: 400 }
-      );
-    }
+    // ✅ CRITICAL FIX: Handle Google users vs MongoDB users
+    const isGoogleUser = !userId.match(/^[0-9a-fA-F]{24}$/);
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return NextResponse.json(
-        { message: 'User not found' },
-        { status: 404 }
-      );
+    let user;
+
+    if (isGoogleUser) {
+      console.log('🔍 Google user profile update (non-ObjectId):', userId);
+      // For Google users, find by googleId instead of _id
+      user = await User.findOne({ googleId: userId });
+
+      if (!user) {
+        console.log('❌ Google user not found in database:', userId);
+        return NextResponse.json(
+          { message: 'User not found. Please complete signup first.' },
+          { status: 404 }
+        );
+      }
+    } else {
+      // Find MongoDB user
+      user = await User.findById(userId);
+
+      if (!user) {
+        return NextResponse.json(
+          { message: 'User not found' },
+          { status: 404 }
+        );
+      }
     }
 
     if (user.banned) {
@@ -380,10 +440,48 @@ export async function PUT(request) {
       );
     }
 
+    // ✅ CRITICAL: 24-hour rate limit for location changes
+    if (updates.location) {
+      const now = Date.now();
+      const twentyFourHours = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+      if (user.lastLocationUpdate) {
+        const timeSinceLastUpdate = now - user.lastLocationUpdate.getTime();
+
+        if (timeSinceLastUpdate < twentyFourHours) {
+          const timeRemaining = twentyFourHours - timeSinceLastUpdate;
+          const hoursRemaining = Math.floor(timeRemaining / (60 * 60 * 1000));
+          const minutesRemaining = Math.floor((timeRemaining % (60 * 60 * 1000)) / (60 * 1000));
+
+          console.log('⏱️ Location update rate limit hit:', {
+            userId: user._id,
+            lastUpdate: user.lastLocationUpdate,
+            hoursRemaining,
+            minutesRemaining
+          });
+
+          return NextResponse.json(
+            {
+              message: `You can only update your location once every 24 hours. Please try again in ${hoursRemaining}h ${minutesRemaining}m.`,
+              rateLimited: true,
+              retryAfter: timeRemaining,
+              hoursRemaining,
+              minutesRemaining
+            },
+            { status: 429 }
+          );
+        }
+      }
+
+      console.log('✅ Location update allowed, updating lastLocationUpdate timestamp');
+    }
+
     // Apply updates with special handling for location
+    let locationActuallyUpdated = false;
+
     for (const [key, value] of Object.entries(updates)) {
       if (key === 'location') {
-        // Enhanced location update with coordinates and history
+        // ✅ CRITICAL FIX: Only update location if it has valid coordinates
         if (value && value.lat && value.lng) {
           // Update main location
           user.location = {
@@ -434,13 +532,22 @@ export async function PUT(request) {
           if (user.locationHistory.length > 10) {
             user.locationHistory = user.locationHistory.slice(0, 10);
           }
+
+          locationActuallyUpdated = true;
         } else {
-          // Simple location update without coordinates
-          user.location = value;
+          // ✅ CRITICAL FIX: Skip location update if no valid coordinates
+          // This prevents validation errors when saving profile without location changes
+          console.log('⏭️ Skipping location update - no valid coordinates provided');
         }
       } else {
         user[key] = value;
       }
+    }
+
+    // ✅ CRITICAL: Update lastLocationUpdate timestamp only if location was actually changed
+    if (locationActuallyUpdated) {
+      user.lastLocationUpdate = new Date();
+      console.log('📍 Location update timestamp set:', user.lastLocationUpdate);
     }
 
     await user.save();

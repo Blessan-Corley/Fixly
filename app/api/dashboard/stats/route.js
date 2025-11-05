@@ -5,8 +5,9 @@ import connectDB from '../../../../lib/db.js';
 import Job from '../../../../models/Job.js';
 import User from '../../../../models/User.js';
 import { rateLimit } from '../../../../utils/rateLimiting.js';
+import { redisUtils } from '../../../../lib/redis.js';
 
-export const dynamic = 'force-dynamic'; 
+export const dynamic = 'force-dynamic';
 export async function GET(request) {
   console.log('🔍 Dashboard stats API called');
   try {
@@ -91,6 +92,32 @@ export async function GET(request) {
 
     console.log('✅ User found, role:', user.role);
 
+    // ✅ REDIS CACHING: Try to get stats from cache first
+    const cacheKey = `dashboard:stats:${user.role}:${user._id}`;
+    const cacheTTL = 5 * 60; // 5 minutes cache for stats
+
+    try {
+      const cachedStats = await redisUtils.get(cacheKey);
+      if (cachedStats) {
+        console.log('✅ Cache HIT for dashboard stats:', cacheKey);
+        const stats = JSON.parse(cachedStats);
+        return NextResponse.json({
+          ...stats,
+          cached: true,
+          cacheTimestamp: stats._cacheTimestamp
+        }, {
+          headers: {
+            'X-Cache': 'HIT',
+            'Cache-Control': `max-age=${cacheTTL}`
+          }
+        });
+      }
+      console.log('❌ Cache MISS for dashboard stats:', cacheKey);
+    } catch (cacheError) {
+      console.error('⚠️ Cache read error:', cacheError);
+      // Continue without cache on error
+    }
+
     let stats = {};
 
     switch (user.role) {
@@ -111,7 +138,25 @@ export async function GET(request) {
         );
     }
 
-    return NextResponse.json(stats);
+    // ✅ REDIS CACHING: Store stats in cache
+    try {
+      const statsWithMeta = {
+        ...stats,
+        _cacheTimestamp: new Date().toISOString()
+      };
+      await redisUtils.set(cacheKey, JSON.stringify(statsWithMeta), cacheTTL);
+      console.log('✅ Stats cached successfully:', cacheKey);
+    } catch (cacheError) {
+      console.error('⚠️ Cache write error:', cacheError);
+      // Continue without caching on error
+    }
+
+    return NextResponse.json(stats, {
+      headers: {
+        'X-Cache': 'MISS',
+        'Cache-Control': `max-age=${cacheTTL}`
+      }
+    });
 
   } catch (error) {
     console.error('❌ Dashboard stats error:', {
