@@ -194,4 +194,183 @@ class PushNotificationTester {
       if (manager.validateSubscriptionData(invalid)) {
         throw new Error('Invalid subscription data accepted: ' + JSON.stringify(invalid));
       }
-    }\n    \n    manager.destroy();\n  }\n\n  // Test 7: Memory Cleanup and Resource Management\n  async testMemoryCleanup() {\n    const manager = new PushNotificationManager();\n    manager.setUser(this.mockUser);\n    \n    // Add some rate limit entries\n    for (let i = 0; i < 100; i++) {\n      manager.inMemoryRateLimit.set(`test_key_${i}`, [Date.now() - 25 * 60 * 60 * 1000]); // 25 hours ago\n    }\n    \n    const initialSize = manager.inMemoryRateLimit.size;\n    manager.cleanupMemoryRateLimit();\n    const afterCleanupSize = manager.inMemoryRateLimit.size;\n    \n    if (afterCleanupSize >= initialSize) {\n      throw new Error('Memory cleanup not working');\n    }\n    \n    // Test destroy method\n    manager.destroy();\n    \n    if (manager.inMemoryRateLimit.size !== 0) {\n      throw new Error('Destroy method not clearing memory properly');\n    }\n    \n    if (manager.currentUser !== null) {\n      throw new Error('Destroy method not resetting state');\n    }\n  }\n\n  // Test 8: Error Handling\n  async testErrorHandling() {\n    const manager = new PushNotificationManager();\n    \n    let errorHandled = false;\n    manager.on('notificationError', () => {\n      errorHandled = true;\n    });\n    \n    const testError = new Error('Test error');\n    await manager.handleNotificationError(testError, 'test_operation');\n    \n    // Give a moment for async operations\n    await new Promise(resolve => setTimeout(resolve, 100));\n    \n    if (!errorHandled) {\n      throw new Error('Error event not emitted');\n    }\n    \n    manager.destroy();\n  }\n\n  // Test 9: Health Check System\n  async testHealthCheck() {\n    // Mock browser environment\n    global.navigator = { serviceWorker: { ready: Promise.resolve({ active: true }) } };\n    \n    const manager = new PushNotificationManager();\n    manager.setUser(this.mockUser);\n    \n    let healthCheckCompleted = false;\n    manager.on('healthCheckDetailed', (data) => {\n      healthCheckCompleted = true;\n      \n      if (!data.timestamp || typeof data.redis !== 'boolean') {\n        throw new Error('Health check data incomplete');\n      }\n    });\n    \n    try {\n      await manager.performEnhancedHealthCheck();\n    } catch (error) {\n      // Expected in test environment\n      if (!error.message.includes('serviceWorker')) {\n        throw error;\n      }\n    }\n    \n    manager.destroy();\n  }\n\n  // Test 10: Configuration Validation\n  async testConfiguration() {\n    const manager = new PushNotificationManager();\n    \n    // Check rate limit configuration\n    const requiredConfigs = ['subscribe', 'send', 'unsubscribe'];\n    for (const config of requiredConfigs) {\n      if (!manager.rateLimitConfig[config]) {\n        throw new Error(`Missing rate limit config for ${config}`);\n      }\n      \n      if (!manager.rateLimitConfig[config].limit || !manager.rateLimitConfig[config].windowMs) {\n        throw new Error(`Incomplete rate limit config for ${config}`);\n      }\n    }\n    \n    // Check notification templates\n    const requiredTemplates = ['job_match', 'message_received', 'job_application'];\n    for (const template of requiredTemplates) { \n      if (!manager.notificationTemplates[template]) {\n        throw new Error(`Missing notification template for ${template }`);\n      }\n    }\n    \n    manager.destroy();\n  }\n\n  // Run all tests\n  async runAllTests() { \n    console.log('🚀 Starting Enhanced Push notification System Tests\\n');\n    \n    const tests = [\n      ['Manager Creation and Initialization', () => this.testManagerCreation()],\n      ['Secure Factory Method', () => this.testSecureFactory()],\n      ['Rate Limiting Functionality', () => this.testRateLimiting()],\n      ['Input Validation and Sanitization', () => this.testInputValidation()],\n      ['Offline Queue Management', () => this.testOfflineQueue()],\n      ['Subscription Data Validation', () => this.testSubscriptionValidation()],\n      ['Memory Cleanup and Resource Management', () => this.testMemoryCleanup()],\n      ['Error Handling', () => this.testErrorHandling()],\n      ['Health Check System', () => this.testHealthCheck()],\n      ['Configuration Validation', () => this.testConfiguration()]\n    ];\n    \n    for (const [name, testFn] of tests) {\n      await this.runTest(name, testFn);\n     }\n    \n    this.printSummary();\n  }\n\n  printSummary() {\n    console.log('\\n' + '='.repeat(60));\n    console.log('📊 TEST RESULTS SUMMARY');\n    console.log('='.repeat(60));\n    \n    const passed = this.testResults.filter(r => r.status === 'PASS').length;\n    const failed = this.testResults.filter(r => r.status === 'FAIL').length;\n    const warnings = this.testResults.filter(r => r.status === 'WARN').length;\n    \n    console.log(`✅ Passed: ${passed}`);\n    console.log(`❌ Failed: ${failed}`);\n    console.log(`⚠️  Warnings: ${warnings}`);\n    console.log(`📈 Success Rate: ${((passed / this.testResults.length) * 100).toFixed(1)}%`);\n    \n    if (failed > 0) {\n      console.log('\\n❌ Failed Tests:');\n      this.testResults\n        .filter(r => r.status === 'FAIL')\n        .forEach(r => console.log(`   - ${r.test}: ${r.message}`));\n    }\n    \n    console.log('\\n🎉 Enhanced Push Notification System Testing Complete!');\n    \n    if (failed === 0) {\n      console.log('🏆 All critical security and functionality tests passed!');\n      process.exit(0);\n    } else { \n      console.log('⚠️  Some tests failed. Please review the results above.');\n      process.exit(1);\n     }\n  }\n}\n\n// Run tests if called directly\nif (require.main === module) {\n  const tester = new PushNotificationTester();\n  tester.runAllTests().catch(error => {\n    console.error('❌ Test suite failed:', error);\n    process.exit(1);\n  });\n}\n\nmodule.exports = { PushNotificationTester };
+    }
+
+    manager.destroy();
+  }
+
+  // Test 7: Memory Cleanup and Resource Management
+  async testMemoryCleanup() {
+    const manager = new PushNotificationManager();
+    manager.setUser(this.mockUser);
+
+    // Add some rate limit entries
+    for (let i = 0; i < 100; i++) {
+      manager.inMemoryRateLimit.set(`test_key_${i}`, [Date.now() - 25 * 60 * 60 * 1000]); // 25 hours ago
+    }
+
+    const initialSize = manager.inMemoryRateLimit.size;
+    manager.cleanupMemoryRateLimit();
+    const afterCleanupSize = manager.inMemoryRateLimit.size;
+
+    if (afterCleanupSize >= initialSize) {
+      throw new Error('Memory cleanup not working');
+    }
+
+    // Test destroy method
+    manager.destroy();
+
+    if (manager.inMemoryRateLimit.size !== 0) {
+      throw new Error('Destroy method not clearing memory properly');
+    }
+
+    if (manager.currentUser !== null) {
+      throw new Error('Destroy method not resetting state');
+    }
+  }
+
+  // Test 8: Error Handling
+  async testErrorHandling() {
+    const manager = new PushNotificationManager();
+
+    let errorHandled = false;
+    manager.on('notificationError', () => {
+      errorHandled = true;
+    });
+
+    const testError = new Error('Test error');
+    await manager.handleNotificationError(testError, 'test_operation');
+
+    // Give a moment for async operations
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    if (!errorHandled) {
+      throw new Error('Error event not emitted');
+    }
+
+    manager.destroy();
+  }
+
+  // Test 9: Health Check System
+  async testHealthCheck() {
+    // Mock browser environment
+    global.navigator = { serviceWorker: { ready: Promise.resolve({ active: true }) } };
+
+    const manager = new PushNotificationManager();
+    manager.setUser(this.mockUser);
+
+    let healthCheckCompleted = false;
+    manager.on('healthCheckDetailed', (data) => {
+      healthCheckCompleted = true;
+
+      if (!data.timestamp || typeof data.redis !== 'boolean') {
+        throw new Error('Health check data incomplete');
+      }
+    });
+
+    try {
+      await manager.performEnhancedHealthCheck();
+    } catch (error) {
+      // Expected in test environment
+      if (!error.message.includes('serviceWorker')) {
+        throw error;
+      }
+    }
+
+    manager.destroy();
+  }
+
+  // Test 10: Configuration Validation
+  async testConfiguration() {
+    const manager = new PushNotificationManager();
+
+    // Check rate limit configuration
+    const requiredConfigs = ['subscribe', 'send', 'unsubscribe'];
+    for (const config of requiredConfigs) {
+      if (!manager.rateLimitConfig[config]) {
+        throw new Error(`Missing rate limit config for ${config}`);
+      }
+
+      if (!manager.rateLimitConfig[config].limit || !manager.rateLimitConfig[config].windowMs) {
+        throw new Error(`Incomplete rate limit config for ${config}`);
+      }
+    }
+
+    // Check notification templates
+    const requiredTemplates = ['job_match', 'message_received', 'job_application'];
+    for (const template of requiredTemplates) {
+      if (!manager.notificationTemplates[template]) {
+        throw new Error(`Missing notification template for ${template }`);
+      }
+    }
+
+    manager.destroy();
+  }
+
+  // Run all tests
+  async runAllTests() {
+    console.log('🚀 Starting Enhanced Push notification System Tests\n');
+
+    const tests = [
+      ['Manager Creation and Initialization', () => this.testManagerCreation()],
+      ['Secure Factory Method', () => this.testSecureFactory()],
+      ['Rate Limiting Functionality', () => this.testRateLimiting()],
+      ['Input Validation and Sanitization', () => this.testInputValidation()],
+      ['Offline Queue Management', () => this.testOfflineQueue()],
+      ['Subscription Data Validation', () => this.testSubscriptionValidation()],
+      ['Memory Cleanup and Resource Management', () => this.testMemoryCleanup()],
+      ['Error Handling', () => this.testErrorHandling()],
+      ['Health Check System', () => this.testHealthCheck()],
+      ['Configuration Validation', () => this.testConfiguration()]
+    ];
+
+    for (const [name, testFn] of tests) {
+      await this.runTest(name, testFn);
+     }
+
+    this.printSummary();
+  }
+
+  printSummary() {
+    console.log('\n' + '='.repeat(60));
+    console.log('📊 TEST RESULTS SUMMARY');
+    console.log('='.repeat(60));
+
+    const passed = this.testResults.filter(r => r.status === 'PASS').length;
+    const failed = this.testResults.filter(r => r.status === 'FAIL').length;
+    const warnings = this.testResults.filter(r => r.status === 'WARN').length;
+
+    console.log(`✅ Passed: ${passed}`);
+    console.log(`❌ Failed: ${failed}`);
+    console.log(`⚠️  Warnings: ${warnings}`);
+    console.log(`📈 Success Rate: ${((passed / this.testResults.length) * 100).toFixed(1)}%`);
+
+    if (failed > 0) {
+      console.log('\n❌ Failed Tests:');
+      this.testResults
+        .filter(r => r.status === 'FAIL')
+        .forEach(r => console.log(`   - ${r.test}: ${r.message}`));
+    }
+
+    console.log('\n🎉 Enhanced Push Notification System Testing Complete!');
+
+    if (failed === 0) {
+      console.log('🏆 All critical security and functionality tests passed!');
+      process.exit(0);
+    } else {
+      console.log('⚠️  Some tests failed. Please review the results above.');
+      process.exit(1);
+     }
+  }
+}
+
+// Run tests if called directly
+if (require.main === module) {
+  const tester = new PushNotificationTester();
+  tester.runAllTests().catch(error => {
+    console.error('❌ Test suite failed:', error);
+    process.exit(1);
+  });
+}
+
+module.exports = { PushNotificationTester };

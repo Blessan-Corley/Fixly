@@ -912,6 +912,12 @@ export default function SignupPage() {
           if (response.ok && data.success) {
             toast.success('Profile completed successfully! 🎉');
 
+            // Clear any cached session data immediately
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem('selectedRole');
+              sessionStorage.removeItem('incompleteSignup');
+            }
+
             // Force session refresh for Google users - trigger JWT token update
             console.log('🔄 Refreshing session after Google completion');
             try {
@@ -923,20 +929,22 @@ export default function SignupPage() {
                 profileCompleted: true
               });
               console.log('✅ Session updated successfully');
+              
+              // Verify session update completed
+              const updatedSession = await getSession();
+              if (updatedSession?.user?.isRegistered) {
+                console.log('✅ Session verification successful');
+                router.replace('/dashboard');
+              } else {
+                console.warn('⚠️ Session not fully updated, forcing page reload');
+                // Force full page reload to refresh session
+                window.location.href = '/dashboard';
+              }
             } catch (error) {
-              console.warn('⚠️ Session update failed, continuing anyway:', error);
+              console.warn('⚠️ Session update error, forcing page reload:', error);
+              // Force full page reload as fallback
+              window.location.href = '/dashboard';
             }
-
-            // Clear any cached session data
-            if (typeof window !== 'undefined') {
-              sessionStorage.removeItem('selectedRole');
-              sessionStorage.removeItem('incompleteSignup');
-            }
-
-            // Navigate to dashboard with longer delay to allow session update
-            setTimeout(() => {
-              router.replace('/dashboard');
-            }, 1000);
           } else {
             console.error('❌ Google completion failed:', data);
             toast.error(data.message || 'Failed to complete profile. Please try again.');
