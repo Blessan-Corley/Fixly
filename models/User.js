@@ -3,9 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 const userSchema = new mongoose.Schema({
-  // Password reset fields
-  resetToken: String,
-  resetTokenExpiry: Date,
+
   // Authentication IDs
   uid: {
     type: String,
@@ -136,20 +134,8 @@ const userSchema = new mongoose.Schema({
     select: false // Excludes from queries by default
   },
   
-  // Password Reset Tokens
-  passwordResetToken: {
-    type: String,
-    select: false
-  },
-  passwordResetExpires: {
-    type: Date,
-    select: false
-  },
-  passwordResetAttempts: {
-    type: Number,
-    default: 0,
-    select: false
-  },
+  // Password Reset - Using OTP system (stored in Redis)
+  // No token fields needed - all OTP logic handled in lib/otpService.js
   
   // Authentication
   authMethod: {
@@ -1366,46 +1352,9 @@ userSchema.methods.linkGoogleAccount = function(googleId, picture) {
   return this.save();
 };
 
-// NEW: Method to generate password reset token
-userSchema.methods.createPasswordResetToken = function() {
-  const resetToken = crypto.randomBytes(32).toString('hex');
-  
-  this.passwordResetToken = crypto
-    .createHash('sha256')
-    .update(resetToken)
-    .digest('hex');
-  
-  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-  this.passwordResetAttempts = 0;
-  
-  return resetToken;
-};
-
-// NEW: Method to verify password reset token
-userSchema.methods.verifyPasswordResetToken = function(token) {
-  const hashedToken = crypto
-    .createHash('sha256')
-    .update(token)
-    .digest('hex');
-  
-  return this.passwordResetToken === hashedToken && 
-         this.passwordResetExpires > Date.now() &&
-         this.passwordResetAttempts < 3;
-};
-
-// NEW: Method to increment password reset attempts
-userSchema.methods.incrementPasswordResetAttempts = function() {
-  this.passwordResetAttempts += 1;
-  return this.save();
-};
-
-// NEW: Method to clear password reset token
-userSchema.methods.clearPasswordResetToken = function() {
-  this.passwordResetToken = undefined;
-  this.passwordResetExpires = undefined;
-  this.passwordResetAttempts = 0;
-  return this.save();
-};
+// NOTE: Password reset uses OTP system (Redis-based)
+// All password reset logic is in lib/otpService.js and app/api/auth/reset-password/route.js
+// No token-based methods needed
 
 // Method to update badges based on performance
 userSchema.methods.updateBadges = function() {

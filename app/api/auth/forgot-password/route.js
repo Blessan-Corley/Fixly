@@ -1,23 +1,26 @@
-// app/api/auth/forgot-password/route.js - Professional password reset system
+// app/api/auth/forgot-password/route.js - OTP-based password reset (SIMPLIFIED)
 import { NextResponse } from 'next/server';
-import connectDB from '@/lib/db';
-import User from '@/models/User';
-import { rateLimit } from '@/utils/rateLimiting';
-import { sendPasswordResetEmail } from '@/lib/email';
+import connectDB from '../../../../lib/db';
+import User from '../../../../models/User';
+import { redisRateLimit } from '../../../../lib/redis';
+import { sendPasswordResetOTP } from '../../../../lib/otpService';
 
 export async function POST(request) {
   try {
-    // Strict rate limiting for password reset requests using Redis for consistency
+    // Strict rate limiting for password reset requests
     const forwarded = request.headers.get('x-forwarded-for');
     const ip = forwarded ? forwarded.split(',')[0] : request.headers.get('x-real-ip') || 'unknown';
 
-    const rateLimitResult = await rateLimit(request, `forgot_password_${ip}`, 3, 15 * 60 * 1000); // 3 attempts per 15 minutes
+    // Apply Redis-based rate limiting - max 3 attempts per 15 minutes
+    const rateLimitResult = await redisRateLimit(`forgot_password:${ip}`, 3, 900); // 15 minutes
     if (!rateLimitResult.success) {
+      const resetTime = new Date(rateLimitResult.resetTime || Date.now() + 900000);
       return NextResponse.json(
         { 
           success: false,
           message: 'Too many password reset attempts. Please wait 15 minutes before trying again.',
-          remainingTime: rateLimitResult.remainingTime
+          resetTime: resetTime.toISOString(),
+          remaining: rateLimitResult.remaining
         },
         { status: 429 }
       );
@@ -65,9 +68,10 @@ export async function POST(request) {
 
     if (!user) {
       // Security: Always return success to prevent email enumeration
+      console.log(`⚠️ Password reset requested for non-existent email: ${cleanEmail}`);
       return NextResponse.json({
         success: true,
-        message: 'If an account with this email exists, you will receive a password reset link shortly.'
+        message: 'If an account with this email exists, you will receive a password reset code shortly.'
       });
     }
 
@@ -79,6 +83,14 @@ export async function POST(request) {
       }, { status: 403 });
     }
 
+    // Check if user is inactive
+    if (!user.isActive || user.deletedAt) {
+      return NextResponse.json({
+        success: false,
+        message: 'Account is inactive. Please contact support.'
+      }, { status: 403 });
+    }
+
     // Check if user uses Google OAuth
     if (user.authMethod === 'google' || user.googleId) {
       return NextResponse.json({
@@ -87,35 +99,27 @@ export async function POST(request) {
       });
     }
 
-    // Generate password reset token using User model method
-    const resetToken = user.createPasswordResetToken();
-    await user.save({ validateBeforeSave: false });
+    // Send password reset OTP
+    console.log(`🔄 Sending password reset OTP to: ${cleanEmail}`);
+    const otpResult = await sendPasswordResetOTP(cleanEmail, user.name);
 
-    // Send password reset email
-    try {
-      const resetUrl = `${process.env.NEXTAUTH_URL}/auth/reset-password?token=${resetToken}`;
-      await sendPasswordResetEmail(user, resetUrl);
-      
-      
+    if (otpResult.success) {
+      console.log(`✅ Password reset OTP sent successfully to ${cleanEmail}`);
       return NextResponse.json({
         success: true,
-        message: 'Password reset instructions have been sent to your email address.'
+        message: 'A verification code has been sent to your email address. Please check your inbox.',
+        expiresIn: 300 // 5 minutes
       });
-    } catch (emailError) {
-      console.error('Failed to send password reset email:', emailError);
-      
-      // Clear the reset token if email fails
-      user.clearPasswordResetToken();
-      await user.save({ validateBeforeSave: false });
-      
+    } else {
+      console.error(`❌ Failed to send password reset OTP to ${cleanEmail}`);
       return NextResponse.json({
         success: false,
-        message: 'Failed to send password reset email. Please try again later.'
+        message: 'Failed to send verification code. Please try again later.'
       }, { status: 500 });
     }
 
   } catch (error) {
-    console.error('Forgot password error:', error);
+    console.error('💥 Forgot password error:', error);
     return NextResponse.json({
       success: false,
       message: 'An error occurred. Please try again later.'

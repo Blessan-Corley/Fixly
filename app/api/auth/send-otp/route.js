@@ -72,14 +72,20 @@ export async function POST(request) {
       const { generateOTP, storeOTP } = await import('../../../../lib/otpService');
       const otp = generateOTP();
 
-      // Store OTP in Redis
+      // Store OTP in Redis (or fallback)
+      console.log(`🔄 Storing OTP for ${email}...`);
       const storeResult = await storeOTP(email, otp, 'signup');
+      console.log(`📋 Store result:`, storeResult);
+      
       if (!storeResult.success) {
+        console.error(`❌ Failed to store OTP:`, storeResult.message);
         return NextResponse.json(
-          { message: 'Failed to generate verification code. Please try again.' },
+          { message: `Failed to generate verification code: ${storeResult.message}` },
           { status: 500 }
         );
       }
+      
+      console.log(`✅ OTP stored successfully for ${email}`);
 
       // Send signup OTP with the generated OTP
       const result = await sendSignupOTP(email, name, otp);
