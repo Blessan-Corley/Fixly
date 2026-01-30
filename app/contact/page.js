@@ -94,7 +94,7 @@ export default function ContactPage() {
     {
       icon: Mail,
       title: 'Email Support',
-      description: 'Send us an email and we\'ll respond within 24 hours',
+      description: 'Send us an email and we&apos;ll respond within 24 hours',
       value: 'blessancorley@gmail.com',
       action: 'mailto:blessancorley@gmail.com',
       primary: true
@@ -118,7 +118,7 @@ export default function ContactPage() {
     {
       icon: MapPin,
       title: 'Location',
-      description: 'We\'re based in Tamil Nadu, India',
+      description: 'We&apos;re based in Tamil Nadu, India',
       value: 'Coimbatore, Tamil Nadu',
       action: 'https://www.google.com/maps/search/?api=1&query=11.000044,77.080355',
       primary: false
@@ -293,7 +293,7 @@ export default function ContactPage() {
               Send us a Message
             </h2>
             <p className="text-fixly-text-light mb-6">
-              Fill out the form below and we'll get back to you as soon as possible.
+              Fill out the form below and we&apos;ll get back to you as soon as possible.
             </p>
 
             {submitted ? (
@@ -303,7 +303,7 @@ export default function ContactPage() {
                   Message Sent Successfully!
                 </h3>
                 <p className="text-fixly-text-light mb-6">
-                  Thank you for contacting us. We'll respond within 24 hours.
+                  Thank you for contacting us. We&apos;ll respond within 24 hours.
                 </p>
                 <button
                   onClick={() => setSubmitted(false)}
@@ -506,7 +506,7 @@ export default function ContactPage() {
             Other Ways to Reach Us
           </h2>
           <p className="text-fixly-text-light mb-6">
-            Choose the method that works best for you. We're committed to providing
+            Choose the method that works best for you. We&apos;re committed to providing
             excellent customer service and support.
           </p>
 

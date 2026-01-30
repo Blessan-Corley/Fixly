@@ -352,28 +352,6 @@ export const SupportChat = dynamic(
   }
 );
 
-// Export all dynamic components
-export {
-  AdminDashboard,
-  LineChart,
-  PieChart,
-  InstagramCommentsRealtime,
-  VirtualJobList,
-  SkillSelector,
-  FileUploadZone,
-  RichTextEditor,
-  DatePicker,
-  MapView,
-  QRCodeScanner,
-  VideoCall,
-  SettingsPage,
-  AnalyticsDashboard,
-  FeatureFlag,
-  PWAInstallPrompt,
-  NotificationCenter,
-  SupportChat
-};
-
 // Preload functions for critical components
 export const preloadCriticalComponents = () => {
   // Preload components likely to be used soon

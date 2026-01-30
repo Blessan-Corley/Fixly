@@ -838,7 +838,7 @@ function SettingsContent() {
             <div className="text-center p-4 bg-blue-50 rounded-lg">
               <p className="text-blue-800 font-medium">Verification documents submitted!</p>
               <p className="text-sm text-blue-600 mt-1">
-                We'll review your documents within 3-5 business days and notify you of the result.
+                We&apos;ll review your documents within 3-5 business days and notify you of the result.
               </p>
             </div>
           )}

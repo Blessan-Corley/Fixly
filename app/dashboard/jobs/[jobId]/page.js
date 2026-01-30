@@ -1931,7 +1931,7 @@ export default function JobDetailsPage({ params }) {
                           <div className="text-lg font-bold text-fixly-text">
                             ₹{application.proposedAmount?.toLocaleString()}
                           </div>
-                          // ...previous code
+
 
                           {application.timeEstimate && (
                             <div className="text-sm text-fixly-text-muted">

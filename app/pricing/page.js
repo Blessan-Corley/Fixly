@@ -99,11 +99,11 @@ export default function PricingPage() {
     },
     {
       question: 'How do payments work between hirers and fixers?',
-      answer: 'Payments are made directly between hirers and fixers. Fixly doesn\'t charge any commission on transactions.'
+      answer: 'Payments are made directly between hirers and fixers. Fixly doesn&apos;t charge any commission on transactions.'
     },
     {
       question: 'Can I cancel my Pro subscription anytime?',
-      answer: 'Yes, you can cancel your Pro subscription anytime. You\'ll continue to have Pro benefits until the end of your billing period.'
+      answer: 'Yes, you can cancel your Pro subscription anytime. You&apos;ll continue to have Pro benefits until the end of your billing period.'
     },
     {
       question: 'Do you offer annual discounts?',
@@ -147,7 +147,7 @@ export default function PricingPage() {
           </h1>
           <p className="text-xl text-fixly-text-light max-w-3xl mx-auto mb-8">
             Choose the plan that works best for you. No hidden fees, no surprises. 
-            Start free and upgrade when you're ready for more opportunities.
+            Start free and upgrade when you&apos;re ready for more opportunities.
           </p>
         </motion.div>
 

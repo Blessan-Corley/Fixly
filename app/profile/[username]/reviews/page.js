@@ -252,7 +252,7 @@ export default function UserReviewsPage() {
             
             <div className="flex-1">
               <h1 className="text-3xl font-bold text-fixly-text mb-2">
-                {user.name}'s Reviews
+                {user.name}&apos;s Reviews
               </h1>
               <p className="text-fixly-text-light mb-4">
                 @{user.username} • {user.role === 'fixer' ? 'Service Provider' : 'Client'}
@@ -429,7 +429,7 @@ export default function UserReviewsPage() {
                   <p className="text-fixly-text-light">
                     {filters.search || filters.reviewType !== 'all' || filters.rating !== 'all'
                       ? 'Try adjusting your filters'
-                      : 'This user hasn\'t received any reviews yet'
+                      : 'This user hasn&apos;t received any reviews yet'
                     }
                   </p>
                 </div>
