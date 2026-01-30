@@ -1,6 +1,6 @@
 // utils/rateLimiting.js - Enhanced rate limiting with Redis support
 import { NextResponse } from 'next/server';
-import { redisRateLimit } from '../lib/redis';
+import { redisRateLimit, checkRedisHealth } from '../lib/redis';
 
 // Fallback in-memory store when Redis is unavailable
 const rateLimitStore = new Map();
@@ -81,15 +81,33 @@ function cleanupExpiredEntries() {
   }
 }
 
-// Check Redis availability (temporarily disabled to prevent stream errors)
+// Check Redis availability
 async function checkRedisAvailability() {
-  // TEMPORARILY DISABLED: Always return false to use in-memory store
-  // This prevents the "Stream isn't writeable and enableOfflineQueue options is false" error
-  if (useRedis === null) {
-    console.warn('⚠️ Redis availability check disabled, using in-memory rate limiting');
-    useRedis = false;
+  const now = Date.now();
+  
+  // Return cached status if checked recently
+  if (useRedis !== null && (now - lastRedisCheck < REDIS_CHECK_INTERVAL)) {
+    return useRedis;
   }
-  return false;
+  
+  try {
+    const isHealthy = await checkRedisHealth();
+    useRedis = isHealthy;
+    lastRedisCheck = now;
+    
+    if (useRedis) {
+      // console.log('✅ Rate limiting using Redis');
+    } else {
+      console.warn('⚠️ Redis unavailable, using in-memory rate limiting');
+    }
+    
+    return useRedis;
+  } catch (error) {
+    console.error('Error checking Redis availability:', error);
+    useRedis = false;
+    lastRedisCheck = now;
+    return false;
+  }
 }
 
 // Enhanced rate limiting function with Redis support

@@ -14,7 +14,7 @@
     "test:coverage": "jest --coverage",
     "test:integration": "jest --testPathPattern=integration",
     "test:e2e": "playwright test",
-    "test:realtime": "node scripts/test-realtime.js",
+    "verify:env": "node scripts/verify-env.js",
     "test:auth": "node scripts/test-optimized-auth-system.js",
     "test:comprehensive": "node scripts/final-comprehensive-test.js",
     "verify:auth": "node scripts/verify-auth-implementation.js",
@@ -27,7 +27,6 @@
     "db:seed": "node scripts/seed.js",
     "postbuild": "next-sitemap",
     "prepare": "husky install",
-    "verify:setup": "node scripts/test-realtime.js",
     "verify:deployment": "node scripts/verify-deployment.js",
     "health": "curl http://localhost:3000/api/health || echo 'Server not running'"
   },
