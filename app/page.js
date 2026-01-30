@@ -165,7 +165,7 @@ export default function HomePage() {
             >
               Connect with skilled fixers in your area. Post jobs and get them done 
               by verified professionals. From electrical work to plumbing, 
-              we've got you covered.
+              we&apos;ve got you covered.
             </motion.p>
 
             <motion.div 
@@ -186,7 +186,7 @@ export default function HomePage() {
                 className="btn-secondary text-lg px-8 py-4 hover-lift"
               >
                 <Wrench className="mr-2 h-5 w-5" />
-                I'm a Service Provider
+                I&apos;m a Service Provider
               </button>
             </motion.div>
           </div>

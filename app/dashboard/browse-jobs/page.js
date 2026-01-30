@@ -825,7 +825,7 @@ function BrowseJobsContent() {
                 Upgrade to Pro
               </h4>
               <p className="text-sm text-fixly-text-muted mb-3">
-                You've used all free applications. Upgrade for unlimited access.
+                You&apos;ve used all free applications. Upgrade for unlimited access.
               </p>
               <button
                 onClick={() => router.push('/dashboard/subscription')}

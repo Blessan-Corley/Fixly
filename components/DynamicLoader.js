@@ -8,6 +8,8 @@ import { lazy, Suspense, Component } from 'react';
 
 // Error boundary wrapper for dynamic components
 class DynamicErrorBoundary extends Component {
+  static displayName = 'DynamicErrorBoundary';
+
   constructor(props) {
     super(props);
     this.state = { hasError: false };
@@ -38,8 +40,8 @@ export const createDynamicLoader = (importFunction, options = {}) => {
   const LazyComponent = lazy(async () => {
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const module = await importFunction();
-        return { default: module.default };
+        const importedModule = await importFunction();
+        return { default: importedModule.default };
       } catch (error) {
         console.warn(`Dynamic import attempt ${i + 1} failed:`, error);
         
@@ -55,13 +57,16 @@ export const createDynamicLoader = (importFunction, options = {}) => {
   });
 
   // Return a component that wraps the lazy component with error boundary and suspense
-  return (props) => (
+  const DynamicComponentWrapper = (props) => (
     <DynamicErrorBoundary fallback={fallback}>
       <Suspense fallback={fallback || <div className="loading-spinner">Loading...</div>}>
         <LazyComponent {...props} />
       </Suspense>
     </DynamicErrorBoundary>
   );
+
+  DynamicComponentWrapper.displayName = 'DynamicComponentWrapper';
+  return DynamicComponentWrapper;
 };
 
 // Common dynamic components
@@ -93,8 +98,8 @@ export const DynamicDataTable = createDynamicLoader(
 // Utility function to dynamically import and use components
 export const loadAndRender = async (importFunction, props, fallback) => {
   try {
-    const module = await importFunction();
-    const Component = module.default;
+    const importedModule = await importFunction();
+    const Component = importedModule.default;
     return <Component {...props} />;
   } catch (error) {
     console.error('Failed to load dynamic component:', error);
@@ -102,7 +107,7 @@ export const loadAndRender = async (importFunction, props, fallback) => {
   }
 };
 
-export default {
+const DynamicLoader = {
   createDynamicLoader,
   DynamicRichTextEditor,
   DynamicMapComponent,
@@ -111,3 +116,5 @@ export default {
   DynamicDataTable,
   loadAndRender
 };
+
+export default DynamicLoader;

@@ -1599,7 +1599,7 @@ export default function ProfilePage() {
                   />
                 </div>
                 <p className="text-xs text-fixly-text-muted mt-1">
-                  You'll need to verify this number after updating
+                  You&apos;ll need to verify this number after updating
                 </p>
               </div>
 
@@ -1724,7 +1724,7 @@ export default function ProfilePage() {
                   <Mail className="h-8 w-8 text-fixly-accent mx-auto mb-2" />
                   <p className="text-fixly-text font-medium">Verification code sent!</p>
                   <p className="text-sm text-fixly-text-muted">
-                    We've sent a 6-digit code to <strong>{newEmail}</strong>
+                    We&apos;ve sent a 6-digit code to <strong>{newEmail}</strong>
                   </p>
                 </div>
 

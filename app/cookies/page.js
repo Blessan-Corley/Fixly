@@ -144,8 +144,8 @@ export default function CookiesPage() {
           </p>
           <p className="text-fixly-text-light leading-relaxed">
             This page describes what information cookies gather, how we use it, and why we sometimes need to store 
-            these cookies. We'll also explain how you can control these cookies, though disabling some may affect 
-            certain features of Fixly's functionality.
+            these cookies. We&apos;ll also explain how you can control these cookies, though disabling some may affect 
+            certain features of Fixly&apos;s functionality.
           </p>
         </motion.div>
 
@@ -163,7 +163,7 @@ export default function CookiesPage() {
             functionality they provide to our service marketplace.
           </p>
           <p className="text-fixly-text-light leading-relaxed">
-            We recommend leaving all cookies enabled if you're unsure whether you need them, as they may be used 
+            We recommend leaving all cookies enabled if you&apos;re unsure whether you need them, as they may be used 
             to provide services you use on Fixly, such as job posting, fixer matching, and secure payments.
           </p>
         </motion.div>
@@ -332,7 +332,7 @@ export default function CookiesPage() {
         >
           <h2 className="text-3xl font-bold text-fixly-text mb-6">More Information</h2>
           <p className="text-fixly-text-light leading-relaxed mb-6">
-            We hope this clarifies how Fixly uses cookies. If there's something you're unsure about, it's usually 
+            We hope this clarifies how Fixly uses cookies. If there&apos;s something you&apos;re unsure about, it&apos;s usually 
             safer to leave cookies enabled in case they interact with features you use on our platform.
           </p>
           <p className="text-fixly-text-light leading-relaxed mb-6">

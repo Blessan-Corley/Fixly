@@ -549,7 +549,7 @@ function HirerSubscriptionContent() {
               </div>
               
               <p className="text-fixly-text-muted mb-4 italic">
-                "{story.story}"
+                &quot;{story.story}&quot;
               </p>
               
               <div className="flex items-center text-green-600 font-medium">
@@ -576,19 +576,19 @@ function HirerSubscriptionContent() {
           {[
             {
               question: 'Can I cancel my subscription anytime?',
-              answer: 'Yes, you can cancel your Pro subscription at any time. You\'ll continue to have Pro features until your current billing period ends.'
+              answer: 'Yes, you can cancel your Pro subscription at any time. You&apos;ll continue to have Pro features until your current billing period ends.'
             },
             {
               question: 'What happens to my applications if I downgrade?',
-              answer: 'All your existing applications remain active. However, you\'ll be limited to 3 applications per month on the free plan.'
+              answer: 'All your existing applications remain active. However, you&apos;ll be limited to 3 applications per month on the free plan.'
             },
             {
               question: 'Do I get a refund if I cancel?',
-              answer: 'We offer a 7-day money-back guarantee. If you\'re not satisfied within the first week, contact support for a full refund.'
+              answer: 'We offer a 7-day money-back guarantee. If you&apos;re not satisfied within the first week, contact support for a full refund.'
             },
             {
               question: 'Can I upgrade from monthly to yearly?',
-              answer: 'Yes, you can upgrade anytime. We\'ll prorate your current subscription and charge the difference for the yearly plan.'
+              answer: 'Yes, you can upgrade anytime. We&apos;ll prorate your current subscription and charge the difference for the yearly plan.'
             }
           ].map((faq, index) => (
             <div key={index} className="card">

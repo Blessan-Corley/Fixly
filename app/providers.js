@@ -388,7 +388,7 @@ export function ProtectedRoute({ children, allowedRoles = [], fallback = null })
             Access Denied
           </h1>
           <p className="text-fixly-text-light mb-6">
-            You don't have permission to access this page.
+            You don&apos;t have permission to access this page.
           </p>
           <a href="/dashboard" className="btn-primary">
             Go to Dashboard

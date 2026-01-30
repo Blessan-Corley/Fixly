@@ -403,7 +403,7 @@ export default function HowItWorksPage() {
                 onClick={() => handleGetStarted('fixer')}
                 className="btn-secondary text-lg px-8 py-4 hover-lift"
               >
-                I'm a Service Provider
+                I&apos;m a Service Provider
               </button>
             </div>
           </motion.div>

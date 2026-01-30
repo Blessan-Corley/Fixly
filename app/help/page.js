@@ -92,7 +92,7 @@ export default function HelpPage() {
             <p>Getting started with Fixly is quick and easy. Follow these steps to create your account:</p>
             
             <h3>Step 1: Choose Your Role</h3>
-            <p>When you sign up, you'll need to choose your primary role:</p>
+            <p>When you sign up, you&apos;ll need to choose your primary role:</p>
             <ul>
               <li><strong>Hirer:</strong> If you need services and want to hire fixers</li>
               <li><strong>Fixer:</strong> If you provide services and want to get hired</li>
@@ -421,7 +421,7 @@ export default function HelpPage() {
             
             <h3>Communication Safety</h3>
             <ul>
-              <li><strong>Platform Messaging:</strong> Use Fixly's messaging system</li>
+              <li><strong>Platform Messaging:</strong> Use Fixly&apos;s messaging system</li>
               <li><strong>No Personal Info:</strong> Don't share personal contact details initially</li>
               <li><strong>Professional Communication:</strong> Keep conversations work-related</li>
               <li><strong>Report Issues:</strong> Report inappropriate behavior immediately</li>
@@ -533,7 +533,7 @@ export default function HelpPage() {
           a: 'All fixers go through verification. You can check their ratings, reviews, portfolio, and work history before hiring.'
         },
         {
-          q: 'What if I\'m not satisfied with the work?',
+          q: 'What if I&apos;m not satisfied with the work?',
           a: 'We have a dispute resolution system. Funds are held in escrow, and we mediate any issues between hirers and fixers.'
         }
       ]
@@ -906,7 +906,7 @@ export default function HelpPage() {
         <div className="bg-fixly-primary-bg rounded-lg p-8 text-center">
           <h3 className="text-xl font-bold text-fixly-text mb-4">Still need help?</h3>
           <p className="text-fixly-text-light mb-6">
-            Can't find what you're looking for? Our support team is here to help.
+            Can&apos;t find what you&apos;re looking for? Our support team is here to help.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <a

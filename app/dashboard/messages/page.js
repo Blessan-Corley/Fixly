@@ -31,7 +31,8 @@ import {
   DollarSign,
   Loader,
   AlertCircle,
-  Settings
+  Settings,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePageLoading } from '../../../contexts/LoadingContext';

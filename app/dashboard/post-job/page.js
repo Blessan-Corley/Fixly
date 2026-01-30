@@ -1374,7 +1374,7 @@ function PostJobContent() {
           Job Location <span className="text-red-500">*</span>
         </label>
         <p className="text-xs text-fixly-text-light mb-4">
-          Provide the complete address where the work needs to be done. We'll use GPS to help auto-fill details.
+          Provide the complete address where the work needs to be done. We&apos;ll use GPS to help auto-fill details.
         </p>
 
         <EnhancedLocationSelector
@@ -2170,7 +2170,7 @@ function PostJobContent() {
                 <p className="text-fixly-text mb-4">
                   Are you sure you want to delete the draft{' '}
                   <span className="font-semibold text-fixly-accent">
-                    "{draftToDelete?.title || 'Untitled Job'}"
+                    &quot;{draftToDelete?.title || 'Untitled Job'}&quot;
                   </span>
                   ? This will permanently remove all progress and cannot be recovered.
                 </p>

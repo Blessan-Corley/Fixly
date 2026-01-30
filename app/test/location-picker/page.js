@@ -313,7 +313,7 @@ export default function LocationPickerTestPage() {
               <div>
                 <h3 className="font-medium text-fixly-text mb-2">How to Use</h3>
                 <ul className="text-sm text-fixly-text-light space-y-1">
-                  <li>• Click "Detect My Location" to use GPS</li>
+                  <li>• Click &quot;Detect My Location&quot; to use GPS</li>
                   <li>• Type in the search box for autocomplete suggestions</li>
                   <li>• Click on the map to select a location</li>
                   <li>• Drag the marker to fine-tune position</li>
