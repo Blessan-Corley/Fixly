@@ -1,4 +1,7 @@
 // tests/userRoles.test.js - Comprehensive Role-Based Testing
+/**
+ * @jest-environment jsdom
+ */
 import { describe, test, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { SessionProvider } from 'next-auth/react';

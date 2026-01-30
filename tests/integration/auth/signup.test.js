@@ -1,3 +1,6 @@
+/**
+ * @jest-environment node
+ */
 import { POST } from '@/app/api/auth/signup/route';
 import User from '@/models/User';
 import connectDB from '@/lib/db';
@@ -66,7 +69,7 @@ describe('Signup API Integration Test', () => {
     const body = {
       name: 'Valid Hirer',
       email: 'hirer@example.com',
-      username: 'valid_hirer',
+      username: 'valid_person_one',
       password: 'Password123!',
       confirmPassword: 'Password123!',
       phone: '9876543210',
@@ -103,7 +106,7 @@ describe('Signup API Integration Test', () => {
     const body = {
       name: 'Valid Fixer',
       email: 'fixer@example.com',
-      username: 'valid_fixer',
+      username: 'valid_person_two',
       password: 'Password123!',
       confirmPassword: 'Password123!',
       phone: '9876543211',
@@ -137,7 +140,7 @@ describe('Signup API Integration Test', () => {
     await User.create({
       name: 'Original',
       email: 'duplicate@example.com',
-      username: 'original_user',
+      username: 'first_registrant',
       passwordHash: 'hashedpassword123', // Must be >= 6 chars
       role: 'hirer',
       authMethod: 'email',
@@ -147,7 +150,7 @@ describe('Signup API Integration Test', () => {
     const body = {
       name: 'Duplicate',
       email: 'duplicate@example.com',
-      username: 'duplicate_user',
+      username: 'second_registrant',
       password: 'Password123!',
       confirmPassword: 'Password123!',
       phone: '9876543212',
@@ -172,7 +175,7 @@ describe('Signup API Integration Test', () => {
     const body = {
       name: 'Weak Password',
       email: 'weak@example.com',
-      username: 'weak_pass_user',
+      username: 'weak_pass_person',
       password: '123', // Weak
       confirmPassword: '123',
       phone: '9876543213', // Required field

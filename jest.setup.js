@@ -1,5 +1,11 @@
 // jest.setup.js - Jest testing configuration
+require('dotenv').config({ path: '.env.local' });
 require('@testing-library/jest-dom');
+
+// Ensure Buffer is available globally (crucial for Ably in JSDOM/Hybrid envs)
+if (typeof global.Buffer === 'undefined') {
+  global.Buffer = require('buffer').Buffer;
+}
 
 // Polyfill Web APIs for Next.js 13+ App Router
 const { TextEncoder, TextDecoder } = require('util');
@@ -62,6 +68,25 @@ jest.mock('next/image', () => ({
   }
 }));
 
+// Mock node-fetch to prevent ESM errors
+jest.mock('node-fetch', () => ({
+  __esModule: true,
+  default: jest.fn(() => 
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({}),
+      text: () => Promise.resolve(''),
+      status: 200,
+      headers: new Map()
+    })
+  ),
+  Headers: class Headers extends Map {
+    append(name, value) { this.set(name, value); }
+  },
+  Request: class Request {},
+  Response: class Response {}
+}));
+
 // Mock NextAuth
 jest.mock('next-auth/react', () => ({
   useSession: () => ({
@@ -101,9 +126,25 @@ jest.mock('ably', () => ({
     connection: {
       state: 'connected',
       on: jest.fn(),
-      off: jest.fn()
+      off: jest.fn(),
+      close: jest.fn()
     },
-    close: jest.fn()
+    close: jest.fn(),
+    auth: {
+      authorize: jest.fn(() => Promise.resolve({ token: 'mock-token' })),
+      createTokenRequest: jest.fn(() => Promise.resolve({ token: 'mock-token-request' }))
+    }
+  })),
+  Rest: jest.fn(() => ({
+    channels: {
+      get: jest.fn(() => ({
+        publish: jest.fn(() => Promise.resolve()),
+        history: jest.fn(() => Promise.resolve({ items: [] }))
+      }))
+    },
+    auth: {
+      createTokenRequest: jest.fn(() => Promise.resolve({ token: 'mock-token-request' }))
+    }
   }))
 }));
 
@@ -142,30 +183,7 @@ jest.mock('./lib/redis', () => ({
 }));
 
 // Mock MongoDB
-jest.mock('./lib/mongodb', () => ({
-  connectDB: jest.fn(),
-  db: {
-    collection: jest.fn(() => ({
-      find: jest.fn(() => ({
-        toArray: jest.fn(() => Promise.resolve([])),
-        limit: jest.fn(() => ({
-          toArray: jest.fn(() => Promise.resolve([]))
-        })),
-        sort: jest.fn(() => ({
-          toArray: jest.fn(() => Promise.resolve([])),
-          limit: jest.fn(() => ({
-            toArray: jest.fn(() => Promise.resolve([]))
-          }))
-        }))
-      })),
-      findOne: jest.fn(() => Promise.resolve(null)),
-      insertOne: jest.fn(() => Promise.resolve({ insertedId: 'test-id' })),
-      updateOne: jest.fn(() => Promise.resolve({ modifiedCount: 1 })),
-      deleteOne: jest.fn(() => Promise.resolve({ deletedCount: 1 })),
-      countDocuments: jest.fn(() => Promise.resolve(0))
-    }))
-  }
-}));
+
 
 // Mock Firebase
 jest.mock('./lib/firebase-client', () => ({
@@ -434,9 +452,11 @@ afterAll(() => {
 jest.setTimeout(10000);
 
 // Mock environment variables
-process.env.NEXTAUTH_URL = 'http://localhost:3000';
-process.env.NEXTAUTH_SECRET = 'test-secret';
-process.env.MONGODB_URI = 'mongodb://localhost:27017/fixly-test';
-process.env.REDIS_URL = 'redis://localhost:6379';
+process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || 'test-secret';
+// Only set these defaults if not already present (e.g. from .env)
+process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fixly-test';
+process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+process.env.ABLY_ROOT_KEY = process.env.ABLY_ROOT_KEY || 'test-ably-key';
 
 module.exports = {};
