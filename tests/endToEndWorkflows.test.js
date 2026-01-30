@@ -23,15 +23,8 @@ jest.mock('next-auth/react', () => ({
 // Mock global fetch
 global.fetch = jest.fn();
 
-// Mock location services
-Object.defineProperty(global.navigator, 'geolocation', {
-  value: {
-    getCurrentPosition: jest.fn(),
-    watchPosition: jest.fn(),
-    clearWatch: jest.fn()
-  },
-  writable: true
-});
+// Mock location services (already handled in jest.setup.js)
+// Object.defineProperty(global.navigator, 'geolocation', ...);
 
 // Mock Ably
 const mockAblyChannel = {

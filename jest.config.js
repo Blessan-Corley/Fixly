@@ -8,13 +8,15 @@ const createJestConfig = nextJest({
 // Add any custom config to be passed to Jest
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testEnvironment: 'node',
+  testEnvironment: 'jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^jose': '<rootDir>/node_modules/jose/dist/node/cjs/index.js',
+    '^ably$': '<rootDir>/node_modules/ably/build/ably-node.js',
+    '^mongodb$': '<rootDir>/node_modules/mongodb/lib/index.js',
   },
   transformIgnorePatterns: [
-    // Transform all node_modules that are ESM-only
-    '/node_modules/(?!(mongoose|mongodb|bson|ably|node-fetch|data-uri-to-buffer|fetch-blob|formdata-polyfill|uuid)/)',
+    'node_modules[\\\\/](?!(@upstash|mongoose|mongodb|bson|ably|node-fetch|data-uri-to-buffer|fetch-blob|formdata-polyfill|uuid|jose|openid-client|@panva)[\\\\/])',
   ],
   transform: {
     // Use babel-jest for js, jsx, ts, tsx, and mjs files
