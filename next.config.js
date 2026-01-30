@@ -211,7 +211,7 @@ const nextConfig = {
   },
   
   eslint: {
-    ignoreDuringBuilds: true, // Temporarily disabled to focus on functionality
+    ignoreDuringBuilds: false, // Re-enabled to ensure code quality
   },
   
   // Production optimizations
