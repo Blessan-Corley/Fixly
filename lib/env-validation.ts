@@ -1,14 +1,6 @@
 import { env } from '@/lib/env';
-type Validator = (value: string | undefined) => boolean;
 
-interface EnvRule {
-  required: boolean;
-  validate: Validator;
-  error: string;
-  security?: string;
-}
-
-type EnvRuleSet = Record<string, EnvRule>;
+import { ENV_CONFIG, type EnvRuleSet } from './env-validation.config';
 
 interface ValidationResult {
   errors: string[];
@@ -27,93 +19,11 @@ export interface EnvHealthReport extends ValidationResult {
   summary: EnvHealthSummary;
 }
 
-export const ENV_CONFIG: { server: EnvRuleSet; client: EnvRuleSet } = {
-  server: {
-    MONGODB_URI: {
-      required: true,
-      validate: (value) => Boolean(value?.startsWith('mongodb')),
-      error: 'MONGODB_URI must be a valid MongoDB connection string',
-    },
-    NEXTAUTH_SECRET: {
-      required: true,
-      validate: (value) => Boolean(value && value.length >= 32),
-      error: 'NEXTAUTH_SECRET must be at least 32 characters long',
-    },
-    ABLY_ROOT_KEY: {
-      required: true,
-      validate: (value) => Boolean(value?.includes(':')),
-      error: 'ABLY_ROOT_KEY must be a valid Ably root key',
-    },
-    CLOUDINARY_CLOUD_NAME: {
-      required: true,
-      validate: (value) => Boolean(value && value.length > 0),
-      error: 'CLOUDINARY_CLOUD_NAME is required',
-    },
-    CLOUDINARY_API_KEY: {
-      required: true,
-      validate: (value) => Boolean(value && /^\d+$/.test(value)),
-      error: 'CLOUDINARY_API_KEY must be numeric',
-    },
-    CLOUDINARY_API_SECRET: {
-      required: true,
-      validate: (value) => Boolean(value && value.length > 10),
-      error: 'CLOUDINARY_API_SECRET is required',
-    },
-    GOOGLE_CLIENT_ID: {
-      required: true,
-      validate: (value) => Boolean(value?.endsWith('.googleusercontent.com')),
-      error: 'GOOGLE_CLIENT_ID must be a valid Google OAuth client ID',
-    },
-    GOOGLE_CLIENT_SECRET: {
-      required: true,
-      validate: (value) => Boolean(value && value.length > 0),
-      error: 'GOOGLE_CLIENT_SECRET is required',
-    },
-    REDIS_URL: {
-      required: false,
-      validate: (value) => !value || value.startsWith('redis://') || value.startsWith('rediss://'),
-      error: 'REDIS_URL must be a valid redis:// or rediss:// connection string',
-    },
-  },
-
-  client: {
-    NEXT_PUBLIC_ABLY_CLIENT_KEY: {
-      required: true,
-      validate: (value) => Boolean(value?.includes(':') && !value.includes('root')),
-      error: 'NEXT_PUBLIC_ABLY_CLIENT_KEY must be a client-only key (not root key)',
-      security: 'Ensure this is a subscribe-only key',
-    },
-    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: {
-      required: false,
-      validate: (value) => !value || value.startsWith('AIza'),
-      error: 'NEXT_PUBLIC_GOOGLE_MAPS_API_KEY must be a valid Google Maps API key',
-      security: 'Restrict this key to specific domains and APIs in Google Console',
-    },
-    NEXT_PUBLIC_FIREBASE_API_KEY: {
-      required: false,
-      validate: (value) => !value || value.startsWith('AIza'),
-      error: 'NEXT_PUBLIC_FIREBASE_API_KEY must be a valid Firebase API key',
-      security: 'This key is safe to expose as it identifies the project, not authenticates it',
-    },
-    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: {
-      required: false,
-      validate: (value) => !value || value.startsWith('pk_'),
-      error: 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY must be a valid Stripe publishable key',
-      security:
-        'This key is public by design, but still should be restricted by origin in Stripe settings',
-    },
-  },
-};
+export { ENV_CONFIG };
 
 const toEnvString = (value: unknown): string | undefined => {
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return undefined;
 };
 
@@ -130,7 +40,7 @@ const getTypedEnvSource = (): Record<string, string | undefined> => ({
   NEXT_PUBLIC_ABLY_CLIENT_KEY: toEnvString(env.NEXT_PUBLIC_ABLY_CLIENT_KEY),
   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: toEnvString(env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
   NEXT_PUBLIC_FIREBASE_API_KEY: toEnvString(env.NEXT_PUBLIC_FIREBASE_API_KEY),
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: toEnvString(env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY),
+  NEXT_PUBLIC_RAZORPAY_KEY_ID: toEnvString(env.NEXT_PUBLIC_RAZORPAY_KEY_ID),
 });
 
 function validateRuleSet(
@@ -172,14 +82,12 @@ export function validateServerEnv(): ValidationResult {
     if (!env.NEXTAUTH_URL.startsWith('https://') && !env.NEXTAUTH_URL.includes('localhost')) {
       errors.push('NEXTAUTH_URL must use HTTPS in production');
     }
-
     if (!env.NEXTAUTH_SECRET || env.NEXTAUTH_SECRET.length < 32) {
       warnings.push('NEXTAUTH_SECRET should be at least 32 characters in production');
     }
   }
 
   const insecureFallbacks = ['test_mock', 'your-api-key', 'localhost', 'development-key'];
-
   for (const key of Object.keys(ENV_CONFIG.server)) {
     const value = source[key];
     if (value && insecureFallbacks.some((fallback) => value.includes(fallback))) {
@@ -197,14 +105,10 @@ export function validateClientEnv(): ValidationResult {
 export function getClientEnv(): Record<string, string> {
   const source = getTypedEnvSource();
   const clientEnv: Record<string, string> = {};
-
   for (const key of Object.keys(ENV_CONFIG.client)) {
     const value = source[key];
-    if (value) {
-      clientEnv[key] = value;
-    }
+    if (value) clientEnv[key] = value;
   }
-
   return clientEnv;
 }
 
