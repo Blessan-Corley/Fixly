@@ -23,6 +23,9 @@ coverage/
 test-results/
 playwright-report/
 
+# Playwright MCP browser tool artifacts (auto-generated screenshots, snapshots, console logs)
+.playwright-mcp/
+
 # Cache directories
 .cache/
 .parcel-cache/
@@ -66,16 +69,37 @@ ehthumbs.db
 *.swo
 *~
 
-# Local tool artifacts
+# Claude Code — local session data, memory, settings
 .claude/
+.claudeignore
+CLAUDE-local.md
+
+# MCP (Model Context Protocol) — local server configs and generated artefacts
+.mcp.json
+.mcp.local.json
+mcp-servers.json
+.mcprc
+.playwright-mcp/
+playwright-mcp-output/
+mcp-debug.log
+mcp-*.log
+
+# AI coding tool noise
 .codex/
 .codex-*.log
-.next-build.log
-.scan/
 .orchids/
+.aider*
+.cursor/
+.windsurfrules
+.cline/
+
+# Local repo analytics / generated metadata
 .VSCodeCounter/
 route-matrix.json
-CLAUDE.md
+.scan/
+.next-build.log
+
+# Agent instruction files (local overrides — not project-wide)
 AGENTS.md
 
 # Temporary files
