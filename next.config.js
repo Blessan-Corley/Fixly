@@ -1,9 +1,34 @@
 // Phase 2: Disabled runtime SVG rendering for user-controlled uploads.
 const { withSentryConfig } = require('@sentry/nextjs');
+
 const envConfig = require('./lib/env-config');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Turbopack configuration (used by `next dev --turbopack`).
+  // Production builds continue to use webpack via `next build --webpack`.
+  turbopack: {
+    resolveAlias: {
+      // undici uses node: internals and must not be bundled for the browser.
+      // Equivalent to webpack's `resolve.alias: { undici: false }`.
+      undici: { browser: '@/lib/empty-module' },
+      // keyv (pulled in by ably-node.js → got → cacheable-request) uses a
+      // dynamic require() to load adapter packages by URI scheme. Turbopack
+      // (unlike webpack with exprContextCritical=false) statically resolves
+      // ALL possible values and errors when the packages are missing.
+      // Map them to the empty stub — they're never actually invoked at runtime
+      // because we don't use keyv with external stores.
+      '@keyv/redis': '@/lib/empty-module',
+      '@keyv/mongo': '@/lib/empty-module',
+      '@keyv/sqlite': '@/lib/empty-module',
+      '@keyv/postgres': '@/lib/empty-module',
+      '@keyv/mysql': '@/lib/empty-module',
+      '@keyv/etcd': '@/lib/empty-module',
+      '@keyv/offline': '@/lib/empty-module',
+      '@keyv/tiered': '@/lib/empty-module',
+    },
+  },
+
   webpack: (config, { dev, isServer }) => {
     // Suppress noisy dynamic import warnings from keyv (pulled in by Ably).
     // We use ignoreWarnings instead of ContextReplacementPlugin with a callback
