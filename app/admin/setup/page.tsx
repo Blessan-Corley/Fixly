@@ -1,110 +1,20 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Shield, Eye, EyeOff, Loader } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { toast } from 'sonner';
+import { Eye, EyeOff, Loader, Shield } from 'lucide-react';
 
-type AdminSetupFormData = {
-  setupKey: string;
-  name: string;
-  username: string;
-  email: string;
-  password: string;
-};
-
-type SetupResponse = {
-  success?: boolean;
-  message?: string;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const getResponseMessage = (payload: unknown, fallback: string): string => {
-  if (isRecord(payload) && typeof payload.message === 'string') {
-    return payload.message;
-  }
-  return fallback;
-};
+import { useAdminSetupPage } from './useAdminSetupPage';
 
 export default function AdminSetupPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState<AdminSetupFormData>({
-    setupKey: '',
-    name: '',
-    username: '',
-    email: '',
-    password: '',
-  });
-
-  const handleInputChange = <K extends keyof AdminSetupFormData>(
-    field: K,
-    value: AdminSetupFormData[K]
-  ) => {
-    setFormData((previous) => ({ ...previous, [field]: value }));
-  };
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (
-      !formData.name ||
-      !formData.username ||
-      !formData.email ||
-      !formData.password ||
-      !formData.setupKey
-    ) {
-      toast.error('All fields are required');
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      toast.error('Password must be at least 8 characters');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await fetch('/api/admin/setup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          setupKey: formData.setupKey,
-          adminData: {
-            name: formData.name,
-            username: formData.username,
-            email: formData.email,
-            password: formData.password,
-          },
-        }),
-      });
-
-      const payload: unknown = await response.json();
-      const responseData: SetupResponse = isRecord(payload) ? (payload as SetupResponse) : {};
-
-      if (response.ok) {
-        toast.success('Admin account created successfully!');
-        setTimeout(() => {
-          router.push('/auth/signin?message=admin_created');
-        }, 2000);
-        return;
-      }
-
-      toast.error(
-        responseData.message ?? getResponseMessage(payload, 'Failed to create admin account')
-      );
-    } catch (setupError) {
-      console.error('Admin setup error:', setupError);
-      toast.error('Failed to create admin account');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    loading,
+    showPassword,
+    formData,
+    togglePasswordVisibility,
+    handleInputChange,
+    handleSubmit,
+    goHome,
+  } = useAdminSetupPage();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-fixly-bg p-4">
@@ -187,7 +97,7 @@ export default function AdminSetupPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((previous) => !previous)}
+                  onClick={togglePasswordVisibility}
                   className="absolute right-3 top-1/2 -translate-y-1/2 transform"
                 >
                   {showPassword ? (
@@ -225,10 +135,7 @@ export default function AdminSetupPage() {
         </div>
 
         <div className="mt-6 text-center">
-          <button
-            onClick={() => router.push('/')}
-            className="text-fixly-accent hover:text-fixly-accent-dark"
-          >
+          <button onClick={goHome} className="text-fixly-accent hover:text-fixly-accent-dark">
             {'<- Back to Home'}
           </button>
         </div>
