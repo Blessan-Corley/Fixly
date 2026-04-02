@@ -72,7 +72,7 @@
 // POST /api/reviews/submit - active - getServerSession - no - n/a
 // POST /api/reviews/[reviewId]/helpful - active - getServerSession - no - n/a
 // GET /api/search/suggestions - active - none - no - no
-// POST /api/stripe/webhook - active - webhook - no - n/a
+// POST /api/razorpay/webhook - active - webhook - no - n/a
 // POST /api/subscription/create-order - active - withAuth - no - n/a
 // GET /api/subscription/fixer - active - withAuth - no - no
 // GET /api/subscription/hirer - active - withAuth - no - no
@@ -107,3 +107,4 @@
 export * from './response';
 export * from './parse';
 export * from './auth';
+export * from './request';
