@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbopack --port 3000",
     "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 next build",
     "start": "next start",
     "test": "npm run test:unit && npm run test:integration",
@@ -24,7 +24,8 @@
     "build:analyze": "cross-env ANALYZE=true npm run build",
     "prepare": "husky install",
     "health": "curl http://localhost:3000/api/health || echo 'Server not running'",
-    "db:reconcile-subscriptions": "npx ts-node --project tsconfig.json scripts/migrations/reconcile-subscriptions.ts"
+    "db:reconcile-subscriptions": "npx ts-node --project tsconfig.json scripts/migrations/reconcile-subscriptions.ts",
+    "db:seed-e2e": "npx tsx scripts/seed-test-db.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.0.4",
@@ -43,8 +44,6 @@
     "@radix-ui/react-toast": "^1.1.5",
     "@radix-ui/react-tooltip": "^1.0.7",
     "@sentry/nextjs": "^10.45.0",
-    "@stripe/react-stripe-js": "^5.6.1",
-    "@stripe/stripe-js": "^8.11.0",
     "@t3-oss/env-nextjs": "^0.13.10",
     "@tailwindcss/forms": "^0.5.3",
     "@tanstack/query-sync-storage-persister": "^5.95.0",
@@ -97,7 +96,6 @@
     "server-only": "^0.0.1",
     "sharp": "^0.33.0",
     "sonner": "^1.2.4",
-    "stripe": "^20.4.1",
     "tailwind-merge": "^2.2.1",
     "tailwindcss-animate": "^1.0.7",
     "tough-cookie": "^6.0.0",
