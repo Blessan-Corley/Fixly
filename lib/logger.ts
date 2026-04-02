@@ -1,7 +1,5 @@
 import pino, { type Logger as PinoLogger, type LoggerOptions } from 'pino';
 
-import { env } from '@/lib/env';
-
 type RequestLoggerContext = {
   requestId?: string;
   userId?: string;
@@ -18,21 +16,9 @@ export type AppLogger = {
 };
 
 const options: LoggerOptions = {
-  level: env.NODE_ENV === 'production' ? 'info' : 'debug',
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
   base: undefined,
   timestamp: pino.stdTimeFunctions.isoTime,
-  ...(env.NODE_ENV === 'production'
-    ? {}
-    : {
-        transport: {
-          target: 'pino-pretty',
-          options: {
-            colorize: true,
-            translateTime: 'SYS:standard',
-            singleLine: true,
-          },
-        },
-      }),
 };
 
 const baseLogger: PinoLogger = pino(options);
