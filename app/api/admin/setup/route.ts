@@ -1,6 +1,4 @@
 import bcrypt from 'bcryptjs';
-import { Types } from 'mongoose';
-import { z } from 'zod';
 
 import { badRequest, respond, serverError } from '@/lib/api';
 import { parseBody } from '@/lib/api/parse';
@@ -8,78 +6,22 @@ import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
-import type { IUser } from '@/types/User';
 import { rateLimit } from '@/utils/rateLimiting';
+
+import {
+  SetupRequestBodySchema,
+  getAdminSetupKey,
+  getRequestIp,
+  isPlainObject,
+  toTrimmedString,
+  validateAdminFields,
+  type AdminData,
+  type UserDocument,
+} from './helpers';
 
 // SECURITY: This endpoint is disabled in production.
 // To use in development: set ADMIN_SETUP_ENABLED=true in .env.local
 // Never set ADMIN_SETUP_ENABLED=true in production environment variables.
-
-type SetupRequestBody = {
-  setupKey?: unknown;
-  adminData?: unknown;
-};
-
-type AdminData = {
-  name?: unknown;
-  username?: unknown;
-  email?: unknown;
-  password?: unknown;
-};
-
-const SetupRequestBodySchema: z.ZodType<SetupRequestBody> = z.object({
-  setupKey: z.unknown().optional(),
-  adminData: z.unknown().optional(),
-});
-
-type UserDocument = IUser & {
-  _id: Types.ObjectId;
-  save: () => Promise<unknown>;
-};
-
-function toTrimmedString(value: unknown): string | null {
-  return typeof value === 'string' ? value.trim() : null;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== 'object') return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function normalizeEmail(value: string): string {
-  return value.toLowerCase();
-}
-
-function normalizeUsername(value: string): string {
-  return value.toLowerCase();
-}
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidUsername(value: string): boolean {
-  return /^[a-z0-9_]{3,20}$/.test(value);
-}
-
-function getAdminSetupKey(): string | null {
-  const configured = toTrimmedString(env.ADMIN_SETUP_KEY);
-  return configured;
-}
-
-function getRequestIp(request: Request): string {
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  if (forwardedFor) {
-    const forwardedIp = forwardedFor.split(',')[0]?.trim();
-    if (forwardedIp) {
-      return forwardedIp;
-    }
-  }
-
-  const realIp = request.headers.get('x-real-ip');
-  return realIp?.trim() || 'unknown';
-}
 
 export async function POST(request: Request) {
   const timestamp = new Date().toISOString();
@@ -103,46 +45,16 @@ export async function POST(request: Request) {
     }
 
     const parsedBody = await parseBody(request, SetupRequestBodySchema);
-    if ('error' in parsedBody) {
-      return parsedBody.error;
-    }
-    const requestBody: SetupRequestBody = parsedBody.data;
+    if ('error' in parsedBody) return parsedBody.error;
 
-    const setupKey = toTrimmedString(requestBody.setupKey);
-    if (!setupKey) {
-      return badRequest('Setup key is required');
-    }
+    const setupKey = toTrimmedString(parsedBody.data.setupKey);
+    if (!setupKey) return badRequest('Setup key is required');
 
-    if (!isPlainObject(requestBody.adminData)) {
-      return badRequest('Admin data is required');
-    }
-    const adminData = requestBody.adminData as AdminData;
+    if (!isPlainObject(parsedBody.data.adminData)) return badRequest('Admin data is required');
 
-    const name = toTrimmedString(adminData.name);
-    const usernameRaw = toTrimmedString(adminData.username);
-    const emailRaw = toTrimmedString(adminData.email);
-    const password = toTrimmedString(adminData.password);
-
-    if (!name || !usernameRaw || !emailRaw || !password) {
-      return badRequest('All fields are required');
-    }
-
-    const username = normalizeUsername(usernameRaw);
-    const email = normalizeEmail(emailRaw);
-
-    if (!isValidUsername(username)) {
-      return badRequest(
-        'Username must be 3-20 chars and contain only lowercase letters, numbers, and underscores'
-      );
-    }
-
-    if (!isValidEmail(email)) {
-      return badRequest('Invalid email address');
-    }
-
-    if (password.length < 8) {
-      return badRequest('Password must be at least 8 characters');
-    }
+    const validation = validateAdminFields(parsedBody.data.adminData as AdminData);
+    if (!validation.valid) return badRequest(validation.error);
+    const { name, username, email, password } = validation;
 
     const adminSetupKey = getAdminSetupKey();
     if (!adminSetupKey) {
@@ -163,37 +75,19 @@ export async function POST(request: Request) {
       return badRequest('Admin already exists');
     }
 
-    const existingUser = await User.findOne({
-      $or: [{ email }, { username }],
-    }).select('_id');
+    const existingUser = await User.findOne({ $or: [{ email }, { username }] }).select('_id');
     if (existingUser) {
       logger.warn({ timestamp, ip, reason: 'user_already_exists' }, '[Admin Setup] Attempt failed');
       return badRequest('Email or username already exists');
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-
     const admin = new User({
-      name,
-      username,
-      email,
-      passwordHash,
-      role: 'admin',
-      authMethod: 'email',
-      providers: ['email'],
-      isRegistered: true,
-      location: {
-        city: 'Coimbatore',
-        state: 'Tamil Nadu',
-      },
-      emailVerified: true,
-      phoneVerified: true,
-      isVerified: true,
-      isActive: true,
-      plan: {
-        type: 'pro',
-        status: 'active',
-      },
+      name, username, email, passwordHash,
+      role: 'admin', authMethod: 'email', providers: ['email'],
+      isRegistered: true, location: { city: 'Coimbatore', state: 'Tamil Nadu' },
+      emailVerified: true, phoneVerified: true, isVerified: true, isActive: true,
+      plan: { type: 'pro', status: 'active' },
     }) as UserDocument;
 
     await admin.save();
@@ -204,13 +98,7 @@ export async function POST(request: Request) {
       {
         success: true,
         message: 'Admin account created successfully',
-        admin: {
-          id: admin._id,
-          name: admin.name,
-          username: admin.username,
-          email: admin.email,
-          role: admin.role,
-        },
+        admin: { id: admin._id, name: admin.name, username: admin.username, email: admin.email, role: admin.role },
       },
       201
     );
