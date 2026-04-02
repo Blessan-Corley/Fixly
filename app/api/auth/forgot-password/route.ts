@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { respond } from '@/lib/api';
 import { AppError } from '@/lib/api/errors';
 import { parseBody } from '@/lib/api/parse';
+import { getClientIp, isAllowedOrigin } from '@/lib/api/request';
 import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
 import { sendPasswordResetOTP } from '@/lib/otpService';
@@ -18,25 +19,12 @@ const ForgotPasswordSchema = z.object({
 const GENERIC_FORGOT_PASSWORD_MESSAGE =
   'If an eligible account exists for that email address, a verification code has been sent.';
 
-function toTrimmedString(value: unknown): string | null {
-  return typeof value === 'string' ? value.trim() : null;
-}
-
-function getClientIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  return request.headers.get('x-real-ip')?.trim() || 'unknown';
-}
-
-function isTemporarilyUnavailable(message: string | undefined): boolean {
-  return typeof message === 'string' && /temporarily unavailable/i.test(message);
-}
-
 export async function POST(request: Request) {
   try {
+    if (!isAllowedOrigin(request)) {
+      return respond({ success: false, message: 'Forbidden' }, 403);
+    }
+
     const ip = getClientIp(request);
     const rateLimitResult = await authSlidingRateLimit(`forgot_password:${ip}`, 3, 15 * 60);
     if (!rateLimitResult.success) {
