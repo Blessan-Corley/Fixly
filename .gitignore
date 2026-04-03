@@ -75,6 +75,8 @@ ehthumbs.db
 .orchids/
 .VSCodeCounter/
 route-matrix.json
+CLAUDE.md
+AGENTS.md
 
 # Temporary files
 tmp/
