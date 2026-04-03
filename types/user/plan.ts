@@ -5,8 +5,7 @@ export interface UserPlan {
   startDate?: Date;
   endDate?: Date;
   status: PlanStatus;
-  stripeCustomerId?: string;
-  stripeSubscriptionId?: string | null;
+  razorpayCustomerId?: string;
   activatedAt?: Date;
   paymentId?: string;
   creditsUsed: number;
