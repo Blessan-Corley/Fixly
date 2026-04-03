@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireSession, respond } from '@/lib/api';
 import { AppError } from '@/lib/api/errors';
 import { parseBody } from '@/lib/api/parse';
+import { isAllowedOrigin, isTemporarilyUnavailable } from '@/lib/api/request';
 import {
   computeIsFullyVerified,
   invalidateAuthCache,
@@ -16,11 +17,21 @@ import { verifyOTP } from '@/lib/otpService';
 import { authSlidingRateLimit } from '@/lib/redis';
 import User from '@/models/User';
 
+import type { OtpPurpose } from '../send-otp/types';
+
+const VALID_PURPOSES: OtpPurpose[] = [
+  'signup',
+  'password_reset',
+  'email_verification',
+  'email_change',
+  'username_change',
+];
+
 const VerifyOtpSchema = z
   .object({
     email: z.string().email().optional(),
     phone: z.string().optional(),
-    otp: z.string().min(4),
+    otp: z.string().length(6, 'OTP must be exactly 6 digits'),
     purpose: z.string().optional(),
     type: z.string().optional(),
   })
@@ -33,12 +44,15 @@ function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function isTemporarilyUnavailable(message: string | undefined): boolean {
-  return typeof message === 'string' && /temporarily unavailable/i.test(message);
+function normalizePurpose(raw: string): OtpPurpose | null {
+  const v = raw.toLowerCase() as OtpPurpose;
+  return VALID_PURPOSES.includes(v) ? v : null;
 }
 
 export async function POST(request: Request) {
   try {
+    if (!isAllowedOrigin(request)) return respond({ message: 'Forbidden' }, 403);
+
     const ip =
       request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       request.headers.get('x-real-ip')?.trim() ||
@@ -66,9 +80,14 @@ export async function POST(request: Request) {
     }
 
     const otp = asTrimmedString(parsed.data.otp);
-    const purpose = asTrimmedString(parsed.data.purpose) || asTrimmedString(parsed.data.type);
+    const rawPurpose = asTrimmedString(parsed.data.purpose) || asTrimmedString(parsed.data.type);
+    const purpose = normalizePurpose(rawPurpose);
     const email = normalizeEmail(parsed.data.email);
     const phone = normalizeIndianPhone(parsed.data.phone);
+
+    if (!purpose) {
+      return respond({ message: 'Valid OTP purpose is required' }, 400);
+    }
 
     const identifier = phone || email;
     if (!identifier) {
