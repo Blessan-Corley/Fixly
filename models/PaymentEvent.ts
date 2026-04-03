@@ -4,8 +4,8 @@ export type PaymentEventStatus = 'pending' | 'processed' | 'failed';
 
 export interface IPaymentEvent extends Document {
   _id: Types.ObjectId;
-  stripeEventId: string;
-  stripeEventType: string;
+  paymentEventId: string;
+  paymentEventType: string;
   userId: Types.ObjectId;
   status: PaymentEventStatus;
   processedAt?: Date;
@@ -20,12 +20,12 @@ type PaymentEventModel = Model<IPaymentEvent>;
 
 const paymentEventSchema = new Schema<IPaymentEvent, PaymentEventModel>(
   {
-    stripeEventId: {
+    paymentEventId: {
       type: String,
       required: true,
       trim: true,
     },
-    stripeEventType: {
+    paymentEventType: {
       type: String,
       required: true,
       trim: true,
@@ -50,7 +50,7 @@ const paymentEventSchema = new Schema<IPaymentEvent, PaymentEventModel>(
   }
 );
 
-paymentEventSchema.index({ stripeEventId: 1 }, { unique: true });
+paymentEventSchema.index({ paymentEventId: 1 }, { unique: true });
 paymentEventSchema.index({ userId: 1, createdAt: -1 });
 paymentEventSchema.index({ status: 1, createdAt: -1 });
 
