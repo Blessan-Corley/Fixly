@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export type MessageType = 'text' | 'image' | 'file' | 'system';
+export type MessageType = 'text' | 'image' | 'file' | 'system' | 'location';
 export type ConversationType = 'direct' | 'job' | 'support';
 export type ConversationPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type AttachmentType = 'image' | 'document' | 'link';
