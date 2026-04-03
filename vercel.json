@@ -2,19 +2,12 @@
   "name": "fixly",
   "version": 2,
   "framework": "nextjs",
-  "regions": ["sin1", "bom1"],
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build",
   "functions": {
     "app/api/**/*": {
       "maxDuration": 30
     }
-  },
-  "build": {
-    "env": {
-      "NEXT_TELEMETRY_DISABLED": "1"
-    }
-  },
-  "env": {
-    "NODE_ENV": "production"
   },
   "headers": [
     {
@@ -27,10 +20,6 @@
         {
           "key": "X-Content-Type-Options",
           "value": "nosniff"
-        },
-        {
-          "key": "X-XSS-Protection",
-          "value": "1; mode=block"
         },
         {
           "key": "Strict-Transport-Security",

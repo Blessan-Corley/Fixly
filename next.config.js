@@ -1,226 +1,171 @@
-// Create: next.config.js - ADD this to ensure env vars load properly
+// Phase 2: Disabled runtime SVG rendering for user-controlled uploads.
+const { withSentryConfig } = require('@sentry/nextjs');
+const envConfig = require('./lib/env-config');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['mongoose'],
-    webpackBuildWorker: true,
-    optimizeCss: true,
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons', 'framer-motion', '@tanstack/react-query'],
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
-      },
-    }
-  },
-  
-  // ⚠️ SECURITY: Only expose PUBLIC variables here
-  // NEVER expose secrets like NEXTAUTH_SECRET, GOOGLE_CLIENT_SECRET, etc.
-  env: {
-    // Only NEXT_PUBLIC_ variables should be exposed to client
-    // Next.js handles this automatically for variables starting with NEXT_PUBLIC_
-    // So we don't need to manually list them here unless we're aliasing them
-  },
-  
-  webpack: (config, { buildId, dev, isServer, defaultLoaders, webpack }) => {
-    // Suppress critical dependency warnings from keyv (used by Ably)
+  webpack: (config, { dev, isServer }) => {
+    // Suppress noisy dynamic import warnings from keyv (pulled in by Ably).
+    // We use ignoreWarnings instead of ContextReplacementPlugin with a callback
+    // because callback functions cannot be serialised for webpack build workers
+    // (DataCloneError) in Next.js 15.
     config.module.exprContextCritical = false;
     config.module.unknownContextCritical = false;
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings ?? []),
+      { module: /keyv/ },
+      /Critical dependency: the request of a dynamic expression is ambiguous/,
+    ];
 
-    // Add plugin to handle dynamic imports better
-    config.plugins.push(
-      new webpack.ContextReplacementPlugin(
-        /keyv/,
-        (data) => {
-          // Suppress warnings from keyv module
-          data.dependencies.forEach((dep) => {
-            if (dep.critical) dep.critical = false;
-          });
-          return data;
-        }
-      )
-    );
-
-    // Client-side optimizations
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        dns: false,
+        assert: false,
         child_process: false,
-        tls: false,
         crypto: false,
-        stream: false,
-        url: false,
-        zlib: false,
+        dns: false,
+        fs: false,
         http: false,
         https: false,
-        assert: false,
+        net: false,
         os: false,
         path: false,
+        stream: false,
+        tls: false,
+        url: false,
+        zlib: false,
       };
 
+      // Alias node: URI scheme imports to empty modules for client bundles.
+      // Any server-only module using `import ... from 'node:*'` that leaks into
+      // the client-side graph (e.g. via a missing 'use server' / dynamic import)
+      // gets a harmless no-op rather than a webpack UnhandledSchemeError.
       config.resolve.alias = {
         ...config.resolve.alias,
-        'undici': false,
+        undici: false,
+        'node:crypto': false,
+        'node:buffer': false,
+        'node:events': false,
+        'node:path': false,
+        'node:stream': false,
+        'node:util': false,
+        'node:url': false,
+        'node:net': false,
+        'node:tls': false,
+        'node:dns': false,
+        'node:os': false,
+        'node:fs': false,
+        'node:http': false,
+        'node:https': false,
+        'node:zlib': false,
+        'node:assert': false,
+        'node:child_process': false,
       };
-
-      config.externals = config.externals || [];
-      config.externals.push({
-        'undici': 'undici',
-        'firebase-admin': 'firebase-admin'
-      });
-
-      // Bundle splitting and optimization
-      if (!dev) {
-        config.optimization = {
-          ...config.optimization,
-          splitChunks: {
-            chunks: 'all',
-            cacheGroups: {
-              // Vendor chunk for stable dependencies
-              vendor: {
-                test: /[\\/]node_modules[\\/]/,
-                name: 'vendors',
-                priority: 10,
-                reuseExistingChunk: true,
-              },
-              // React ecosystem chunk
-              react: {
-                test: /[\\/]node_modules[\\/](react|react-dom|react-router)[\\/]/,
-                name: 'react',
-                priority: 20,
-                reuseExistingChunk: true,
-              },
-              // UI libraries chunk
-              ui: {
-                test: /[\\/]node_modules[\\/](framer-motion|lucide-react)[\\/]/,
-                name: 'ui',
-                priority: 15,
-                reuseExistingChunk: true,
-              },
-              // Query and state management
-              query: {
-                test: /[\\/]node_modules[\\/](@tanstack\/react-query|socket\.io-client)[\\/]/,
-                name: 'query',
-                priority: 15,
-                reuseExistingChunk: true,
-              },
-              // Common chunk for frequently used modules
-              common: {
-                name: 'common',
-                minChunks: 2,
-                priority: 5,
-                reuseExistingChunk: true,
-              },
-            },
-          },
-        };
-      }
     }
 
-    // Production optimizations
-    if (!dev) {
-      // Analyze bundle size in development
-      if (process.env.ANALYZE === 'true') {
-        const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
-        config.plugins.push(
-          new BundleAnalyzerPlugin({
-            analyzerMode: 'server',
-            openAnalyzer: true,
-          })
-        );
-      }
+    if (!dev && envConfig.isAnalyze) {
+      const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
 
-      // Compression and minification
-      config.optimization.minimize = true;
-      
-      // Remove console logs in production (safely check if minimizer exists)
-      if (config.optimization.minimizer && 
-          config.optimization.minimizer[0] && 
-          config.optimization.minimizer[0].options && 
-          config.optimization.minimizer[0].options.terserOptions) {
-        config.optimization.minimizer[0].options.terserOptions.compress.drop_console = true;
-      }
+      config.plugins.push(
+        new BundleAnalyzerPlugin({
+          analyzerMode: 'static',
+          openAnalyzer: false,
+          reportFilename: isServer ? '../analyze/server.html' : './analyze/client.html',
+          statsFilename: isServer ? '../analyze/server-stats.json' : './analyze/client-stats.json',
+          generateStatsFile: true,
+        })
+      );
     }
-
-    // Performance monitoring
-    config.plugins.push(
-      new webpack.DefinePlugin({
-        'process.env.BUILD_ID': JSON.stringify(buildId),
-        'process.env.BUILD_TIME': JSON.stringify(new Date().toISOString()),
-      })
-    );
 
     return config;
   },
-  
+
   transpilePackages: [
     'firebase',
     '@firebase/auth',
     '@firebase/firestore',
     'ably',
     'keyv',
-    '@keyv/redis'
+    '@keyv/redis',
   ],
-  
+
   images: {
     remotePatterns: [
       {
         protocol: 'https',
         hostname: 'storage.googleapis.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'lh3.googleusercontent.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
-        port: '',
         pathname: '/**',
-      }
+      },
+      {
+        protocol: 'https',
+        hostname: 'res.cloudinary.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'storage.cloud.google.com',
+        pathname: '/**',
+      },
     ],
-    dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  
+
   async headers() {
     return [
       {
         source: '/api/:path*',
         headers: [
           { key: 'Access-Control-Allow-Credentials', value: 'true' },
-          { key: 'Access-Control-Allow-Origin', value: process.env.NEXTAUTH_URL || 'http://localhost:3000' },
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: envConfig.nextAuthUrl,
+          },
           { key: 'Access-Control-Allow-Methods', value: 'GET,OPTIONS,PATCH,DELETE,POST,PUT' },
-          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
-        ]
-      }
+          {
+            key: 'Access-Control-Allow-Headers',
+            value:
+              'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version',
+          },
+        ],
+      },
     ];
   },
-  
+
   typescript: {
     ignoreBuildErrors: false,
   },
-  
+
   eslint: {
-    ignoreDuringBuilds: false, // Re-enabled to ensure code quality
+    ignoreDuringBuilds: false,
   },
-  
-  // Production optimizations
-  swcMinify: true,
+
   compress: true,
-  
-  // Performance improvements
   poweredByHeader: false,
-  
 };
 
-module.exports = nextConfig;
+const sentryWebpackPluginOptions = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: true,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  dryRun: !process.env.SENTRY_AUTH_TOKEN,
+  webpack: {
+    automaticVercelMonitors: true,
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+};
+
+module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);

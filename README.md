@@ -43,6 +43,18 @@ Configure the application by creating a `.env.local` file in the root directory.
     npm run dev
     ```
 
+## Running Background Jobs Locally
+
+Inngest functions run via the Inngest Dev Server in development.
+
+1. Start the Next.js dev server: `npm run dev`
+2. In a second terminal, start Inngest Dev Server:
+   ```
+   npx inngest-cli@latest dev -u http://localhost:3000/api/inngest
+   ```
+3. Open http://localhost:8288 to see the Inngest dashboard
+4. Functions will execute automatically when events are triggered
+
 ## Key Features
 
 *   **Job Management:** Comprehensive workflows for posting requirements, reviewing applications, and managing project lifecycles.

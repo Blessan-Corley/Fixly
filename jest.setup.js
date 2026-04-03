@@ -1,10 +1,92 @@
-// jest.setup.js - Jest testing configuration
+// Phase 2: Hardened Jest test auth defaults and CSRF-aware API request setup.
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+process.env.NEXTAUTH_SECRET =
+  process.env.NEXTAUTH_SECRET || 'test-secret-123456789012345678901234567890';
+process.env.TEST_CSRF_TOKEN =
+  process.env.TEST_CSRF_TOKEN || 'test-csrf-token-for-integration-tests';
+process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fixly-test';
+process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+process.env.ABLY_ROOT_KEY = process.env.ABLY_ROOT_KEY || 'test-ably-key';
+process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY =
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || 'test-public-key';
+process.env.VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'test-private-key';
+
 require('dotenv').config({ path: '.env.local' });
-require('@testing-library/jest-dom');
+require('@testing-library/jest-dom/jest-globals');
+
+jest.mock('@t3-oss/env-nextjs', () => ({
+  createEnv: ({ runtimeEnv }) => runtimeEnv,
+}));
+
+// Mock next/server — stub `after` so handlers that call after(...) don't throw
+// "after was called outside a request scope" in the Jest environment.
+jest.mock('next/server', () => {
+  const actual = jest.requireActual('next/server');
+  return {
+    ...actual,
+    after: jest.fn((fn) => {
+      try { fn(); } catch (_) { /* swallow — side-effects are fire-and-forget */ }
+    }),
+  };
+});
+
+jest.mock('nuqs', () => {
+  const createParser = () => ({
+    parse: jest.fn((value) => value),
+    serialize: jest.fn((value) => String(value)),
+    withDefault(defaultValue) {
+      return {
+        ...this,
+        defaultValue,
+      };
+    },
+  });
+
+  const resolveSearchValue = (key) => {
+    try {
+      const { useSearchParams } = require('next/navigation');
+      const searchParams = typeof useSearchParams === 'function' ? useSearchParams() : null;
+      if (!searchParams || typeof searchParams.get !== 'function') {
+        return null;
+      }
+      return searchParams.get(key);
+    } catch {
+      return null;
+    }
+  };
+
+  return {
+    parseAsString: createParser(),
+    parseAsInteger: createParser(),
+    parseAsArrayOf: jest.fn(() => createParser()),
+    parseAsStringEnum: jest.fn(() => createParser()),
+    useQueryState: jest.fn((key) => [resolveSearchValue(key), jest.fn()]),
+    useQueryStates: jest.fn((shape) => {
+      const values = Object.keys(shape || {}).reduce((acc, key) => {
+        acc[key] = resolveSearchValue(key);
+        return acc;
+      }, {});
+      return [values, jest.fn()];
+    }),
+  };
+});
+
+jest.mock('nuqs/adapters/next/app', () => ({
+  NuqsAdapter: ({ children }) => children,
+}));
 
 // Ensure Buffer is available globally (crucial for Ably in JSDOM/Hybrid envs)
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = require('buffer').Buffer;
+}
+
+if (typeof global.setImmediate === 'undefined') {
+  global.setImmediate = (callback, ...args) => setTimeout(callback, 0, ...args);
+}
+
+if (typeof global.clearImmediate === 'undefined') {
+  global.clearImmediate = (handle) => clearTimeout(handle);
 }
 
 // Polyfill Web APIs for Next.js 13+ App Router
@@ -37,9 +119,81 @@ if (typeof global.Request === 'undefined') {
       return new Response(JSON.stringify(data), init);
     }
   };
-  global.Headers = class Headers extends Map {
-    get(name) { return super.get(name.toLowerCase()); }
-    set(name, value) { super.set(name.toLowerCase(), value); }
+  global.Headers = class Headers {
+    constructor(init) {
+      this.values = new Map();
+
+      if (!init) {
+        return;
+      }
+
+      if (typeof init[Symbol.iterator] === 'function') {
+        for (const [key, value] of init) {
+          this.set(key, value);
+        }
+        return;
+      }
+
+      if (typeof init === 'object') {
+        Object.entries(init).forEach(([key, value]) => {
+          this.set(key, value);
+        });
+      }
+    }
+    get(name) { return this.values.get(name.toLowerCase()); }
+    set(name, value) { this.values.set(name.toLowerCase(), value); }
+    delete(name) { this.values.delete(name.toLowerCase()); }
+    has(name) { return this.values.has(name.toLowerCase()); }
+    append(name, value) { this.set(name, value); }
+    [Symbol.iterator]() { return this.values[Symbol.iterator](); }
+  };
+}
+
+const OriginalRequest = global.Request;
+if (OriginalRequest) {
+  const testCsrfToken = process.env.TEST_CSRF_TOKEN || 'test-csrf-token-for-integration-tests';
+  const shouldAutoAttachCsrf = (pathname, method) => {
+    if (!pathname || !method) {
+      return false;
+    }
+
+    const normalizedMethod = method.toUpperCase();
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(normalizedMethod)) {
+      return false;
+    }
+
+    if (pathname.startsWith('/api/stripe')) {
+      return false;
+    }
+
+    if (pathname === '/api/messages' && normalizedMethod === 'POST') {
+      return false;
+    }
+
+    return pathname.startsWith('/api/');
+  };
+
+  global.Request = class RequestWithTestCsrf extends OriginalRequest {
+    constructor(input, init) {
+      const requestInput = typeof input === 'string' ? input : input?.url || 'http://localhost';
+      const url = new URL(requestInput, 'http://localhost');
+      const method =
+        init?.method ||
+        (typeof input === 'object' && input && 'method' in input ? input.method : 'GET');
+      const headers = new Headers(
+        init?.headers || (typeof input === 'object' && input && 'headers' in input ? input.headers : undefined)
+      );
+
+      if (!headers.has('x-csrf-token') && shouldAutoAttachCsrf(url.pathname, method)) {
+        headers.set('x-csrf-token', testCsrfToken);
+      }
+
+      super(input, {
+        ...init,
+        method,
+        headers,
+      });
+    }
   };
 }
 
@@ -95,7 +249,8 @@ jest.mock('next-auth/react', () => ({
         id: 'test-user',
         email: 'test@example.com',
         name: 'Test User',
-        role: 'fixer'
+        role: 'fixer',
+        csrfToken: process.env.TEST_CSRF_TOKEN || 'test-csrf-token-for-integration-tests',
       },
       accessToken: 'test-token'
     },
@@ -149,37 +304,66 @@ jest.mock('ably', () => ({
 }));
 
 // Mock Redis
+const mockRedisUtils = {
+  get: jest.fn(() => Promise.resolve(null)),
+  set: jest.fn(() => Promise.resolve(true)),
+  del: jest.fn(() => Promise.resolve(true)),
+  exists: jest.fn(() => Promise.resolve(false)),
+  keys: jest.fn(() => Promise.resolve([])),
+  ttl: jest.fn(() => Promise.resolve(-1)),
+  incr: jest.fn(() => Promise.resolve(1)),
+  decr: jest.fn(() => Promise.resolve(0)),
+  expire: jest.fn(() => Promise.resolve(true)),
+  pexpire: jest.fn(() => Promise.resolve(true)),
+  pttl: jest.fn(() => Promise.resolve(-1)),
+  setex: jest.fn(() => Promise.resolve(true)),
+  invalidatePattern: jest.fn(() => Promise.resolve(0)),
+  invalidateByPattern: jest.fn(() => Promise.resolve(0)),
+};
+
 jest.mock('./lib/redis', () => ({
-  cache: {
-    get: jest.fn(),
-    set: jest.fn(),
-    del: jest.fn(),
-    exists: jest.fn(),
-    invalidatePattern: jest.fn(),
-    getOrSet: jest.fn()
+  redisUtils: mockRedisUtils,
+  sessionRedis: {
+    get: jest.fn(() => Promise.resolve(null)),
+    set: jest.fn(() => Promise.resolve(true)),
+    del: jest.fn(() => Promise.resolve(true)),
+    exists: jest.fn(() => Promise.resolve(false)),
   },
-  analytics: {
-    trackEvent: jest.fn(),
-    getEventCount: jest.fn()
-  },
-  session: {
-    get: jest.fn(),
-    set: jest.fn(),
-    destroy: jest.fn(),
-    touch: jest.fn()
-  },
-  pubsub: {
-    publish: jest.fn(),
-    subscribe: jest.fn(),
-    unsubscribe: jest.fn()
-  },
-  redisRateLimit: jest.fn(() => ({
+  redisRateLimit: jest.fn(() => Promise.resolve({
     success: true,
     count: 1,
     remaining: 99,
-    resetTime: Date.now() + 3600000
+    resetTime: Date.now() + 3600000,
   })),
-  redisHealthCheck: jest.fn(() => Promise.resolve(true))
+  authRedisRateLimit: jest.fn(() => Promise.resolve({
+    success: true,
+    count: 1,
+    remaining: 99,
+    resetTime: Date.now() + 3600000,
+  })),
+  checkRedisHealth: jest.fn(() => Promise.resolve(true)),
+  initRedis: jest.fn(() => null),
+  getRedis: jest.fn(() => null),
+  redis: null,
+  isAuthRedisDegraded: jest.fn(() => false),
+  shouldFailClosedForAuth: jest.fn(() => false),
+  shouldAllowInMemoryAuthFallback: jest.fn(() => false),
+  getRedisRecoveryRetrySeconds: jest.fn(() => 0),
+  isRedisConfigured: jest.fn(() => false),
+  default: {
+    initRedis: jest.fn(() => null),
+    getRedis: jest.fn(() => null),
+    checkRedisHealth: jest.fn(() => Promise.resolve(true)),
+    redisRateLimit: jest.fn(() => Promise.resolve({ success: true, count: 1, remaining: 99, resetTime: Date.now() + 3600000 })),
+    authRedisRateLimit: jest.fn(() => Promise.resolve({ success: true, count: 1, remaining: 99, resetTime: Date.now() + 3600000 })),
+    redisUtils: mockRedisUtils,
+    sessionRedis: {
+      get: jest.fn(() => Promise.resolve(null)),
+      set: jest.fn(() => Promise.resolve(true)),
+      del: jest.fn(() => Promise.resolve(true)),
+      exists: jest.fn(() => Promise.resolve(false)),
+    },
+  },
 }));
 
 // Mock MongoDB
@@ -436,7 +620,8 @@ beforeAll(() => {
       typeof args[0] === 'string' &&
       (args[0].includes('Warning: ReactDOM.render') ||
        args[0].includes('Warning: render') ||
-       args[0].includes('Not implemented: navigation'))
+       args[0].includes('Not implemented: navigation') ||
+       args[0].includes('not wrapped in act(...)'))
     ) {
       return;
     }
@@ -450,13 +635,5 @@ afterAll(() => {
 
 // Global test timeout
 jest.setTimeout(10000);
-
-// Mock environment variables
-process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET || 'test-secret';
-// Only set these defaults if not already present (e.g. from .env)
-process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fixly-test';
-process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-process.env.ABLY_ROOT_KEY = process.env.ABLY_ROOT_KEY || 'test-ably-key';
 
 module.exports = {};

@@ -1,19 +1,5 @@
 # Dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Next.js
-.next/
-out/
-build/
-dist/
-.claude/
-nul
-# Production
-/build
 
 # Environment variables
 .env
@@ -23,166 +9,81 @@ nul
 .env.production.local
 .env*.local
 
-# Vercel
-.vercel
-
-# TypeScript
+# Next.js build output
+.next/
+out/
+dist/
+build/
 *.tsbuildinfo
-next-env.d.ts
+tsconfig.tsbuildinfo
 
-# IDE/Editor files
-.vscode/
+# Test and coverage output
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Cache directories
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.npm/
+
+# Deployment tooling
+.vercel/
+.netlify/
+.firebase/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Runtime files
+pids/
+*.pid
+*.pid.lock
+*.seed
+
+# Editor and OS files
 .idea/
-*.swp
-*.swo
-*~
-
-# OS generated files
+.vscode/
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
 Thumbs.db
+ehthumbs.db
+*.swp
+*.swo
+*~
 
-# Logs
-logs
-*.log
+# Local tool artifacts
+.claude/
+.codex/
+.codex-*.log
+.next-build.log
+.scan/
+.orchids/
+.VSCodeCounter/
+route-matrix.json
 
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-
-# nyc test coverage
-.nyc_output
-
-# ESLint cache
-.eslintcache
-
-# Optional npm cache directory
-.npm
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
-.parcel-cache
-
-# Firebase
-firebase-debug.log
-firestore-debug.log
-ui-debug.log
-.firebase/
-
-# Temporary folders
+# Temporary files
 tmp/
 temp/
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Local Netlify folder
-.netlify
-
-# Sentry Config File
-.sentryclirc
-
-# PWA files
-**/public/sw.js
-**/public/workbox-*.js
-**/public/worker-*.js
-**/public/sw.js.map
-**/public/workbox-*.js.map
-**/public/worker-*.js.map
-
-# Storybook build outputs
-.out
-.storybook-out
-storybook-static
-
-# Misc
 *.tgz
 *.tar.gz
-.cache/
+nul
 
-# Claude Code Development Files
-CLAUDE.md
-DEPLOYMENT.md
-SECURITY.md
-TESTING_CHECKLIST.md
-
-# Analysis, Test Reports & Performance Files
-SCALABILITY_REPORT.md
-performance-analysis-report.json
-scripts/performance-analysis.js
-scripts/comprehensive-feature-test.js
-scripts/test-realtime.js
-*-analysis-report.json
-*-test-report.json
-*-performance-report.*
-*-scalability-report.*
-
-# Generated Documentation & Reports
-/docs/generated/
-/reports/
-performance-*.json
-scalability-*.md
-test-results-*.json
-benchmark-*.log
-capacity-analysis.*
-infrastructure-report.*
-
-# Development & Testing Artifacts  
-jest-test-results.json
-coverage-*.json
-benchmark-results.json
-load-test-*.log
-stress-test-*.json
-
-# Test Scripts - Development Only
-scripts/socket-test.js
-scripts/comprehensive-socket-diagnostic.js
-scripts/production-test.js
-scripts/verify-production.js
-scripts/production-load-test.js
-scripts/final-system-verification.js
-scripts/verify-deployment.js
-
-# Documentation & Reports - Development Only
-# Exclude all markdown files except README
-*.md
-!README.md
-# Exclude specific development docs
-CLAUDE.md
-DEPLOYMENT.md
-DOCS/
-.VSCodeCounter/
-# Exclude test and development script files
-test-*.js
-*-report.md
-*-summary.md
-*-documentation.md
-*-implementation.md
-*-system.md
-*-guide.md
+# Local generated backups
+.next_prebuild_backup/
+.next_stale_*/
+test-results-stale-*/
