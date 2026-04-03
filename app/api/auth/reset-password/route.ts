@@ -1,54 +1,22 @@
-// Phase 2: Removed predictable public CSRF tokens from reset-password requests.
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
 import { badRequest, forbidden, notFound, respond } from '@/lib/api';
 import { AppError } from '@/lib/api/errors';
 import { parseBody } from '@/lib/api/parse';
+import { getClientIp, isAllowedOrigin } from '@/lib/api/request';
 import { invalidateAuthCache, normalizeEmail } from '@/lib/auth-utils';
-import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
-import { consumeOTPVerification, verifyOTP } from '@/lib/otpService';
+import { consumeOTPVerification } from '@/lib/otpService';
 import { authSlidingRateLimit } from '@/lib/redis';
 import { emailSchema, passwordSchema } from '@/lib/validations/auth';
 import User from '@/models/User';
 
-const OTP_REGEX = /^\d{6}$/;
 const ResetPasswordSchema = z.object({
-  email: z.unknown().optional(),
-  newPassword: z.unknown().optional(),
-  otp: z.unknown().optional(),
+  email: emailSchema,
+  newPassword: passwordSchema,
 });
-
-function toTrimmedString(value: unknown): string | null {
-  return typeof value === 'string' ? value.trim() : null;
-}
-
-function getClientIp(request: Request): string {
-  const realIp = request.headers.get('x-real-ip')?.trim();
-  if (realIp) return realIp;
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const last = forwarded.split(',')[0]?.trim();
-    if (last) return last;
-  }
-  return 'unknown';
-}
-
-function isAllowedOrigin(request: Request): boolean {
-  const origin = request.headers.get('origin');
-  if (!origin) return true;
-  try {
-    return new URL(origin).host === new URL(env.NEXTAUTH_URL).host;
-  } catch {
-    return false;
-  }
-}
-
-function isTemporarilyUnavailable(message: string | undefined): boolean {
-  return typeof message === 'string' && /temporarily unavailable/i.test(message);
-}
 
 export async function POST(request: Request) {
   try {
@@ -85,35 +53,20 @@ export async function POST(request: Request) {
     }
 
     const email = normalizeEmail(parsedBody.data.email);
-    const newPassword = toTrimmedString(parsedBody.data.newPassword) || '';
-    const otp = toTrimmedString(parsedBody.data.otp) || '';
+    const newPassword = parsedBody.data.newPassword;
 
-    const emailValidation = emailSchema.safeParse(email);
-    if (!emailValidation.success) {
-      return badRequest('Please enter a valid email address');
-    }
-
-    const passwordValidation = passwordSchema.safeParse(newPassword);
-    if (!passwordValidation.success) {
-      return badRequest('Password does not meet security requirements');
-    }
-
+    // Require a verification receipt from the prior verify-otp step.
+    // Direct OTP submission is intentionally not accepted here — callers
+    // must complete the /api/auth/verify-otp step first.
     const hasVerificationReceipt = await consumeOTPVerification(email, 'password_reset');
     if (!hasVerificationReceipt) {
-      if (!OTP_REGEX.test(otp)) {
-        return badRequest('OTP must be 6 digits');
-      }
-
-      const otpResult = await verifyOTP(email, otp, 'password_reset');
-      if (!otpResult.success) {
-        return respond(
-          {
-            success: false,
-            message: otpResult.message || 'Invalid or expired verification code',
-          },
-          isTemporarilyUnavailable(otpResult.message) ? 503 : 400
-        );
-      }
+      return respond(
+        {
+          success: false,
+          message: 'Verification required. Please complete the verification step before resetting your password.',
+        },
+        403
+      );
     }
 
     await connectDB();
@@ -146,6 +99,7 @@ export async function POST(request: Request) {
 
     user.passwordHash = await bcrypt.hash(newPassword, 12);
     user.lastActivityAt = new Date();
+    user.passwordChangedAt = new Date();
     await user.save();
     await invalidateAuthCache(String(user._id));
 
