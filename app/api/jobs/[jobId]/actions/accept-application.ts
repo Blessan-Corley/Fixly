@@ -1,8 +1,12 @@
 import { startSession } from 'mongoose';
 import { NextResponse } from 'next/server';
 
-import { badRequest, notFound, ok } from '@/lib/api';
+import { Channels, Events } from '@/lib/ably/events';
+import { publishToChannel } from '@/lib/ably/publisher';
+import { badRequest, notFound, ok, respond } from '@/lib/api';
+import { logger } from '@/lib/logger';
 import { redisUtils } from '@/lib/redis';
+import Conversation from '@/models/Conversation';
 import Job from '@/models/Job';
 import { acceptApplicationOnJob } from '@/models/job/workflow';
 import User from '@/models/User';
@@ -58,22 +62,73 @@ export async function acceptApplication(
     const application = result.value;
     const acceptedFixerId = toIdString(application.fixer);
 
-    // Atomic credit increment — avoids read-modify-save race condition
-    await User.updateOne(
-      {
-        _id: application.fixer,
-        $or: [{ 'plan.type': { $ne: 'pro' } }, { 'plan.status': { $ne: 'active' } }],
-      },
-      { $inc: { 'plan.creditsUsed': 1 } },
-      { session: dbSession }
-    );
+    // Atomic credit increment with double-spend guard.
+    // Only deduct from non-pro fixers. The $lt:3 condition makes the update
+    // a no-op if credits are exhausted, and matchedCount tells us which case we hit.
+    const fixerPlan = await User.findById(application.fixer)
+      .select('plan')
+      .session(dbSession)
+      .lean<{ plan?: { type?: string; status?: string } }>();
+
+    const isProFixer =
+      fixerPlan?.plan?.type === 'pro' && fixerPlan?.plan?.status === 'active';
+
+    if (!isProFixer) {
+      const creditResult = await User.updateOne(
+        { _id: application.fixer, 'plan.creditsUsed': { $lt: 3 } },
+        { $inc: { 'plan.creditsUsed': 1 } },
+        { session: dbSession }
+      );
+
+      if (creditResult.matchedCount === 0) {
+        await dbSession.abortTransaction();
+        return respond(
+          {
+            message:
+              'This fixer has used all their free credits. They need to upgrade to Pro to accept more jobs.',
+            code: 'insufficient_credits',
+          },
+          402
+        );
+      }
+    }
 
     await txJob.save({ session: dbSession });
     await dbSession.commitTransaction();
 
-    // Post-commit side effects
+    // Post-commit side effects — no session held past this point
     await invalidateJobReadCaches(job._id);
     void redisUtils.invalidatePattern(`fixer-apps:v1:${acceptedFixerId}:*`);
+
+    // Auto-open conversation between hirer and fixer
+    const hirerId = toIdString(job.createdBy);
+    let conversationId: string | null = null;
+    try {
+      const conversation = await Conversation.findOrCreateBetween(
+        hirerId,
+        acceptedFixerId,
+        toIdString(job._id)
+      );
+      conversationId = String(conversation._id);
+
+      // Send a system message so the conversation isn't empty
+      await conversation.addMessage({
+        sender: conversation.participants[0],
+        content: `Your application for "${job.title ?? 'this job'}" has been accepted. You can now chat directly with the hirer.`,
+        messageType: 'system',
+      });
+
+      // Notify the fixer's client to open/navigate to the new conversation
+      await publishToChannel(Channels.user(acceptedFixerId), Events.user.conversationCreated, {
+        conversationId,
+        jobId: toIdString(job._id),
+        hirerId,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (convError) {
+      // Non-fatal — acceptance succeeded; conversation creation failure is logged only
+      logger.error({ error: convError, acceptedFixerId, hirerId }, 'Failed to auto-create conversation after acceptance');
+    }
 
     // Notify fixer outside transaction to avoid holding session
     const fixer = await User.findById(application.fixer).select('_id name plan').lean();
@@ -92,6 +147,7 @@ export async function acceptApplication(
       applicationId,
       fixerId: acceptedFixerId,
       status: application.status ?? 'accepted',
+      conversationId,
     });
     await publishApplicationRealtimeEvent(job._id, EVENTS.JOB_ASSIGNED, {
       applicationId,
@@ -107,6 +163,7 @@ export async function acceptApplication(
     return ok({
       success: true,
       message: 'Application accepted successfully',
+      conversationId,
       job: await Job.findById(job._id).populate('assignedTo', 'name username photoURL rating'),
     });
   } catch (error) {
