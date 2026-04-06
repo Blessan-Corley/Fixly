@@ -1,6 +1,3 @@
-import { Types } from 'mongoose';
-import { z } from 'zod';
-
 import { requireSession, respond } from '@/lib/api';
 import { parseBody } from '@/lib/api/parse';
 import {
@@ -13,47 +10,19 @@ import admin from '@/lib/firebase-admin';
 import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
-import type { AuthMethod, IUser } from '@/types/User';
 import { rateLimit } from '@/utils/rateLimiting';
 
+import {
+  VerifyPhoneFirebaseSchema,
+  buildProvidersSet,
+  isAccountBlocked,
+  normalizeIndianNumber,
+  toTrimmedString,
+  type DecodedFirebaseToken,
+  type UserDocument,
+} from './helpers';
+
 export const dynamic = 'force-dynamic';
-
-const VerifyPhoneFirebaseSchema = z.object({
-  idToken: z.string().min(1),
-  phoneNumber: z.string().optional(),
-});
-
-type UserDocument = IUser & {
-  _id: Types.ObjectId;
-  addNotification?: (
-    type: string,
-    title: string,
-    message: string,
-    data?: unknown
-  ) => Promise<IUser>;
-  save: () => Promise<unknown>;
-};
-
-type DecodedFirebaseToken = {
-  uid?: string;
-  phone_number?: string;
-};
-
-function toTrimmedString(value: unknown): string | null {
-  return typeof value === 'string' ? value.trim() : null;
-}
-
-function normalizeIndianNumber(value: string | null): string | null {
-  if (!value) return null;
-  const digits = value.replace(/\D/g, '');
-  if (digits.length === 10) return digits;
-  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
-  return null;
-}
-
-function isAccountBlocked(user: Pick<IUser, 'banned' | 'isActive' | 'deletedAt'>): boolean {
-  return Boolean(user.banned || user.isActive === false || user.deletedAt);
-}
 
 export async function POST(request: Request) {
   try {
@@ -67,10 +36,7 @@ export async function POST(request: Request) {
           503
         );
       }
-      const retryAfter = Math.max(
-        0,
-        Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000)
-      );
+      const retryAfter = Math.max(0, Math.ceil((rateLimitResult.resetTime - Date.now()) / 1000));
       return respond(
         {
           message: 'Too many verification attempts. Please try again later.',
@@ -86,48 +52,32 @@ export async function POST(request: Request) {
     if ('error' in auth) return auth.error;
 
     const userId = toTrimmedString(auth.session.user.id);
-    if (!userId) {
-      return respond({ message: 'Authentication required' }, 401);
-    }
+    if (!userId) return respond({ message: 'Authentication required' }, 401);
 
     const parsed = await parseBody(request, VerifyPhoneFirebaseSchema);
-    if ('error' in parsed) {
-      return parsed.error;
-    }
+    if ('error' in parsed) return parsed.error;
     const idToken = parsed.data.idToken.trim();
 
     await connectDB();
 
     const user = (await User.findById(userId)) as UserDocument | null;
-    if (!user) {
-      return respond({ message: 'User not found' }, 404);
-    }
+    if (!user) return respond({ message: 'User not found' }, 404);
 
-    if (isAccountBlocked(user)) {
-      return respond({ message: 'Account is suspended' }, 403);
-    }
+    if (isAccountBlocked(user)) return respond({ message: 'Account is suspended' }, 403);
 
-    if (user.phoneVerified) {
-      return respond({ message: 'Phone number is already verified' }, 400);
-    }
+    if (user.phoneVerified) return respond({ message: 'Phone number is already verified' }, 400);
 
     let decodedToken: DecodedFirebaseToken;
     try {
       decodedToken = (await admin.auth().verifyIdToken(idToken)) as DecodedFirebaseToken;
     } catch (firebaseError: unknown) {
       logger.error('Firebase token verification error:', firebaseError);
-      return respond(
-        { message: 'Invalid or expired verification token' },
-        401
-      );
+      return respond({ message: 'Invalid or expired verification token' }, 401);
     }
 
     const decodedPhone = normalizeIndianPhone(decodedToken.phone_number);
     if (!decodedPhone) {
-      return respond(
-        { message: 'Verified token does not include a phone number' },
-        400
-      );
+      return respond({ message: 'Verified token does not include a phone number' }, 400);
     }
 
     const providedPhone = normalizeIndianPhone(parsed.data.phoneNumber);
@@ -146,20 +96,15 @@ export async function POST(request: Request) {
       .lean();
 
     if (existingUser) {
-      return respond(
-        { message: 'Phone number is already in use by another account' },
-        409
-      );
+      return respond({ message: 'Phone number is already in use by another account' }, 409);
     }
 
     user.phoneVerified = true;
     user.phoneVerifiedAt = new Date();
     user.lastActivityAt = new Date();
     user.firebaseUid = toTrimmedString(decodedToken.uid) ?? user.firebaseUid;
-    user.providers = Array.from(new Set<AuthMethod>([...(user.providers || []), 'phone']));
-
+    user.providers = buildProvidersSet(user.providers);
     user.phone = decodedPhone;
-
     user.isVerified = computeIsFullyVerified(user.emailVerified, user.phoneVerified);
 
     await user.save();
