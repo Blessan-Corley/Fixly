@@ -1,11 +1,11 @@
 import { Document, Types } from 'mongoose';
 
+import type { UserNotification, UserRating } from './user/activity';
 import type { UserLocation, UserLocationHistoryEntry } from './user/location';
 import type { UserBanDetails, UserVerification } from './user/moderation';
 import type { UserPlan, UserPortfolioItem } from './user/plan';
 import type { UserPreferences, UserPrivacy } from './user/preferences';
 import type { AuthMethod, BadgeType, UserRole } from './user/primitives';
-import type { UserNotification, UserRating } from './user/activity';
 
 export type { UserRole, AuthMethod, PlanType, PlanStatus, BadgeType, VerificationStatus } from './user/primitives';
 export type { LocationCoordinates, LocationAddress, UserLocation, UserLocationHistoryEntry } from './user/location';
@@ -95,9 +95,12 @@ export interface IUser extends Document {
 
   deletedAt?: Date;
   isActive: boolean;
+  isOnline?: boolean;
+  lastSeen?: Date;
 
   lastLoginAt?: Date;
   lastActivityAt?: Date;
+  passwordChangedAt?: Date;
   emailVerifiedAt?: Date;
   phoneVerifiedAt?: Date;
   profileCompletedAt?: Date;
