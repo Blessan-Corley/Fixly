@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 import {
   badRequest,
   forbidden,
@@ -16,59 +14,16 @@ import { applyRespondentDisputeResponse, syncJobDisputeState } from '@/lib/dispu
 import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
 import { csrfGuard } from '@/lib/security/csrf';
-import { moderateUserGeneratedContent } from '@/lib/validations/content-policy';
 import Dispute from '@/models/Dispute';
 import { rateLimit } from '@/utils/rateLimiting';
 
+import { moderateDisputeContent } from '../../handlers/post-dispute.helpers';
+
+import { normalizeCounterEvidence } from './put.helpers';
+import { SubmitResponseBodySchema, type SubmitResponseBody } from './put.types';
 import { RouteContext, sendNotifications, SessionUser } from './shared';
 
-const EVIDENCE_TYPES = new Set(['image', 'document', 'screenshot', 'chat_log']);
-
-function isEvidenceType(value: string): value is 'image' | 'document' | 'screenshot' | 'chat_log' {
-  return EVIDENCE_TYPES.has(value);
-}
-
-type SubmitResponseBody = {
-  content?: string;
-  acknowledgement?: 'acknowledge' | 'dispute' | 'counter_claim';
-  counterEvidence?: Array<{
-    type: string;
-    url: string;
-    filename?: string;
-    description?: string;
-  }>;
-  counterClaim?: {
-    category?: string;
-    description?: string;
-    desiredOutcome?: string;
-    amount?: number;
-  };
-};
-
-const SubmitResponseBodySchema: z.ZodType<SubmitResponseBody> = z.object({
-  content: z.string().optional(),
-  acknowledgement: z.enum(['acknowledge', 'dispute', 'counter_claim']).optional(),
-  counterEvidence: z
-    .array(
-      z.object({
-        type: z.string(),
-        url: z.string(),
-        filename: z.string().optional(),
-        description: z.string().optional(),
-      })
-    )
-    .optional(),
-  counterClaim: z
-    .object({
-      category: z.string().optional(),
-      description: z.string().optional(),
-      desiredOutcome: z.string().optional(),
-      amount: z.number().optional(),
-    })
-    .optional(),
-});
-
-export async function PUT(request: Request, segmentData: RouteContext) {
+export async function PUT(request: Request, segmentData: RouteContext): Promise<Response> {
   const params = await segmentData.params;
   try {
     const rateLimitResult = await rateLimit(request, 'dispute_response', 10, 60 * 60 * 1000);
@@ -95,23 +50,15 @@ export async function PUT(request: Request, segmentData: RouteContext) {
     }
 
     const parsedBody = await parseBody(request, SubmitResponseBodySchema);
-    if ('error' in parsedBody) {
-      return parsedBody.error;
-    }
+    if ('error' in parsedBody) return parsedBody.error;
     const body: SubmitResponseBody = parsedBody.data;
 
-    const content = (body.content || '').trim();
+    const content = (body.content ?? '').trim();
     const acknowledgement = body.acknowledgement;
-    const counterEvidence = body.counterEvidence || [];
+    const counterEvidence = body.counterEvidence ?? [];
 
-    if (!content) {
-      return badRequest('Response content is required');
-    }
-
-    if (
-      !acknowledgement ||
-      !['acknowledge', 'dispute', 'counter_claim'].includes(acknowledgement)
-    ) {
+    if (!content) return badRequest('Response content is required');
+    if (!acknowledgement || !['acknowledge', 'dispute', 'counter_claim'].includes(acknowledgement)) {
       return badRequest('Valid acknowledgement is required');
     }
 
@@ -119,62 +66,22 @@ export async function PUT(request: Request, segmentData: RouteContext) {
       { label: 'Dispute response', value: content },
       {
         label: 'Counter claim description',
-        value:
-          typeof body.counterClaim?.description === 'string'
-            ? body.counterClaim.description.trim()
-            : '',
+        value: typeof body.counterClaim?.description === 'string' ? body.counterClaim.description.trim() : '',
       },
       {
         label: 'Counter claim desired outcome',
-        value:
-          typeof body.counterClaim?.desiredOutcome === 'string'
-            ? body.counterClaim.desiredOutcome.trim()
-            : '',
+        value: typeof body.counterClaim?.desiredOutcome === 'string' ? body.counterClaim.desiredOutcome.trim() : '',
       },
     ];
-    for (const field of responseFields) {
-      if (!field.value) continue;
 
-      const moderation = await moderateUserGeneratedContent(field.value, {
-        context: 'dispute',
-        fieldLabel: field.label,
-        userId: currentUser.id,
-      });
-
-      if (!moderation.allowed) {
-        return badRequest(moderation.message ?? 'Content validation failed', {
-          violations: moderation.violations,
-          suggestions: moderation.suggestions,
-        });
-      }
-    }
-
-    for (const evidenceItem of counterEvidence) {
-      const descriptionValue =
-        typeof evidenceItem?.description === 'string' ? evidenceItem.description.trim() : '';
-      if (!descriptionValue) continue;
-
-      const moderation = await moderateUserGeneratedContent(descriptionValue, {
-        context: 'dispute',
-        fieldLabel: 'Counter evidence description',
-        userId: currentUser.id,
-      });
-
-      if (!moderation.allowed) {
-        return badRequest(moderation.message ?? 'Content validation failed', {
-          violations: moderation.violations,
-          suggestions: moderation.suggestions,
-        });
-      }
-    }
+    const moderationError = await moderateDisputeContent(responseFields, counterEvidence, currentUser.id);
+    if (moderationError) return moderationError;
 
     const { disputeId } = params;
     await connectDB();
 
     const dispute = await Dispute.findOne({ disputeId });
-    if (!dispute) {
-      return notFound('Dispute');
-    }
+    if (!dispute) return notFound('Dispute');
 
     if (String(dispute.againstUser) !== currentUser.id) {
       return forbidden('Only the respondent can submit a response');
@@ -184,29 +91,7 @@ export async function PUT(request: Request, segmentData: RouteContext) {
       return badRequest('Response already submitted');
     }
 
-    const normalizedCounterEvidence = counterEvidence.reduce<
-      Array<{
-        type: 'image' | 'document' | 'screenshot' | 'chat_log';
-        url: string;
-        filename?: string;
-        description?: string;
-        uploadedAt: Date;
-      }>
-    >((accumulator, item) => {
-      if (!item || !item.type || !item.url || !isEvidenceType(item.type)) {
-        return accumulator;
-      }
-
-      accumulator.push({
-        type: item.type,
-        url: item.url,
-        filename: item.filename,
-        description: item.description,
-        uploadedAt: new Date(),
-      });
-
-      return accumulator;
-    }, []);
+    const normalizedCounterEvidence = normalizeCounterEvidence(counterEvidence);
 
     const responseResult = applyRespondentDisputeResponse(dispute, currentUser.id, {
       content,
@@ -239,10 +124,7 @@ export async function PUT(request: Request, segmentData: RouteContext) {
       }))
     );
 
-    return respond({
-      success: true,
-      message: 'Response submitted successfully',
-    });
+    return respond({ success: true, message: 'Response submitted successfully' });
   } catch (error) {
     logger.error('Submit dispute response error:', error);
     return serverError('Failed to submit response');
