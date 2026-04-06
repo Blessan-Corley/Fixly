@@ -27,11 +27,15 @@ import { inngest } from '@/lib/inngest/client';
 import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
 import { csrfGuard } from '@/lib/security/csrf';
-import { moderateUserGeneratedContent } from '@/lib/validations/content-policy';
 import Dispute from '@/models/Dispute';
 import Job from '@/models/Job';
 import { rateLimit } from '@/utils/rateLimiting';
 
+import {
+  computeDisputePriority,
+  moderateDisputeContent,
+  normalizeDisputeEvidence,
+} from './post-dispute.helpers';
 import {
   CreateDisputeBodySchema,
   getUserContact,
@@ -102,37 +106,8 @@ export async function handlePostDispute(request: Request): Promise<Response> {
       { label: 'Desired outcome details', value: desiredOutcomeDetails?.trim() ?? '' },
     ];
 
-    for (const field of disputeFields) {
-      if (!field.value) continue;
-      const moderation = await moderateUserGeneratedContent(field.value, {
-        context: 'dispute',
-        fieldLabel: field.label,
-        userId,
-      });
-      if (!moderation.allowed) {
-        return badRequest(moderation.message ?? 'Content validation failed', {
-          violations: moderation.violations,
-          suggestions: moderation.suggestions,
-        });
-      }
-    }
-
-    for (const evidenceItem of evidence) {
-      const descriptionValue =
-        typeof evidenceItem?.description === 'string' ? evidenceItem.description.trim() : '';
-      if (!descriptionValue) continue;
-      const moderation = await moderateUserGeneratedContent(descriptionValue, {
-        context: 'dispute',
-        fieldLabel: 'Evidence description',
-        userId,
-      });
-      if (!moderation.allowed) {
-        return badRequest(moderation.message ?? 'Content validation failed', {
-          violations: moderation.violations,
-          suggestions: moderation.suggestions,
-        });
-      }
-    }
+    const moderationError = await moderateDisputeContent(disputeFields, evidence, userId);
+    if (moderationError) return moderationError;
 
     if (againstUserId === userId) {
       return badRequest('You cannot create a dispute against yourself');
@@ -164,10 +139,7 @@ export async function handlePostDispute(request: Request): Promise<Response> {
     if (existingDispute) return badRequest('There is already an active dispute for this job');
 
     const amount = Number(disputedAmount ?? refundRequested ?? additionalPaymentRequested ?? 0);
-    let priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium';
-    if (amount > 100000) priority = 'urgent';
-    else if (amount > 50000 || category === 'safety_concern') priority = 'high';
-    else if (amount < 5000) priority = 'low';
+    const priority = computeDisputePriority(amount, category);
 
     const dispute = await createDisputeRecord({
       jobId,
@@ -181,14 +153,7 @@ export async function handlePostDispute(request: Request): Promise<Response> {
       desiredOutcomeDetails: desiredOutcomeDetails?.trim(),
       amount: { disputedAmount, refundRequested, additionalPaymentRequested },
       priority,
-      evidence: evidence
-        .filter((item) => item?.type && item?.url)
-        .map((item) => ({
-          type: item.type as 'image' | 'document' | 'screenshot' | 'chat_log',
-          url: item.url,
-          filename: item.filename,
-          description: item.description,
-        })),
+      evidence: normalizeDisputeEvidence(evidence),
     });
 
     const populatedDispute = await Dispute.findById(dispute._id)
