@@ -1,7 +1,102 @@
+import { badRequest, respond } from '@/lib/api/response';
+import { moderateUserGeneratedContent } from '@/lib/validations/content-policy';
+
 import { sanitizeString } from '../../job-route-utils';
 
 import type { ApplyBody, MaterialInput, TimeEstimateInput } from './apply.types';
 import { asRecord } from './shared';
+
+type JobBudget = { type?: string; amount?: number };
+
+export type ValidatedPayload = {
+  proposedAmount: number;
+  description: string;
+  requirements: string;
+  specialNotes: string;
+  negotiationNotes: string;
+};
+
+export async function validateAndParseApplication(
+  body: ApplyBody,
+  jobBudget: JobBudget | undefined,
+  userId: string
+): Promise<{ error: Response } | { ok: true; data: ValidatedPayload }> {
+  const proposedAmount = parseNumber(body.proposedAmount);
+  if (proposedAmount === null || proposedAmount <= 0) {
+    return { error: badRequest('Proposed amount is required and must be greater than 0') };
+  }
+  if (proposedAmount > 1000000) {
+    return { error: badRequest('Proposed amount exceeds allowed maximum') };
+  }
+
+  if (jobBudget?.type === 'fixed' && typeof jobBudget.amount === 'number') {
+    const variance = Math.abs(proposedAmount - jobBudget.amount);
+    const maxVariance = jobBudget.amount * 0.5;
+    if (variance > maxVariance) {
+      return {
+        error: respond(
+          {
+            message: `Proposed amount (INR ${proposedAmount.toLocaleString()}) is too far from the fixed budget (INR ${jobBudget.amount.toLocaleString()}). Please propose within +/-50% of the budget.`,
+            suggestedRange: {
+              min: Math.round(jobBudget.amount * 0.5),
+              max: Math.round(jobBudget.amount * 1.5),
+            },
+          },
+          400
+        ),
+      };
+    }
+  }
+
+  const description = normalizeDescription(body);
+  if (!description || description.length < 20) {
+    return { error: badRequest('Please provide a description with at least 20 characters') };
+  }
+  if (description.length > 600) {
+    return { error: badRequest('Description must be less than 600 characters') };
+  }
+
+  const requirements = sanitizeString(body.requirements);
+  const specialNotes = sanitizeString(body.specialNotes);
+  const negotiationNotes = sanitizeString(
+    body.negotiationNotes ?? body.coverLetter ?? body.message
+  );
+
+  if (requirements.length > 500 || specialNotes.length > 300 || negotiationNotes.length > 500) {
+    return { error: badRequest('One or more optional fields exceed allowed length') };
+  }
+
+  const fieldsToCheck = [
+    { name: 'description', value: description },
+    { name: 'requirements', value: requirements },
+    { name: 'specialNotes', value: specialNotes },
+    { name: 'negotiationNotes', value: negotiationNotes },
+  ];
+
+  for (const field of fieldsToCheck) {
+    if (!field.value) continue;
+    const moderationResult = await moderateUserGeneratedContent(field.value, {
+      context: 'job_application',
+      fieldLabel: field.name,
+      userId,
+    });
+    if (!moderationResult.allowed) {
+      return {
+        error: respond(
+          {
+            message: `Your ${field.name} contains restricted content: ${moderationResult.message}`,
+            violations: moderationResult.violations,
+            type: 'sensitive_content',
+            field: field.name,
+          },
+          400
+        ),
+      };
+    }
+  }
+
+  return { ok: true, data: { proposedAmount, description, requirements, specialNotes, negotiationNotes } };
+}
 
 export function parseNumber(value: unknown): number | null {
   const parsed = Number(value);
