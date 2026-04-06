@@ -1,4 +1,3 @@
-import type { ProfilePhotoRecord, ProfileUser } from '../../types/profile';
 import type {
   ApiSuccessMessageResponse,
   ChangePasswordWithOtpRequest,
@@ -12,52 +11,16 @@ import type {
   VerifyEmailChangeRequest,
 } from '../../types/profile-api';
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const asString = (value: unknown): string | undefined =>
-  typeof value === 'string' ? value : undefined;
-
-const asBoolean = (value: unknown): boolean | undefined =>
-  typeof value === 'boolean' ? value : undefined;
-
-const asNumber = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-
-const parseSuccessMessageResponse = (payload: unknown): ApiSuccessMessageResponse => {
-  if (!isRecord(payload)) {
-    return { success: false, message: 'Invalid server response' };
-  }
-
-  return {
-    success: payload.success === true,
-    message: asString(payload.message),
-  };
-};
-
-const parsePartialUser = (value: unknown): Partial<ProfileUser> | undefined => {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  return value as Partial<ProfileUser>;
-};
-
-const parseProfilePhotoRecord = (value: unknown): ProfilePhotoRecord | undefined => {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  return value as ProfilePhotoRecord;
-};
-
-const readJson = async (response: Response): Promise<unknown> => {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-};
+import {
+  asBoolean,
+  asNumber,
+  asString,
+  isRecord,
+  parsePartialUser,
+  parseProfilePhotoRecord,
+  parseSuccessMessageResponse,
+  readJson,
+} from './profileClient.helpers';
 
 export const sendPasswordResetOtp = async (
   request: SendPasswordResetOtpRequest
@@ -67,7 +30,6 @@ export const sendPasswordResetOtp = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-
   return parseSuccessMessageResponse(await readJson(response));
 };
 
@@ -79,7 +41,6 @@ export const changePasswordWithOtp = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-
   return parseSuccessMessageResponse(await readJson(response));
 };
 
@@ -87,35 +48,19 @@ export const uploadProfilePhoto = async (file: File): Promise<ProfilePhotoUpload
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch('/api/user/profile-photo', {
-    method: 'POST',
-    body: formData,
-  });
-
+  const response = await fetch('/api/user/profile-photo', { method: 'POST', body: formData });
   const payload = await readJson(response);
+
   if (!isRecord(payload)) {
-    return {
-      ok: false,
-      status: response.status,
-      message: 'Invalid upload response',
-    };
+    return { ok: false, status: response.status, message: 'Invalid upload response' };
   }
 
   if (response.ok) {
     const profilePhoto = parseProfilePhotoRecord(payload.profilePhoto);
     if (!profilePhoto) {
-      return {
-        ok: false,
-        status: response.status,
-        message: 'Invalid profile photo response',
-      };
+      return { ok: false, status: response.status, message: 'Invalid profile photo response' };
     }
-
-    return {
-      ok: true,
-      profilePhoto,
-      message: asString(payload.message),
-    };
+    return { ok: true, profilePhoto, message: asString(payload.message) };
   }
 
   return {
@@ -134,13 +79,10 @@ export const updateProfile = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-
   const payload = await readJson(response);
+
   if (!isRecord(payload)) {
-    return {
-      ok: false,
-      message: 'Invalid profile update response',
-    };
+    return { ok: false, message: 'Invalid profile update response' };
   }
 
   return {
@@ -159,7 +101,6 @@ export const updatePhoneNumber = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-
   return parseSuccessMessageResponse(await readJson(response));
 };
 
@@ -172,16 +113,11 @@ export const checkEmailAvailability = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email }),
     });
-
     const payload = await readJson(response);
     if (!isRecord(payload)) {
       return { available: false, message: 'Invalid email validation response' };
     }
-
-    return {
-      available: payload.available === true,
-      message: asString(payload.message),
-    };
+    return { available: payload.available === true, message: asString(payload.message) };
   } catch {
     return { available: false, message: 'Failed to validate email' };
   }
@@ -195,7 +131,6 @@ export const sendEmailChangeOtp = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-
   return parseSuccessMessageResponse(await readJson(response));
 };
 
@@ -207,6 +142,5 @@ export const verifyEmailChange = async (
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-
   return parseSuccessMessageResponse(await readJson(response));
 };
