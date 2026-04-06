@@ -15,7 +15,7 @@ export const MessageSchema = new mongoose.Schema<ConversationMessage>({
   },
   messageType: {
     type: String,
-    enum: ['text', 'image', 'file', 'system'],
+    enum: ['text', 'image', 'file', 'system', 'location'],
     default: 'text',
   },
   timestamp: {
@@ -99,7 +99,7 @@ export const ConversationSchema = new mongoose.Schema<
       sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       messageType: {
         type: String,
-        enum: ['text', 'image', 'file', 'system'],
+        enum: ['text', 'image', 'file', 'system', 'location'],
         default: 'text',
       },
       timestamp: { type: Date },
