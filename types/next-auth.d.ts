@@ -21,7 +21,7 @@ declare module 'next-auth' {
       needsOnboarding?: boolean;
       isRegistered?: boolean;
       isNewUser?: boolean;
-      googleId?: string;
+      hasGoogleAuth?: boolean;
       csrfToken?: string;
     };
   }
