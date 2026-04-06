@@ -1,6 +1,7 @@
 import { Schema } from 'mongoose';
 
 import type { IUser } from '../../types/User';
+
 import type { IUserModel } from './types';
 
 export const userSchema = new Schema<IUser, IUserModel>(
@@ -193,7 +194,7 @@ export const userSchema = new Schema<IUser, IUserModel>(
       type: { type: String, enum: ['free', 'pro'], default: 'free' },
       startDate: Date, endDate: Date,
       status: { type: String, enum: ['active', 'expired', 'cancelled', 'none'], default: 'none' },
-      stripeCustomerId: String, stripeSubscriptionId: String,
+      razorpayCustomerId: String,
       activatedAt: Date, paymentId: String,
       creditsUsed: { type: Number, default: 0 },
       subscribedAt: Date, expiresAt: Date,
@@ -247,7 +248,10 @@ export const userSchema = new Schema<IUser, IUserModel>(
       },
     },
     isActive: { type: Boolean, default: true },
+    isOnline: { type: Boolean, default: false },
+    lastSeen: Date,
     deletedAt: Date, lastLoginAt: Date, lastActivityAt: Date,
+    passwordChangedAt: Date,
     emailVerifiedAt: Date, phoneVerifiedAt: Date, profileCompletedAt: Date,
     registrationMetadata: {
       deviceInfo: { type: String, os: String, browser: String, userAgent: String },
