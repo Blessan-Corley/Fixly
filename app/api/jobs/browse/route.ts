@@ -4,18 +4,16 @@ import connectDB from '@/lib/mongodb';
 import { redisUtils } from '@/lib/redis';
 import { JobSearchParamsSchema } from '@/lib/validations/job';
 import Job from '@/models/Job';
-import { countActiveApplicationsOnJob } from '@/models/job/workflow';
 import { rateLimit } from '@/utils/rateLimiting';
 
 import {
   BROWSE_CACHE_TTL,
   buildBrowseCacheKey,
+  buildBrowseQuery,
   buildSort,
-  escapeRegex,
+  mapBrowseJob,
   parsePositiveInt,
-  toIdString,
   type BrowseJob,
-  type BrowseQuery,
 } from './helpers';
 
 export const dynamic = 'force-dynamic';
@@ -58,7 +56,7 @@ export async function GET(request: Request) {
     const parsedQuery = JobSearchParamsSchema.safeParse({
       q: searchParams.get('q') || searchParams.get('search') || undefined,
       location: searchParams.get('location') || undefined,
-      skills: rawSkills ? rawSkills.split(',').map((skill) => skill.trim().toLowerCase()).filter(Boolean) : undefined,
+      skills: rawSkills ? rawSkills.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : undefined,
       budgetMin: searchParams.get('budgetMin') || undefined,
       budgetMax: searchParams.get('budgetMax') || undefined,
       budgetType: searchParams.get('budgetType') || undefined,
@@ -77,31 +75,14 @@ export async function GET(request: Request) {
     const skip = (page - 1) * limit;
 
     const search = (parsedQuery.data.q || '').trim();
-    const location = (parsedQuery.data.location || '').trim();
-    const urgency = (parsedQuery.data.urgency || '').trim();
-    const sortBy = (parsedQuery.data.sortBy || 'newest').trim();
-    const skills = parsedQuery.data.skills ?? [];
-    const budgetMin = parsedQuery.data.budgetMin ?? null;
-    const budgetMax = parsedQuery.data.budgetMax ?? null;
-
-    const query: BrowseQuery = { status: 'open' };
-
-    if (search) query.$text = { $search: search };
-
-    if (location) {
-      const locationRegex = new RegExp(escapeRegex(location), 'i');
-      query.$and = query.$and ?? [];
-      query.$and.push({ $or: [{ 'location.city': locationRegex }, { 'location.state': locationRegex }] });
-    }
-
-    if (urgency && ['asap', 'flexible', 'scheduled'].includes(urgency)) query.urgency = urgency;
-    if (skills.length > 0) query.skillsRequired = { $in: skills };
-
-    if (budgetMin !== null || budgetMax !== null) {
-      query['budget.amount'] = {};
-      if (budgetMin !== null) query['budget.amount'].$gte = budgetMin;
-      if (budgetMax !== null) query['budget.amount'].$lte = budgetMax;
-    }
+    const query = buildBrowseQuery({
+      search,
+      location: (parsedQuery.data.location || '').trim(),
+      urgency: (parsedQuery.data.urgency || '').trim(),
+      skills: parsedQuery.data.skills ?? [],
+      budgetMin: parsedQuery.data.budgetMin ?? null,
+      budgetMax: parsedQuery.data.budgetMax ?? null,
+    });
 
     const projectionFields = {
       title: 1, description: 1, skillsRequired: 1, budget: 1, urgency: 1, deadline: 1,
@@ -113,41 +94,13 @@ export async function GET(request: Request) {
     const jobs = await Job.find(query)
       .select(projectionFields)
       .populate('createdBy', 'name username photoURL rating location isVerified')
-      .sort(buildSort(sortBy, Boolean(search)))
+      .sort(buildSort((parsedQuery.data.sortBy || 'newest').trim(), Boolean(search)))
       .skip(skip)
       .limit(limit)
       .lean();
 
     const total = await Job.countDocuments(query);
-
-    const mappedJobs = (jobs as BrowseJob[]).map((job) => {
-      const allApplications = Array.isArray(job.applications) ? job.applications : [];
-      const applicationCount = countActiveApplicationsOnJob({ applications: allApplications });
-
-      const hasApplied =
-        !!viewerUserId &&
-        allApplications.some(
-          (app) => app?.status !== 'withdrawn' && toIdString(app?.fixer) === viewerUserId
-        );
-
-      const minimalApplications = hasApplied
-        ? allApplications
-            .filter((app) => toIdString(app?.fixer) === viewerUserId && app?.status !== 'withdrawn')
-            .map((app) => ({ fixer: toIdString(app?.fixer), status: app?.status }))
-        : [];
-
-      const createdBy = job.createdBy ?? null;
-      return {
-        ...job,
-        applicationCount,
-        commentCount: Array.isArray(job.comments) ? job.comments.length : 0,
-        hasApplied,
-        applications: minimalApplications,
-        client: createdBy,
-        hirer: createdBy,
-        fixer: null,
-      };
-    });
+    const mappedJobs = (jobs as BrowseJob[]).map((job) => mapBrowseJob(job, viewerUserId));
 
     const responsePayload = {
       success: true,
