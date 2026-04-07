@@ -4,7 +4,6 @@ import { after } from 'next/server';
 import { requireSession } from '@/lib/api/auth';
 import { parseBody } from '@/lib/api/parse';
 import {
-  badRequest,
   forbidden,
   notFound,
   respond,
@@ -16,21 +15,19 @@ import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
 import { redisUtils } from '@/lib/redis';
 import { csrfGuard } from '@/lib/security/csrf';
-import { moderateUserGeneratedContent } from '@/lib/validations/content-policy';
 import Job from '@/models/Job';
 import { countActiveApplicationsOnJob } from '@/models/job/workflow';
 import User from '@/models/User';
 import { rateLimit } from '@/utils/rateLimiting';
 
-import { invalidateJobReadCaches, sanitizeString, toIdString } from '../../job-route-utils';
+import { invalidateJobReadCaches, toIdString } from '../../job-route-utils';
 import { getValidatedJobId, type JobRouteContext } from '../../route.shared';
 
 import {
   getUserPhotoUrl,
-  normalizeDescription,
   normalizeMaterialsList,
   normalizeTimeEstimate,
-  parseNumber,
+  validateAndParseApplication,
 } from './apply.helpers';
 import { applyBodySchema, type ApplyBody } from './apply.types';
 import { notifyApplicationSubmitted } from './post.notifications';
@@ -81,87 +78,22 @@ export async function POST(request: Request, segmentData: JobRouteContext): Prom
     const job = await Job.findById(jobId).populate('createdBy', 'name username email preferences');
     if (!job) return notFound('Job');
 
-    if (job.status !== 'open') return badRequest('This job is no longer accepting applications');
+    if (job.status !== 'open') return respond({ message: 'This job is no longer accepting applications' }, 400);
     if (job.deadline && new Date(job.deadline) < new Date()) {
-      return badRequest('Application deadline has passed');
+      return respond({ message: 'Application deadline has passed' }, 400);
     }
-    if (!job.canApply(user._id)) return badRequest('You cannot apply to this job');
+    if (!job.canApply(user._id)) return respond({ message: 'You cannot apply to this job' }, 400);
 
-    const proposedAmount = parseNumber(body.proposedAmount);
-    if (proposedAmount === null || proposedAmount <= 0) {
-      return badRequest('Proposed amount is required and must be greater than 0');
-    }
-    if (proposedAmount > 1000000) return badRequest('Proposed amount exceeds allowed maximum');
-
-    if (job.budget?.type === 'fixed' && typeof job.budget?.amount === 'number') {
-      const variance = Math.abs(proposedAmount - job.budget.amount);
-      const maxVariance = job.budget.amount * 0.5;
-
-      if (variance > maxVariance) {
-        return respond(
-          {
-            message: `Proposed amount (INR ${proposedAmount.toLocaleString()}) is too far from the fixed budget (INR ${job.budget.amount.toLocaleString()}). Please propose within +/-50% of the budget.`,
-            suggestedRange: {
-              min: Math.round(job.budget.amount * 0.5),
-              max: Math.round(job.budget.amount * 1.5),
-            },
-          },
-          400
-        );
-      }
-    }
-
-    const description = normalizeDescription(body);
-    if (!description || description.length < 20) {
-      return badRequest('Please provide a description with at least 20 characters');
-    }
-    if (description.length > 600) return badRequest('Description must be less than 600 characters');
-
-    const requirements = sanitizeString(body.requirements);
-    const specialNotes = sanitizeString(body.specialNotes);
-    const negotiationNotes = sanitizeString(
-      body.negotiationNotes ?? body.coverLetter ?? body.message
-    );
-
-    if (requirements.length > 500 || specialNotes.length > 300 || negotiationNotes.length > 500) {
-      return badRequest('One or more optional fields exceed allowed length');
-    }
-
-    const fieldsToCheck = [
-      { name: 'description', value: description },
-      { name: 'requirements', value: requirements },
-      { name: 'specialNotes', value: specialNotes },
-      { name: 'negotiationNotes', value: negotiationNotes },
-    ];
-
-    for (const field of fieldsToCheck) {
-      if (!field.value) continue;
-
-      const moderationResult = await moderateUserGeneratedContent(field.value, {
-        context: 'job_application',
-        fieldLabel: field.name,
-        userId,
-      });
-
-      if (!moderationResult.allowed) {
-        return respond(
-          {
-            message: `Your ${field.name} contains restricted content: ${moderationResult.message}`,
-            violations: moderationResult.violations,
-            type: 'sensitive_content',
-            field: field.name,
-          },
-          400
-        );
-      }
-    }
+    const validationResult = await validateAndParseApplication(body, job.budget, userId);
+    if ('error' in validationResult) return validationResult.error;
+    const { proposedAmount, description, requirements, specialNotes, negotiationNotes } =
+      validationResult.data;
 
     const normalizedTimeEstimate = normalizeTimeEstimate(body.timeEstimate, body.estimatedTime);
     const materialsList = normalizeMaterialsList(body.materialsList);
 
     let priceVariance = 0;
     let priceVariancePercentage = 0;
-
     if (typeof job.budget?.amount === 'number' && job.budget.amount > 0) {
       priceVariance = proposedAmount - job.budget.amount;
       priceVariancePercentage = (priceVariance / job.budget.amount) * 100;
@@ -180,7 +112,6 @@ export async function POST(request: Request, segmentData: JobRouteContext): Prom
       status: 'pending',
       appliedAt: new Date(),
     };
-
     if (normalizedTimeEstimate) application.timeEstimate = normalizedTimeEstimate;
     if (materialsList.length) application.materialsList = materialsList;
 
@@ -195,7 +126,6 @@ export async function POST(request: Request, segmentData: JobRouteContext): Prom
 
     await job.save();
     await invalidateJobReadCaches(job._id);
-    // Invalidate this fixer's applications cache
     void redisUtils.invalidatePattern(`fixer-apps:v1:${userId}:*`);
 
     const newApplication = job.applications[job.applications.length - 1];
