@@ -106,6 +106,49 @@ export function normalizeCategories(value: unknown): {
   return { value: categories, invalid };
 }
 
+export type ParticipantRoleResult =
+  | { ok: true; ratingField: RatingField; ratedUserId: unknown; expectedRatedBy: string }
+  | { ok: false; error: string };
+
+export function resolveParticipantRole(
+  job: { createdBy: unknown; assignedTo: unknown },
+  userIdStr: string,
+  ratedBy: string
+): ParticipantRoleResult {
+  const isHirer = toIdString(job.createdBy) === userIdStr;
+  const isFixer = toIdString(job.assignedTo) === userIdStr;
+
+  if (!isHirer && !isFixer) {
+    return { ok: false, error: 'Only job participants can rate' };
+  }
+
+  const expectedRatedBy = isHirer ? 'hirer' : 'fixer';
+  if (ratedBy && ratedBy !== expectedRatedBy) {
+    return { ok: false, error: 'Invalid rating configuration' };
+  }
+
+  const ratingField: RatingField = expectedRatedBy === 'hirer' ? 'fixerRating' : 'hirerRating';
+  const ratedUserId = expectedRatedBy === 'hirer' ? job.assignedTo : job.createdBy;
+  return { ok: true, ratingField, ratedUserId, expectedRatedBy };
+}
+
+export function writeRatingToCompletion(
+  job: JobWithReviewStatusMethod,
+  ratingField: RatingField,
+  rating: number,
+  review: string,
+  categories: Record<string, number>,
+  ratedBy: unknown
+): void {
+  if (!job.completion || typeof job.completion !== 'object') {
+    job.completion = {};
+  }
+  job.completion[ratingField] = { rating, review, categories, ratedBy, ratedAt: new Date() };
+  if (typeof job.updateReviewStatus === 'function') {
+    job.updateReviewStatus();
+  }
+}
+
 export async function notifyUser(
   userId: unknown,
   rating: number,
