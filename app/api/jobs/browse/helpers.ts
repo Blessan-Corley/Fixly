@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 
+import { countActiveApplicationsOnJob } from '@/models/job/workflow';
+
 export const BROWSE_CACHE_TTL = 30; // seconds — short enough to stay fresh for a marketplace
 
 export type BrowseJobApplication = {
@@ -102,4 +104,77 @@ export function buildSort(sortByRaw: string, hasSearch: boolean): Record<string,
     default:
       return { createdAt: -1 };
   }
+}
+
+export type BrowseQueryOptions = {
+  search: string;
+  location: string;
+  urgency: string;
+  skills: string[];
+  budgetMin: number | null;
+  budgetMax: number | null;
+};
+
+export function buildBrowseQuery(opts: BrowseQueryOptions): BrowseQuery {
+  const { search, location, urgency, skills, budgetMin, budgetMax } = opts;
+  const query: BrowseQuery = { status: 'open' };
+
+  if (search) query.$text = { $search: search };
+
+  if (location) {
+    const locationRegex = new RegExp(escapeRegex(location), 'i');
+    query.$and = query.$and ?? [];
+    query.$and.push({ $or: [{ 'location.city': locationRegex }, { 'location.state': locationRegex }] });
+  }
+
+  if (urgency && ['asap', 'flexible', 'scheduled'].includes(urgency)) query.urgency = urgency;
+  if (skills.length > 0) query.skillsRequired = { $in: skills };
+
+  if (budgetMin !== null || budgetMax !== null) {
+    query['budget.amount'] = {};
+    if (budgetMin !== null) (query['budget.amount'] as BudgetAmountFilter).$gte = budgetMin;
+    if (budgetMax !== null) (query['budget.amount'] as BudgetAmountFilter).$lte = budgetMax;
+  }
+
+  return query;
+}
+
+export function mapBrowseJob(
+  job: BrowseJob,
+  viewerUserId: string | null
+): BrowseJob & {
+  applicationCount: number;
+  commentCount: number;
+  hasApplied: boolean;
+  applications: { fixer: string; status?: string }[];
+  client: unknown;
+  hirer: unknown;
+  fixer: null;
+} {
+  const allApplications = Array.isArray(job.applications) ? job.applications : [];
+  const applicationCount = countActiveApplicationsOnJob({ applications: allApplications });
+
+  const hasApplied =
+    !!viewerUserId &&
+    allApplications.some(
+      (app) => app?.status !== 'withdrawn' && toIdString(app?.fixer) === viewerUserId
+    );
+
+  const minimalApplications = hasApplied
+    ? allApplications
+        .filter((app) => toIdString(app?.fixer) === viewerUserId && app?.status !== 'withdrawn')
+        .map((app) => ({ fixer: toIdString(app?.fixer), status: app?.status }))
+    : [];
+
+  const createdBy = job.createdBy ?? null;
+  return {
+    ...job,
+    applicationCount,
+    commentCount: Array.isArray(job.comments) ? job.comments.length : 0,
+    hasApplied,
+    applications: minimalApplications,
+    client: createdBy,
+    hirer: createdBy,
+    fixer: null,
+  };
 }
