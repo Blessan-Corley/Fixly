@@ -19,7 +19,7 @@ import { rateLimit } from '@/utils/rateLimiting';
 const JOB_DETAIL_TTL = 60; // 60 seconds
 
 import type { JsonObject } from '../job-route-utils';
-import { sanitizeString, toIdString } from '../job-route-utils';
+import { toIdString } from '../job-route-utils';
 import type { JobApplicationLike } from '../route-actions';
 import {
   CACHE_HEADERS,
@@ -28,7 +28,15 @@ import {
   withCacheControl,
 } from '../route.shared';
 
-import { addLegacyAliases, asRecord, sanitizeApplications } from './get.helpers';
+import {
+  addLegacyAliases,
+  applyFixerVisibility,
+  applyHirerAssignedVisibility,
+  buildRestrictedJobView,
+  computeSkillMatch,
+  isLocalJob,
+  sanitizeApplications,
+} from './get.helpers';
 
 export async function GET(request: Request, segmentData: JobRouteContext) {
   const params = await segmentData.params;
@@ -71,7 +79,6 @@ export async function GET(request: Request, segmentData: JobRouteContext) {
 
     if (!user) return notFound('User');
 
-    // Single aggregation: project commentCount via $size to avoid loading all comment sub-docs
     const [jobAgg] = await Job.aggregate<{
       _id?: unknown;
       title?: string;
@@ -90,11 +97,7 @@ export async function GET(request: Request, segmentData: JobRouteContext) {
       [key: string]: unknown;
     }>([
       { $match: { _id: new Types.ObjectId(jobId) } },
-      {
-        $addFields: {
-          commentCount: { $size: { $ifNull: ['$comments', []] } },
-        },
-      },
+      { $addFields: { commentCount: { $size: { $ifNull: ['$comments', []] } } } },
       { $project: { comments: 0 } },
     ]).exec();
 
@@ -116,17 +119,14 @@ export async function GET(request: Request, segmentData: JobRouteContext) {
     const activeApplicationCount = countActiveApplicationsOnJob({ applications });
     const commentCount = typeof job.commentCount === 'number' ? job.commentCount : 0;
     const hasApplied = applications.some(
-      (application) =>
-        application?.status !== 'withdrawn' && toIdString(application?.fixer) === String(user._id)
+      (app) => app?.status !== 'withdrawn' && toIdString(app?.fixer) === String(user._id)
     );
 
     const isJobCreator = toIdString(job.createdBy) === String(user._id);
     const isAssignedFixer = !!job.assignedTo && toIdString(job.assignedTo) === String(user._id);
     const isInvolved = isJobCreator || isAssignedFixer || hasApplied;
 
-    const searchParams = new URL(request.url).searchParams;
-    const forApplication = searchParams.get('forApplication') === 'true';
-
+    const forApplication = new URL(request.url).searchParams.get('forApplication') === 'true';
     const canViewFullDetails =
       user.role !== 'fixer' ||
       user.plan?.type === 'pro' ||
@@ -135,96 +135,20 @@ export async function GET(request: Request, segmentData: JobRouteContext) {
       forApplication;
 
     let jobData: JsonObject = { ...job };
-    const createdBy = asRecord(job.createdBy);
-    const createdByLocation = asRecord(createdBy.location);
 
     if (user.role === 'fixer' && !canViewFullDetails) {
-      jobData = {
-        _id: job._id,
-        title: job.title,
-        description:
-          typeof job.description === 'string' && job.description.length > 200
-            ? `${job.description.slice(0, 200)}...`
-            : job.description,
-        skillsRequired: job.skillsRequired ?? [],
-        budget:
-          job.budget?.type === 'negotiable'
-            ? { type: 'negotiable' }
-            : {
-                type: job.budget?.type,
-                amount:
-                  typeof job.budget?.amount === 'number' && job.budget.amount > 0
-                    ? `INR ${Math.floor(job.budget.amount / 1000)}k+`
-                    : null,
-              },
-        urgency: job.urgency,
-        status: job.status,
-        location: { city: job.location?.city, state: job.location?.state },
-        createdBy: { name: createdBy.name, rating: createdBy.rating },
-        applicationCount: activeApplicationCount,
-        commentCount,
-        createdAt: job.createdAt,
-        restrictedView: true,
-      };
+      jobData = buildRestrictedJobView(job, activeApplicationCount, commentCount);
     } else if (user.role === 'fixer') {
-      const jobCompleted = job.status === 'completed' && !!job.completion?.confirmedAt;
-      const showContactInfo = isAssignedFixer && jobCompleted;
-
-      jobData.createdBy = {
-        name: createdBy.name,
-        username: createdBy.username,
-        photoURL: createdBy.photoURL,
-        picture: createdBy.picture,
-        rating: createdBy.rating,
-        isVerified: createdBy.isVerified,
-        location: { city: createdByLocation.city, state: createdByLocation.state },
-      };
-
-      if (showContactInfo) {
-        jobData.createdBy = {
-          ...asRecord(jobData.createdBy),
-          phone: createdBy.phone,
-          email: createdBy.email,
-        };
-        jobData.location = job.location;
-      } else {
-        jobData.location = { city: job.location?.city, state: job.location?.state };
-      }
-
-      jobData.contactInfoRestricted = !showContactInfo;
+      jobData = applyFixerVisibility(jobData, job, isAssignedFixer);
     }
 
     if (user.role === 'hirer' && isJobCreator && job.assignedTo) {
-      const jobCompleted = job.status === 'completed' && !!job.completion?.confirmedAt;
-
-      if (!jobCompleted && jobData.assignedTo) {
-        const assignedToData = asRecord(jobData.assignedTo);
-        const assignedLocation = asRecord(assignedToData.location);
-        jobData.assignedTo = {
-          ...assignedToData,
-          phone: undefined,
-          email: undefined,
-          location: { city: assignedLocation.city, state: assignedLocation.state },
-        };
-      }
-
-      jobData.fixerContactInfoRestricted = !jobCompleted;
+      jobData = applyHirerAssignedVisibility(jobData, job);
     }
 
-    let skillMatchPercentage = 0;
-    if (user.role === 'fixer' && Array.isArray(user.skills)) {
-      const userSkills = user.skills.map((skill: string) => skill.toLowerCase());
-      const requiredSkills = Array.isArray(job.skillsRequired) ? job.skillsRequired : [];
-      const matchingSkills = requiredSkills.filter((skill: string) =>
-        userSkills.includes(String(skill).toLowerCase())
-      );
-      skillMatchPercentage =
-        requiredSkills.length > 0 ? (matchingSkills.length / requiredSkills.length) * 100 : 0;
-    }
-
-    const isLocalJob =
-      sanitizeString(user.location?.city).toLowerCase() ===
-      sanitizeString(job.location?.city).toLowerCase();
+    const skillMatchPercentage = user.role === 'fixer'
+      ? computeSkillMatch(user.skills, job.skillsRequired)
+      : 0;
 
     const visibleApplications = sanitizeApplications(applications, String(user._id), isJobCreator);
 
@@ -233,7 +157,7 @@ export async function GET(request: Request, segmentData: JobRouteContext) {
         ...jobData,
         hasApplied,
         skillMatchPercentage,
-        isLocalJob,
+        isLocalJob: isLocalJob(user.location?.city, job.location?.city),
         applicationCount: activeApplicationCount,
         commentCount,
         canMessage: isInvolved,
