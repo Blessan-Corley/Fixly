@@ -5,7 +5,7 @@ import { publishToChannel } from '@/lib/ably/publisher';
 
 import { asTrimmedString } from './shared';
 
-export type MessageType = 'text' | 'image' | 'file';
+export type MessageType = 'text' | 'image' | 'file' | 'location';
 
 export type MessageAttachment = {
   type: 'image' | 'document' | 'link';
@@ -25,7 +25,7 @@ export type MessageRequestBody = {
   replyTo?: unknown;
 };
 
-export const ALLOWED_MESSAGE_TYPES: ReadonlySet<string> = new Set(['text', 'image', 'file']);
+export const ALLOWED_MESSAGE_TYPES: ReadonlySet<string> = new Set(['text', 'image', 'file', 'location']);
 
 export const SendMessageBodySchema = z.object({
   conversationId: z.unknown().optional(),
