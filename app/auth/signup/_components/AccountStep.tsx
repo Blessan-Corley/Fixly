@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Loader, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
 import OtpCodeInput from '@/components/auth/OtpCodeInput';
@@ -84,8 +84,13 @@ export function AccountStep({
             autoComplete="new-password"
             className="input-field pr-12 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
-          <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-fixly-text-muted">
-            {showPassword ? 'Hide' : 'Show'}
+          <button
+            type="button"
+            onClick={() => setShowPassword((value) => !value)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-fixly-text-muted"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
         </div>
         {errors.password ? <p className="mt-1 text-sm text-red-500">{errors.password}</p> : null}
@@ -105,8 +110,13 @@ export function AccountStep({
             autoComplete="new-password"
             className="input-field pr-12 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
-          <button type="button" onClick={() => setShowConfirmPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 text-fixly-text-muted">
-            {showConfirmPassword ? 'Hide' : 'Show'}
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword((value) => !value)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-fixly-text-muted"
+            aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+          >
+            {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
           </button>
         </div>
         {errors.confirmPassword ? <p className="mt-1 text-sm text-red-500">{errors.confirmPassword}</p> : null}
