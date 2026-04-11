@@ -65,7 +65,7 @@ export default function AuthShell({ title, subtitle, badge, children, footer }: 
             </Link>
             <span className="text-fixly-border">|</span>
             <Link
-              href="/help"
+              href="/about"
               className="inline-flex items-center gap-1 transition-colors hover:text-fixly-accent"
             >
               <HelpCircle className="h-4 w-4" />
@@ -73,7 +73,7 @@ export default function AuthShell({ title, subtitle, badge, children, footer }: 
             </Link>
             <span className="text-fixly-border">|</span>
             <Link
-              href="/support"
+              href="/contact"
               className="inline-flex items-center gap-1 transition-colors hover:text-fixly-accent"
             >
               <Headphones className="h-4 w-4" />
