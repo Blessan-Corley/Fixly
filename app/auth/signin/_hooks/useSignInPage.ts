@@ -9,6 +9,8 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+import { isTemporaryUsername } from '@/lib/auth/utils';
+
 const signInSchema = z.object({
   identifier: z.string().trim().min(1, 'Enter your email address or username'),
   password: z.string().min(1, 'Password is required'),
@@ -54,7 +56,7 @@ export function useSignInPage() {
     if (
       session?.user?.isRegistered &&
       session.user.role &&
-      !session.user.username?.startsWith('temp_')
+      !isTemporaryUsername(session.user.username)
     ) {
       router.replace('/dashboard');
     }
