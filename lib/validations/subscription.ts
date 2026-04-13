@@ -7,8 +7,7 @@ export const CreateOrderSchema = z.object({
 });
 
 export const VerifyPaymentSchema = z.object({
-  orderId: z.string().optional(),
-  paymentId: z.string().optional(),
-  signature: z.string().optional(),
-  sessionId: z.string().optional(),
+  razorpay_order_id: z.string().trim().min(1).optional(),
+  razorpay_payment_id: z.string().trim().min(1).optional(),
+  razorpay_signature: z.string().trim().min(1).optional(),
 });
