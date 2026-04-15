@@ -87,3 +87,12 @@ export type LeanJob = {
   applications?: LeanApplication[];
   [key: string]: unknown;
 };
+
+export type MutationError = {
+  body: Record<string, unknown>;
+  status: number;
+};
+
+export type PreparedJobPayloadResult =
+  | { jobData: import('./createJob').CreateJobInput; draftId: string; error?: never }
+  | { jobData?: never; draftId?: never; error: MutationError };
