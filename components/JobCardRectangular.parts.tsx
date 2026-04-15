@@ -147,7 +147,7 @@ export function JobCardActions({
 
       <div className="flex items-center gap-2">
         <button
-          onClick={onViewDetails}
+          onClick={(e) => { e.stopPropagation(); void onViewDetails(); }}
           className="tap-target flex items-center gap-1 rounded-lg bg-fixly-bg px-3 py-2 text-sm text-fixly-text transition-colors hover:bg-fixly-border dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           title="View Details"
         >
@@ -156,7 +156,7 @@ export function JobCardActions({
         </button>
 
         <button
-          onClick={onOpenComments}
+          onClick={(e) => { e.stopPropagation(); onOpenComments(); }}
           className="tap-target relative flex items-center gap-1 rounded-lg bg-fixly-bg px-3 py-2 text-sm text-fixly-text transition-colors hover:bg-fixly-border dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           title="Comments"
         >
@@ -170,7 +170,7 @@ export function JobCardActions({
         </button>
 
         <button
-          onClick={onApply}
+          onClick={(e) => { e.stopPropagation(); void onApply(); }}
           disabled={isApplying || hasApplied}
           className={`tap-target flex items-center gap-1 rounded-lg px-3 py-2 text-sm transition-colors ${
             hasApplied
