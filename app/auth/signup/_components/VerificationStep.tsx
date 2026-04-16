@@ -2,6 +2,7 @@
 
 import { Loader, MapPin } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 
 import type { SignupAddress, SignupErrors, SignupFormData } from '../_lib/signup.types';
 
@@ -65,14 +66,11 @@ export function VerificationStep({
           <div className="mb-3 font-semibold text-fixly-text dark:text-white">Choose your skills</div>
           <SkillSelector
             isModal={false}
-            isOpen={true}
-            onClose={() => {}}
-            required={true}
-            className=""
             selectedSkills={formData.skills}
             onSkillsChange={(skills: string[]) => onChange('skills', skills)}
             minSkills={3}
             maxSkills={10}
+            required
           />
           {errors.skills ? <p className="mt-2 text-sm text-red-500">{errors.skills}</p> : null}
         </div>
@@ -87,7 +85,27 @@ export function VerificationStep({
           className="mt-1 rounded border-gray-300 text-fixly-accent"
         />
         <span className="text-sm text-fixly-text dark:text-gray-100">
-          I accept the Fixly Terms, Privacy Policy, and platform rules for secure account use.
+          I accept the Fixly{' '}
+          <Link
+            href="/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-fixly-accent underline hover:text-fixly-accent-dark"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Terms of Service
+          </Link>
+          {' '}and{' '}
+          <Link
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-fixly-accent underline hover:text-fixly-accent-dark"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Privacy Policy
+          </Link>
+          , and platform rules for secure account use.
         </span>
       </label>
       {errors.termsAccepted ? <p className="text-sm text-red-500">{errors.termsAccepted}</p> : null}
