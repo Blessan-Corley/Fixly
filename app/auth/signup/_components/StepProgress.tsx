@@ -38,9 +38,10 @@ export function StepProgress({
                   ? 'bg-fixly-accent text-fixly-text'
                   : 'bg-gray-200 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
               }`}
-              title={STEP_LABELS[step]}
+              role="img"
+              aria-label={`Step ${index + 1}: ${STEP_LABELS[step]}${isCompleted ? ' (completed)' : isActive ? ' (current)' : ''}`}
             >
-              {isCompleted ? <Check className="h-4 w-4" /> : index + 1}
+              {isCompleted ? <Check className="h-4 w-4" aria-hidden="true" /> : index + 1}
             </div>
             {index < steps.length - 1 ? (
               <div
