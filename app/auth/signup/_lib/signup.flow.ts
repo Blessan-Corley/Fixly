@@ -17,12 +17,39 @@ const signupStep1RoleSchema = signupStep1Schema.refine((data) => Boolean(data.ro
 
 export const SIGNUP_STEPS: SignupStep[] = ['role', 'account', 'profile', 'verification'];
 
-export function getNextStep(currentStep: SignupStep, _role: string = ''): SignupStep {
+export function getVisibleSteps(authMethod: string): SignupStep[] {
+  // Google users have no account/password step.
+  if (authMethod === 'google') return ['role', 'profile', 'verification'];
+  return SIGNUP_STEPS;
+}
+
+export function getNextStep(currentStep: SignupStep, authMethod: string = ''): SignupStep {
+  if (authMethod === 'google') {
+    switch (currentStep) {
+      case 'role':
+        return 'profile';
+      case 'profile':
+        return 'verification';
+      default:
+        return 'verification';
+    }
+  }
   const currentIndex = SIGNUP_STEPS.indexOf(currentStep);
   return SIGNUP_STEPS[Math.min(currentIndex + 1, SIGNUP_STEPS.length - 1)];
 }
 
-export function getPreviousStep(currentStep: SignupStep): SignupStep {
+export function getPreviousStep(currentStep: SignupStep, authMethod: string = ''): SignupStep {
+  // Google users skip the account step — back from profile goes straight to role.
+  if (authMethod === 'google') {
+    switch (currentStep) {
+      case 'profile':
+        return 'role';
+      case 'verification':
+        return 'profile';
+      default:
+        return 'role';
+    }
+  }
   const currentIndex = SIGNUP_STEPS.indexOf(currentStep);
   return SIGNUP_STEPS[Math.max(currentIndex - 1, 0)];
 }
@@ -129,9 +156,10 @@ export function buildSignupDraft(formData: SignupFormData, currentStep: SignupSt
   };
 }
 
-export function getCompletedSteps(currentStep: SignupStep): SignupStep[] {
-  const currentIndex = SIGNUP_STEPS.indexOf(currentStep);
-  return SIGNUP_STEPS.slice(0, Math.max(0, currentIndex));
+export function getCompletedSteps(currentStep: SignupStep, authMethod: string = ''): SignupStep[] {
+  const steps = getVisibleSteps(authMethod);
+  const currentIndex = steps.indexOf(currentStep);
+  return steps.slice(0, Math.max(0, currentIndex));
 }
 
 export function isTemporaryUsername(username: string | undefined): boolean {
