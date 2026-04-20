@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { useAbly } from './context';
 import { isInvalidChannelName } from './notification-utils';
 import type { ChannelCallback, CleanupFn } from './types';
-import { useAbly } from './context';
 
 export function useAblyChannel(
   channelName: string | null | undefined,
@@ -24,6 +24,7 @@ export function useAblyChannel(
       return;
     }
 
+    let cancelled = false;
     let unsubscribe: CleanupFn | undefined;
 
     const wrappedCallback: ChannelCallback = (message) => {
@@ -31,14 +32,27 @@ export function useAblyChannel(
     };
 
     const subscribe = async (): Promise<void> => {
-      unsubscribe = await subscribeToChannel(channelName, eventName, wrappedCallback);
+      const fn = await subscribeToChannel(channelName, eventName, wrappedCallback);
+      if (cancelled) {
+        // Effect was cleaned up while we were awaiting — detach immediately.
+        try {
+          fn();
+        } catch {
+          // ignore
+        }
+      } else {
+        unsubscribe = fn;
+      }
     };
 
     subscribe().catch((error) => {
-      console.warn('Channel subscription failed:', error);
+      if (!cancelled) {
+        console.warn('Channel subscription failed:', error);
+      }
     });
 
     return () => {
+      cancelled = true;
       try {
         unsubscribe?.();
       } catch (error) {
