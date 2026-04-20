@@ -16,6 +16,14 @@ type ConnectionStatus =
 
 type AblyClient = NonNullable<ReturnType<typeof getClientAbly>>;
 
+type ConnectionHandlers = {
+  handleConnected: () => void;
+  handleConnecting: () => void;
+  handleDisconnected: () => void;
+  handleSuspended: () => void;
+  handleFailed: (error: unknown) => void;
+};
+
 type UseAblyConnectionResult = {
   ably: AblyClient | null;
   connectionStatus: ConnectionStatus;
@@ -39,6 +47,7 @@ export function useAblyConnection(): UseAblyConnectionResult {
   const [isReconnecting, setIsReconnecting] = useState(false);
 
   const ablyRef = useRef<AblyClient | null>(null);
+  const handlersRef = useRef<ConnectionHandlers | null>(null);
   const reconnectTimeoutRef = useRef<TimeoutHandle | null>(null);
   const connectionAttemptsRef = useRef(0);
   const connectionStatusRef = useRef<ConnectionStatus>('disconnected');
@@ -123,31 +132,57 @@ export function useAblyConnection(): UseAblyConnectionResult {
 
       ablyRef.current = client;
 
-      client.connection.on('connected', () => {
+      // Sync to the current connection state immediately — the singleton may already
+      // be connected (e.g. RealtimeProvider connected it before we registered here).
+      const currentState = client.connection.state;
+      if (currentState === 'connected') {
         setConnectionStatus('connected');
         setConnectionAttempts(0);
         setIsReconnecting(false);
-      });
-
-      client.connection.on('connecting', () => {
+      } else if (currentState === 'connecting') {
         setConnectionStatus('connecting');
-      });
+      } else if (currentState === 'suspended') {
+        setConnectionStatus('suspended');
+      } else if (currentState === 'failed') {
+        setConnectionStatus('failed');
+      }
 
-      client.connection.on('disconnected', () => {
+      // Use named handlers so cleanup can remove only our listeners, not all global ones.
+      const handleConnected = (): void => {
+        setConnectionStatus('connected');
+        setConnectionAttempts(0);
+        setIsReconnecting(false);
+      };
+      const handleConnecting = (): void => {
+        setConnectionStatus('connecting');
+      };
+      const handleDisconnected = (): void => {
         setConnectionStatus('disconnected');
         attemptReconnect();
-      });
-
-      client.connection.on('suspended', () => {
+      };
+      const handleSuspended = (): void => {
         setConnectionStatus('suspended');
         attemptReconnect();
-      });
-
-      client.connection.on('failed', (error: unknown) => {
+      };
+      const handleFailed = (error: unknown): void => {
         console.error('Ably connection failed:', error);
         setConnectionStatus('failed');
         attemptReconnect();
-      });
+      };
+
+      client.connection.on('connected', handleConnected);
+      client.connection.on('connecting', handleConnecting);
+      client.connection.on('disconnected', handleDisconnected);
+      client.connection.on('suspended', handleSuspended);
+      client.connection.on('failed', handleFailed);
+
+      handlersRef.current = {
+        handleConnected,
+        handleConnecting,
+        handleDisconnected,
+        handleSuspended,
+        handleFailed,
+      };
 
       return client;
     } catch (error) {
@@ -183,6 +218,7 @@ export function useAblyConnection(): UseAblyConnectionResult {
     try {
       closeAblyClient();
       ablyRef.current = null;
+      handlersRef.current = null;
       setConnectionStatus('disconnected');
       setIsReconnecting(false);
     } catch (error) {
@@ -204,8 +240,18 @@ export function useAblyConnection(): UseAblyConnectionResult {
       }
 
       try {
-        ablyRef.current.connection.off();
+        // Remove only our specific listeners — never call connection.off() with no
+        // args, which would strip listeners registered by other providers (e.g. RealtimeProvider).
+        const handlers = handlersRef.current;
+        if (handlers) {
+          ablyRef.current.connection.off('connected', handlers.handleConnected);
+          ablyRef.current.connection.off('connecting', handlers.handleConnecting);
+          ablyRef.current.connection.off('disconnected', handlers.handleDisconnected);
+          ablyRef.current.connection.off('suspended', handlers.handleSuspended);
+          ablyRef.current.connection.off('failed', handlers.handleFailed);
+        }
         ablyRef.current = null;
+        handlersRef.current = null;
       } catch (error) {
         console.error('Error during Ably cleanup:', error);
       }
