@@ -1,4 +1,4 @@
-export type MessageType = 'text' | 'image' | 'file' | 'system';
+export type MessageType = 'text' | 'image' | 'file' | 'system' | 'location';
 
 export type MessageReactionType = 'thumbs_up' | 'heart' | 'laugh' | 'wow' | 'sad' | 'angry';
 
