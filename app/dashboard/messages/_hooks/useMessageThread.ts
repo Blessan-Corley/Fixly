@@ -30,8 +30,8 @@ type UseMessageThreadResult = {
   currentPage: number;
   sendMessage: (
     input:
-      | { conversationId: string; content: string; attachments?: import('../_lib/types').Attachment[]; replyTo?: string }
-      | { text: string; attachments?: import('../_lib/types').Attachment[]; replyTo?: string | null; editingMessageId?: string | null }
+      | { conversationId: string; content: string; attachments?: import('../_lib/types').Attachment[]; replyTo?: string; messageType?: string }
+      | { text: string; attachments?: import('../_lib/types').Attachment[]; replyTo?: string | null; editingMessageId?: string | null; messageType?: string }
   ) => Promise<void>;
   loadMore: () => Promise<void>;
   markAsRead: (conversationId?: string) => Promise<void>;
