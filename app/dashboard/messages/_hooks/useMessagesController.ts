@@ -15,6 +15,7 @@ import {
 } from '../_lib/types';
 
 import { useConversationList } from './useConversationList';
+import { useLastSeenSync } from './useLastSeenSync';
 import { useMessagesAttachments } from './useMessagesAttachments';
 import { useMessagesPresence } from './useMessagesPresence';
 import { useMessagesRealtime } from './useMessagesRealtime';
@@ -36,6 +37,8 @@ export function useMessagesController() {
   const [isOtherParticipantActive, setIsOtherParticipantActive] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showConversationsList, setShowConversationsList] = useState(true);
+
+  useLastSeenSync(Boolean(sessionUserId));
 
   const conversationList = useConversationList({ enabled: Boolean(sessionUserId) });
   const thread = useMessageThread({
@@ -122,7 +125,7 @@ export function useMessagesController() {
     if (isMobile) setShowConversationsList(false);
   };
 
-  const handleSend = async (text: string): Promise<void> => {
+  const handleSend = async (text: string, messageType?: string): Promise<void> => {
     if (!selectedConversationId) return;
     const readyAttachments = pendingAttachments.filter((a) => !a.uploading && a.url);
 
@@ -134,6 +137,7 @@ export function useMessagesController() {
         content: text,
         attachments: readyAttachments,
         replyTo: replyingToMessageId || undefined,
+        messageType,
       });
     }
 
