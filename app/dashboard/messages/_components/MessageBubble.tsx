@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { CheckCheck, Edit3, Paperclip, Reply, SmilePlus, Trash2 } from 'lucide-react';
+import { CheckCheck, Edit3, MapPin, Paperclip, Reply, SmilePlus, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 
 import SmartAvatar from '@/components/ui/SmartAvatar';
@@ -14,6 +14,27 @@ import {
   getUserReaction,
 } from '../_lib/normalizers';
 import type { Message, MessageReactionOption } from '../_lib/types';
+
+type LocationPayload = { lat: number; lng: number };
+
+function parseLocationPayload(content: string): LocationPayload | null {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'lat' in parsed &&
+      'lng' in parsed &&
+      typeof (parsed as Record<string, unknown>).lat === 'number' &&
+      typeof (parsed as Record<string, unknown>).lng === 'number'
+    ) {
+      return parsed as LocationPayload;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 type MessageBubbleProps = {
   message: Message;
@@ -131,9 +152,30 @@ export function MessageBubble({
           </div>
         )}
 
-        <p className={`text-sm ${message.deleted ? 'italic opacity-80' : ''}`}>
-          {message.content}
-        </p>
+        {message.messageType === 'location' && !message.deleted ? (
+          (() => {
+            const loc = parseLocationPayload(message.content);
+            if (!loc) return <p className="text-sm italic opacity-80">Location unavailable</p>;
+            const mapsUrl = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+            return (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-opacity hover:opacity-80 ${
+                  isOwn ? 'bg-white/15' : 'bg-fixly-bg'
+                }`}
+              >
+                <MapPin className="h-4 w-4 shrink-0" />
+                <span className="font-medium">Shared a location</span>
+              </a>
+            );
+          })()
+        ) : (
+          <p className={`text-sm ${message.deleted ? 'italic opacity-80' : ''}`}>
+            {message.content}
+          </p>
+        )}
 
         {message.reactions.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">

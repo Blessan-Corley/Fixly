@@ -1,6 +1,6 @@
 'use client';
 
-import { Edit3, Loader, Paperclip, Send, X } from 'lucide-react';
+import { Edit3, Loader, MapPin, Paperclip, Send, X } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 
 import { Channels, Events } from '@/lib/ably/events';
@@ -9,11 +9,13 @@ import { useAblyPublish } from '@/lib/ably/hooks';
 import { formatAttachmentSize, getMessagePreview } from '../_lib/normalizers';
 import type { Message, PendingAttachment } from '../_lib/types';
 
+import { EmojiPicker } from './EmojiPicker';
+
 type ComposerProps = {
   conversationId: string;
   currentUserId: string;
   currentUserName: string;
-  onSend: (text: string) => Promise<void>;
+  onSend: (text: string, messageType?: string) => Promise<void>;
   onAttach: (files: FileList | File[]) => Promise<void>;
   onTyping: () => void;
   isLoading: boolean;
@@ -41,7 +43,26 @@ export function Composer({
   onCancelReply,
 }: ComposerProps): React.JSX.Element {
   const [text, setText] = useState('');
+  const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const insertEmoji = (emoji: string): void => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setText((prev) => prev + emoji);
+      return;
+    }
+    const start = textarea.selectionStart ?? text.length;
+    const end = textarea.selectionEnd ?? text.length;
+    const newText = text.slice(0, start) + emoji + text.slice(end);
+    setText(newText);
+    // Restore cursor position after the inserted emoji
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  };
   const { publish } = useAblyPublish(
     conversationId ? Channels.conversation(conversationId) : ''
   );
@@ -100,6 +121,23 @@ export function Composer({
       await publishTypingStopped();
       setText('');
     }
+  };
+
+  const handleShareLocation = (): void => {
+    if (!navigator.geolocation) return;
+    setIsSharingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const locationPayload = JSON.stringify({ lat: latitude, lng: longitude });
+        await onSend(locationPayload, 'location');
+        setIsSharingLocation(false);
+      },
+      () => {
+        setIsSharingLocation(false);
+      },
+      { timeout: 10_000, maximumAge: 60_000 }
+    );
   };
 
   return (
@@ -174,8 +212,25 @@ export function Composer({
           />
         </label>
 
+        <EmojiPicker onEmojiSelect={insertEmoji} />
+
+        <button
+          type="button"
+          title="Share location"
+          disabled={isSharingLocation || Boolean(editMessage)}
+          onClick={handleShareLocation}
+          className="rounded-lg p-2 text-fixly-text-light hover:bg-fixly-bg hover:text-fixly-accent disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isSharingLocation ? (
+            <Loader className="h-5 w-5 animate-spin" />
+          ) : (
+            <MapPin className="h-5 w-5" />
+          )}
+        </button>
+
         <div className="flex-1">
           <textarea
+            ref={textareaRef}
             value={text}
             onChange={(event) => {
               setText(event.target.value);
