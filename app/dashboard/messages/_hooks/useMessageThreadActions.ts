@@ -14,6 +14,7 @@ type SendMessageInput = {
   content: string;
   attachments?: Attachment[];
   replyTo?: string;
+  messageType?: string;
 };
 
 type UseMessageThreadActionsOptions = {
@@ -80,6 +81,7 @@ export function useMessageThreadActions({
               content: input.text,
               attachments: input.attachments,
               replyTo: input.replyTo ?? undefined,
+              messageType: undefined as string | undefined,
             };
 
       if (
@@ -105,7 +107,7 @@ export function useMessageThreadActions({
         timestamp: new Date().toISOString(),
         edited: false,
         deleted: false,
-        messageType: normalizedInput.attachments?.length ? 'file' : 'text',
+        messageType: normalizedInput.messageType ?? (normalizedInput.attachments?.length ? 'file' : 'text'),
         readBy: { [activeUser.id]: new Date().toISOString() },
         attachments: normalizedInput.attachments ?? [],
         reactions: [],
@@ -118,7 +120,7 @@ export function useMessageThreadActions({
         const response = await sendMutation.mutateAsync({
           conversationId: normalizedInput.conversationId,
           content: normalizedInput.content,
-          messageType: normalizedInput.attachments?.length ? 'file' : 'text',
+          messageType: normalizedInput.messageType ?? (normalizedInput.attachments?.length ? 'file' : 'text'),
           attachments: normalizedInput.attachments,
           replyTo: normalizedInput.replyTo,
         });
