@@ -53,6 +53,7 @@ export const useMessageThreadQuery = (
       }
     },
     enabled: Boolean(conversationId),
+    staleTime: 1000 * 30,
     ...queryOptions,
   });
 };
@@ -78,6 +79,7 @@ export const useJobMessageThreadQuery = (
       }
     },
     enabled: Boolean(jobId),
+    staleTime: 1000 * 30,
     ...queryOptions,
   });
 };
