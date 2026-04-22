@@ -52,6 +52,7 @@ export const useDisputeDetailQuery = (
       }
     },
     enabled: Boolean(disputeId),
+    staleTime: 1000 * 60,
     ...queryOptions,
   });
 };
