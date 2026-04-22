@@ -1,3 +1,6 @@
+import { Channels, Events } from '@/lib/ably/events';
+import { publishToChannel } from '@/lib/ably/publisher';
+import { logger } from '@/lib/logger';
 import Dispute from '@/models/Dispute';
 import Job from '@/models/Job';
 
@@ -91,6 +94,7 @@ export async function syncJobDisputeState(input: {
   status: ApiDisputeStatus;
   resolution?: string;
   resolvedBy?: string;
+  disputeId?: string;
 }): Promise<void> {
   const jobId = toIdString(input.jobId);
   if (!jobId) return;
@@ -102,7 +106,24 @@ export async function syncJobDisputeState(input: {
     update['dispute.resolution'] = input.resolution ?? `Dispute ${input.status}`;
     update['dispute.resolvedBy'] = input.resolvedBy;
     update['dispute.resolvedAt'] = new Date();
+    // Transition the job back to completed so it no longer sits in 'disputed' indefinitely
+    update['status'] = 'completed';
   }
 
   await Job.findByIdAndUpdate(jobId, update);
+
+  // Publish realtime event so hirer/fixer UIs react immediately
+  if (disputeStatus === 'resolved' || disputeStatus === 'closed') {
+    try {
+      await publishToChannel(Channels.job(jobId), Events.job.disputeResolved, {
+        jobId,
+        disputeId: input.disputeId ?? null,
+        resolution: input.resolution ?? null,
+        resolvedBy: input.resolvedBy ?? null,
+        resolvedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      logger.error({ err, jobId }, 'Failed to publish dispute resolved event');
+    }
+  }
 }
