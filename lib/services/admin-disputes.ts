@@ -4,8 +4,10 @@ import {
   syncJobDisputeState,
   type ApiDisputeStatus,
 } from '@/lib/disputes/state';
+import { logger } from '@/lib/logger';
 import connectDB from '@/lib/mongodb';
 import Dispute from '@/models/Dispute';
+import User from '@/models/User';
 
 export type AdminDisputesPagination = {
   page: number;
@@ -80,7 +82,38 @@ export async function updateAdminDisputeStatus(
     status: input.status,
     resolution: dispute.closureReason,
     resolvedBy: input.adminUserId,
+    disputeId: dispute.disputeId,
   });
+
+  // Notify both participants when a dispute is resolved or closed
+  const isTerminal = input.status === 'resolved' || input.status === 'closed';
+  if (isTerminal) {
+    const resolution = dispute.closureReason ?? `Dispute ${input.status}`;
+    const participantIds = [
+      String(dispute.initiatedBy),
+      String(dispute.againstUser),
+    ].filter(Boolean);
+
+    await Promise.all(
+      participantIds.map(async (userId) => {
+        try {
+          const recipient = await User.findById(userId);
+          if (!recipient) return;
+          await recipient.addNotification(
+            'dispute_resolved',
+            'Dispute Resolved',
+            `Your dispute has been ${input.status}. ${resolution}`,
+            { disputeId: dispute.disputeId, resolution }
+          );
+        } catch (err) {
+          logger.error(
+            { err, userId, disputeId: dispute.disputeId },
+            'Failed to notify user of dispute resolution'
+          );
+        }
+      })
+    );
+  }
 
   return Dispute.findById(dispute._id)
     .populate('job', 'title status category budget')
