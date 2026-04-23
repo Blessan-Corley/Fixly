@@ -27,7 +27,7 @@ export const useUser = (
       }
     },
     enabled: Boolean(userId),
-    staleTime: 1000 * 60 * 10,
+    staleTime: 1000 * 60,
     ...queryOptions,
   });
 };
@@ -76,7 +76,7 @@ export const useUserProfile = (
       }
     },
     enabled: true,
-    staleTime: 1000 * 60 * 15,
+    staleTime: 1000 * 60,
     ...queryOptions,
   });
 };
@@ -124,6 +124,7 @@ export const useFixerSettingsQuery = (
         throw normalizedError;
       }
     },
+    staleTime: 1000 * 60 * 2,
     ...queryOptions,
   });
 };
