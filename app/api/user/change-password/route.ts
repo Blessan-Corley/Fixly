@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { badRequest, parseBody, requireSession, respond, unauthorized } from '@/lib/api';
 import { AppError } from '@/lib/api/errors';
+import { isTemporarilyUnavailable } from '@/lib/api/request';
 import { invalidateAuthCache, normalizeEmail } from '@/lib/auth-utils';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
@@ -28,10 +29,6 @@ function asTrimmedString(value: unknown): string {
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function isTemporarilyUnavailable(message: string | undefined): boolean {
-  return typeof message === 'string' && /temporarily unavailable/i.test(message);
 }
 
 export async function PUT(request: Request) {
