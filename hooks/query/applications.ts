@@ -27,6 +27,7 @@ export const useFixerApplicationsQuery = (
         throw normalizedError;
       }
     },
+    staleTime: 1000 * 30,
     ...queryOptions,
   });
 };
