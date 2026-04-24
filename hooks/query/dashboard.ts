@@ -25,7 +25,7 @@ export const useDashboardStatsQuery = (
         throw normalizedError;
       }
     },
-    staleTime: 1000 * 60,
+    staleTime: 1000 * 60 * 2,
     ...queryOptions,
   });
 };
@@ -48,7 +48,7 @@ export const useRecentJobsQuery = (
         throw normalizedError;
       }
     },
-    staleTime: 1000 * 60,
+    staleTime: 1000 * 60 * 2,
     ...queryOptions,
   });
 };
