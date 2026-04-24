@@ -1,9 +1,13 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useMemo } from 'react';
 
+import { useAblyChannel } from '@/contexts/AblyContext';
+import { Channels, Events } from '@/lib/ably/events';
+import { queryKeys } from '@/lib/queries/keys';
 import { usePublicProfileByUsername, useUserReviews } from '@/lib/queries/users';
 
 import { normalizeProfile, normalizeReviews } from './_lib/publicProfile.helpers';
@@ -19,11 +23,17 @@ export default function PublicProfilePageClient({
   username,
 }: PublicProfilePageClientProps): React.JSX.Element {
   const { data: session } = useSession();
+  const queryClient = useQueryClient();
   const { data, isLoading, isError } = usePublicProfileByUsername(username);
   const profile = useMemo(() => normalizeProfile(data), [data]);
   const userId = profile?._id ?? '';
   const { data: reviewsResponse } = useUserReviews(userId, { limit: 5 });
   const reviews = useMemo(() => normalizeReviews(reviewsResponse), [reviewsResponse]);
+
+  useAblyChannel(userId ? Channels.user(userId) : null, Events.job.reviewPosted, () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.users.publicProfileByUsername(username) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.users.reviews(userId) });
+  });
 
   if (isLoading) {
     return (
