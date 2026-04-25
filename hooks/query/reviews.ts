@@ -83,6 +83,7 @@ export const useUserReviewsQuery = (
       }
     },
     enabled: Boolean(username),
+    staleTime: 1000 * 60,
     ...queryOptions,
   });
 };
