@@ -59,14 +59,22 @@ export type VerifyPaymentResponse = {
 };
 
 export type CreateOrderResponse = {
-  sessionId: string;
-  url: string | null;
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
   plan: {
     id: string;
     displayName: string;
     amountRs: number;
     billingCycle: string;
   };
+};
+
+export type VerifyPaymentBody = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
 };
 
 export const useFixerSubscriptionQuery = (
@@ -185,37 +193,24 @@ export const useCreateOrderMutation = (
   });
 };
 
-export const useVerifyPaymentQuery = (
-  sessionId: string | null | undefined,
-  options: QueryHookOptions<
-    VerifyPaymentResponse,
-    ReturnType<typeof queryKeys.subscription.verifyPayment>
-  > = {}
+export const useVerifyPaymentMutation = (
+  options: MutationHookOptions<VerifyPaymentResponse, VerifyPaymentBody> = {}
 ) => {
-  const { onSuccess, onError, ...queryOptions } = options;
+  const { onSuccess, onError, ...mutationOptions } = options;
 
-  return useQuery({
-    queryKey: queryKeys.subscription.verifyPayment(sessionId ?? ''),
-    queryFn: async () => {
-      if (!sessionId) {
-        throw new Error('session_id is required');
-      }
-
-      try {
-        const data = await fetcher<VerifyPaymentResponse>(
-          `/api/subscription/verify-payment?session_id=${encodeURIComponent(sessionId)}`
-        );
-        onSuccess?.(data);
-        return data;
-      } catch (error: unknown) {
-        const normalizedError = toError(error);
-        onError?.(normalizedError);
-        throw normalizedError;
-      }
+  return useMutation({
+    mutationFn: (payload: VerifyPaymentBody) =>
+      fetcher<VerifyPaymentResponse>('/api/subscription/verify-payment', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data, variables, context) => {
+      onSuccess?.(data, variables, context);
     },
-    enabled: Boolean(sessionId),
-    staleTime: 3 * 1000,
-    ...queryOptions,
+    onError: (error, variables, context) => {
+      onError?.(error, variables, context);
+    },
+    ...mutationOptions,
   });
 };
 
