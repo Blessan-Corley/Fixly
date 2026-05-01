@@ -19,6 +19,7 @@ type NotificationBellProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isRealTimeConnected: boolean;
+  connectionBadge: 'live' | 'connecting' | 'offline';
   badgeStyle: BadgeStyle;
   onMarkAllAsRead: () => void;
   onNotificationClick: (notification: DashboardNotification) => void;
@@ -29,6 +30,7 @@ export const NotificationBell = memo(function NotificationBell({
   open,
   onOpenChange,
   isRealTimeConnected,
+  connectionBadge,
   badgeStyle,
   onMarkAllAsRead,
   onNotificationClick,
@@ -45,7 +47,7 @@ export const NotificationBell = memo(function NotificationBell({
         <DropdownMenuTrigger asChild>
           <button
             className="group relative rounded-lg p-2 transition-all duration-200 hover:bg-fixly-accent/10"
-            title={`${unreadCount} unread notifications${isRealTimeConnected ? ' (Real-time)' : ''}`}
+            title={`${unreadCount} unread notifications${connectionBadge === 'live' ? ' (Real-time)' : connectionBadge === 'connecting' ? ' (Connecting…)' : ' (Offline)'}`}
           >
             <div className="relative">
               {unreadCount > 0 ? (
@@ -54,8 +56,14 @@ export const NotificationBell = memo(function NotificationBell({
                 <Bell className="h-5 w-5 text-fixly-text transition-colors duration-200 group-hover:text-fixly-accent" />
               )}
 
-              {isRealTimeConnected && (
+              {connectionBadge === 'live' && (
                 <div className="absolute -left-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-green-500 shadow-sm"></div>
+              )}
+              {connectionBadge === 'connecting' && (
+                <div className="absolute -left-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-yellow-400 shadow-sm"></div>
+              )}
+              {connectionBadge === 'offline' && (
+                <div className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-orange-500 shadow-sm"></div>
               )}
             </div>
 
@@ -80,10 +88,15 @@ export const NotificationBell = memo(function NotificationBell({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-fixly-text dark:text-gray-200">Notifications</h3>
-              {isRealTimeConnected ? (
+              {connectionBadge === 'live' ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs text-green-700 dark:bg-green-900/20 dark:text-green-400">
                   <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500"></div>
                   Live
+                </span>
+              ) : connectionBadge === 'connecting' ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-1 text-xs text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
+                  <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-500"></div>
+                  Connecting
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-1 text-xs text-orange-700 dark:bg-orange-900/20 dark:text-orange-400">
