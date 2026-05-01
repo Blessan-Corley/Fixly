@@ -3,8 +3,6 @@
 import { AlertTriangle, RefreshCw, MapPin } from 'lucide-react';
 import React from 'react';
 
-import { env } from '@/lib/env';
-
 type GtagFunction = (
   command: 'event',
   action: string,
@@ -89,7 +87,7 @@ class LocationPickerErrorBoundary extends React.Component<
               : 'Something went wrong with the location picker. Please try again or use manual address entry.'}
           </p>
 
-          {env.NODE_ENV === 'development' && this.state.error && (
+          {process.env.NODE_ENV === 'development' && this.state.error && (
             <details className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-left text-xs dark:border-red-800 dark:bg-red-900/20">
               <summary className="cursor-pointer font-medium text-red-800 dark:text-red-200">
                 Debug Information
