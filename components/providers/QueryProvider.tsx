@@ -6,8 +6,6 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useState, useEffect, type ReactNode } from 'react';
 
-import { env } from '@/lib/env';
-
 import { queryClient, backgroundSync, cacheUtils } from '../../lib/reactQuery';
 
 type Persister = ReturnType<typeof createSyncStoragePersister>;
@@ -113,7 +111,7 @@ export default function QueryProvider({ children }: QueryProviderProps) {
 }
 
 function QueryDevtoolsWrapper() {
-  if (env.NODE_ENV !== 'development') {
+  if (process.env.NODE_ENV !== 'development') {
     return null;
   }
 
@@ -127,7 +125,7 @@ export function QueryPerformanceMonitor() {
     const interval = setInterval(() => {
       const stats = cacheUtils.getCacheStats();
 
-      if (env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'development') {
         console.log('Query Cache Stats:', stats);
 
         if (stats.totalQueries > 100) {
