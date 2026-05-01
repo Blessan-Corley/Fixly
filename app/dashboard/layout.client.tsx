@@ -40,6 +40,7 @@ function DashboardContent({ children }: { children: ReactNode }): JSX.Element {
     sidebarHovered,
     setSidebarHovered,
     isRealTimeConnected,
+    connectionBadge,
     badgeStyle,
     notificationDropdownOpen,
     setNotificationDropdownOpen,
@@ -132,6 +133,7 @@ function DashboardContent({ children }: { children: ReactNode }): JSX.Element {
               : openMobileNav
           }
           isRealTimeConnected={isRealTimeConnected}
+          connectionBadge={connectionBadge}
           badgeStyle={badgeStyle}
           notificationDropdownOpen={notificationDropdownOpen}
           onNotificationDropdownOpenChange={setNotificationDropdownOpen}
