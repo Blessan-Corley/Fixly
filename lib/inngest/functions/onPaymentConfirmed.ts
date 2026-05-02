@@ -11,7 +11,7 @@ export const onPaymentConfirmed = inngest.createFunction(
     name: 'Send payment confirmation email',
     retries: 3,
   },
-  { event: 'stripe/checkout.completed' },
+  { event: 'razorpay/payment.captured' },
   async ({ event, step }) => {
     const { userId, userEmail, userName, amount, currency, orderId, planId } = event.data;
 
