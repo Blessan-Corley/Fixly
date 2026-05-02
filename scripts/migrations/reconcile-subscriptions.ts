@@ -40,8 +40,8 @@ async function run(): Promise<void> {
 
     try {
       await PaymentEvent.create({
-        stripeEventId: `manual_reconciliation_${String(user._id)}_${Date.now()}`,
-        stripeEventType: 'manual_reconciliation',
+        paymentEventId: `manual_reconciliation_${String(user._id)}_${Date.now()}`,
+        paymentEventType: 'manual_reconciliation',
         userId: user._id,
         status: 'processed',
         processedAt: user.plan?.activatedAt || user.plan?.startDate || new Date(),
