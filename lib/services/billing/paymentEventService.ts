@@ -5,15 +5,15 @@ import type { IPaymentEvent } from '@/models/PaymentEvent';
 type DuplicateKeyError = Error & { code?: number };
 
 export async function recordPaymentEvent(
-  stripeEventId: string,
-  stripeEventType: string,
+  paymentEventId: string,
+  paymentEventType: string,
   userId: string,
   rawEvent: object
 ): Promise<{ isNew: boolean; eventRecord: IPaymentEvent }> {
   try {
     const eventRecord = await PaymentEvent.create({
-      stripeEventId,
-      stripeEventType,
+      paymentEventId,
+      paymentEventType,
       userId,
       status: 'pending',
       rawEvent,
@@ -23,7 +23,7 @@ export async function recordPaymentEvent(
   } catch (error: unknown) {
     const duplicateError = error as DuplicateKeyError;
     if (duplicateError.code === 11000) {
-      const existingRecord = await PaymentEvent.findOne({ stripeEventId });
+      const existingRecord = await PaymentEvent.findOne({ paymentEventId });
       if (!existingRecord) {
         throw new AppError('INTERNAL_ERROR', 'Duplicate payment event could not be loaded', 500);
       }
@@ -35,9 +35,9 @@ export async function recordPaymentEvent(
   }
 }
 
-export async function markEventProcessed(stripeEventId: string): Promise<void> {
+export async function markEventProcessed(paymentEventId: string): Promise<void> {
   await PaymentEvent.updateOne(
-    { stripeEventId },
+    { paymentEventId },
     {
       $set: {
         status: 'processed',
@@ -51,9 +51,9 @@ export async function markEventProcessed(stripeEventId: string): Promise<void> {
   );
 }
 
-export async function markEventFailed(stripeEventId: string, reason: string): Promise<void> {
+export async function markEventFailed(paymentEventId: string, reason: string): Promise<void> {
   await PaymentEvent.updateOne(
-    { stripeEventId },
+    { paymentEventId },
     {
       $set: {
         status: 'failed',
@@ -68,11 +68,17 @@ export async function getPaymentHistory(userId: string, limit = 10): Promise<IPa
   return PaymentEvent.find({ userId }).sort({ createdAt: -1 }).limit(limit);
 }
 
-export async function findProcessedPaymentEventBySessionId(
-  sessionId: string
+export async function findProcessedPaymentEventByOrderId(
+  orderId: string
 ): Promise<IPaymentEvent | null> {
   return PaymentEvent.findOne({
-    stripeEventType: 'checkout.session.completed',
-    'rawEvent.id': sessionId,
+    paymentEventType: 'payment.captured',
+    'rawEvent.order_id': orderId,
   }).sort({ createdAt: -1 });
+}
+
+export async function findPaymentEventByPaymentId(
+  paymentId: string
+): Promise<IPaymentEvent | null> {
+  return PaymentEvent.findOne({ paymentEventId: paymentId });
 }
