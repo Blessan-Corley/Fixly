@@ -1,5 +1,6 @@
-import { computeIsFullyVerified, invalidateAuthCache, normalizeEmail } from '@/lib/auth-utils';
 import { AppError } from '@/lib/api/errors';
+import { isTemporarilyUnavailable } from '@/lib/api/request';
+import { computeIsFullyVerified, invalidateAuthCache, normalizeEmail } from '@/lib/auth-utils';
 import connectDB from '@/lib/mongodb';
 import { generateOTP, sendSignupOTP, storeOTP, verifyOTP } from '@/lib/otpService';
 import User from '@/models/User';
@@ -18,10 +19,6 @@ type EmailChangeResult = {
   user?: EmailChangeSuccessUser;
   expiresAt?: string;
 };
-
-function isTemporarilyUnavailable(message: string | undefined): boolean {
-  return typeof message === 'string' && /temporarily unavailable/i.test(message);
-}
 
 export function isValidEmailAddress(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
