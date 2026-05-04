@@ -1,31 +1,16 @@
 /**
  * Cache Invalidation Utilities
- * Helper functions to invalidate Redis cache when data changes
+ * Helper functions to invalidate Redis cache when data changes.
+ * Admin/stats operations: see cacheInvalidation.admin.ts
  */
 
 import { redisUtils } from '../lib/redis';
 
-type CacheStatistics = {
-  total: number;
-  byType: {
-    dashboard: number;
-    userProfile: number;
-    jobDetails: number;
-    other: number;
-  };
-};
-
-const getErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'Unknown error';
-};
+export { getCacheStatistics, clearAllCaches } from './cacheInvalidation.admin';
 
 export async function invalidateDashboardStats(userId: string, userRole: string): Promise<boolean> {
   try {
-    const cacheKey = `dashboard:stats:${userRole}:${userId}`;
-    await redisUtils.del(cacheKey);
+    await redisUtils.del(`dashboard:stats:${userRole}:${userId}`);
     return true;
   } catch (error) {
     console.error('Dashboard stats cache invalidation failed:', error);
@@ -35,8 +20,7 @@ export async function invalidateDashboardStats(userId: string, userRole: string)
 
 export async function invalidateUserProfile(username: string): Promise<boolean> {
   try {
-    const cacheKey = `user:profile:${username}`;
-    await redisUtils.del(cacheKey);
+    await redisUtils.del(`user:profile:${username}`);
     return true;
   } catch (error) {
     console.error('User profile cache invalidation failed:', error);
@@ -46,8 +30,7 @@ export async function invalidateUserProfile(username: string): Promise<boolean> 
 
 export async function invalidateJobDetails(jobId: string): Promise<boolean> {
   try {
-    const cacheKey = `job:details:${jobId}`;
-    await redisUtils.del(cacheKey);
+    await redisUtils.del(`job:details:${jobId}`);
     return true;
   } catch (error) {
     console.error('Job details cache invalidation failed:', error);
@@ -106,48 +89,6 @@ export async function bulkInvalidate(cacheKeys: string[]): Promise<boolean> {
   }
 }
 
-export async function getCacheStatistics(): Promise<CacheStatistics | null> {
-  try {
-    const allKeys = (await redisUtils.keys('*')) as string[];
-
-    const stats: CacheStatistics = {
-      total: allKeys.length,
-      byType: {
-        dashboard: allKeys.filter((key) => key.startsWith('dashboard:')).length,
-        userProfile: allKeys.filter((key) => key.startsWith('user:profile:')).length,
-        jobDetails: allKeys.filter((key) => key.startsWith('job:details:')).length,
-        other: 0,
-      },
-    };
-
-    stats.byType.other =
-      stats.total - (stats.byType.dashboard + stats.byType.userProfile + stats.byType.jobDetails);
-
-    return stats;
-  } catch (error) {
-    console.error('Failed to get cache statistics:', error);
-    return null;
-  }
-}
-
-export async function clearAllCaches(): Promise<{ cleared: number; error?: string }> {
-  try {
-    const keys = (await redisUtils.keys('dashboard:*')) as string[];
-    const profileKeys = (await redisUtils.keys('user:profile:*')) as string[];
-    const jobKeys = (await redisUtils.keys('job:details:*')) as string[];
-
-    const allKeys = [...keys, ...profileKeys, ...jobKeys];
-
-    if (allKeys.length > 0) {
-      await Promise.all(allKeys.map((key) => redisUtils.del(key)));
-    }
-
-    return { cleared: allKeys.length };
-  } catch (error) {
-    return { cleared: 0, error: getErrorMessage(error) };
-  }
-}
-
 export default {
   invalidateDashboardStats,
   invalidateUserProfile,
@@ -155,6 +96,4 @@ export default {
   invalidateUserCaches,
   invalidateJobCaches,
   bulkInvalidate,
-  getCacheStatistics,
-  clearAllCaches,
 };
