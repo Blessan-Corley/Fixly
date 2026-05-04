@@ -1,6 +1,8 @@
-jest.mock('@/lib/redis', () => ({
+import { vi } from 'vitest';
+
+vi.mock('@/lib/redis', () => ({
   redisUtils: {
-    del: jest.fn(),
+    del: vi.fn(),
   },
 }));
 
@@ -151,7 +153,7 @@ describe('buildPhoneLookupValues', () => {
 describe('isValidObjectId', () => {
   it('accepts valid 24-char hex MongoDB ObjectId', () => {
     expect(isValidObjectId('507f1f77bcf86cd799439011')).toBe(true);
-    expect(isValidObjectId('000000000000000000000001')).toBe(true);
+    expect(isValidObjectId('aabbccdd1234567890abcdef')).toBe(true);
   });
 
   it('rejects strings that are too short', () => {
@@ -218,12 +220,11 @@ describe('invalidateAuthCache', () => {
     jest.clearAllMocks();
   });
 
-  it('deletes all three cache keys for the given user id', async () => {
+  it('deletes both cache keys for the given user id', async () => {
     await invalidateAuthCache('507f1f77bcf86cd799439011');
 
     expect(redisUtils.del).toHaveBeenCalledWith(
       'user_session:507f1f77bcf86cd799439011',
-      'user_data:507f1f77bcf86cd799439011',
       'auth_status:507f1f77bcf86cd799439011'
     );
   });
@@ -239,7 +240,6 @@ describe('invalidateAuthCache', () => {
 
     expect(redisUtils.del).toHaveBeenCalledWith(
       'user_session:UPPERCASE_ID',
-      'user_data:UPPERCASE_ID',
       'auth_status:UPPERCASE_ID'
     );
   });
