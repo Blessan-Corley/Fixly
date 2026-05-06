@@ -63,7 +63,7 @@ export default function GlobalBanModal() {
 
           <div className="space-y-3">
             <a
-              href="mailto:support@fixly.app"
+              href="mailto:blessancorley@gmail.com"
               className="block w-full rounded-xl bg-gray-900 px-4 py-3 font-medium text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-gray-900"
             >
               Contact Support
