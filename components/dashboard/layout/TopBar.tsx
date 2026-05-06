@@ -16,6 +16,7 @@ type TopBarProps = {
   title: string;
   onMobileMenuClick: () => void;
   isRealTimeConnected: boolean;
+  connectionBadge: 'live' | 'connecting' | 'offline';
   badgeStyle: BadgeStyle;
   notificationDropdownOpen: boolean;
   onNotificationDropdownOpenChange: (open: boolean) => void;
@@ -34,6 +35,7 @@ export function TopBar({
   title,
   onMobileMenuClick,
   isRealTimeConnected,
+  connectionBadge,
   badgeStyle,
   notificationDropdownOpen,
   onNotificationDropdownOpenChange,
@@ -68,6 +70,7 @@ export function TopBar({
             open={notificationDropdownOpen}
             onOpenChange={onNotificationDropdownOpenChange}
             isRealTimeConnected={isRealTimeConnected}
+            connectionBadge={connectionBadge}
             badgeStyle={badgeStyle}
             onMarkAllAsRead={onMarkAllAsRead}
             onNotificationClick={onNotificationClick}
