@@ -51,54 +51,6 @@ export function formatDistance(distanceKm?: number | null): string {
   return `${Math.round(distanceKm)}km`;
 }
 
-export function sortJobsByDistance<
-  T extends { location?: { lat?: number | null; lng?: number | null } | null },
->(
-  jobs: T[],
-  userLat?: number | null,
-  userLng?: number | null
-): Array<T & { distance: number | null }> {
-  if (!Array.isArray(jobs) || jobs.length === 0) return [];
-  if (!isFiniteNumber(userLat) || !isFiniteNumber(userLng)) {
-    return jobs.map((job) => ({ ...job, distance: null }));
-  }
-
-  return jobs
-    .map((job) => ({
-      ...job,
-      distance: calculateDistance(
-        userLat,
-        userLng,
-        job.location?.lat ?? null,
-        job.location?.lng ?? null
-      ),
-    }))
-    .sort((a, b) => {
-      if (a.distance === null && b.distance === null) return 0;
-      if (a.distance === null) return 1;
-      if (b.distance === null) return -1;
-      return a.distance - b.distance;
-    });
-}
-
-export function filterJobsByRadius<
-  T extends { location?: { lat?: number | null; lng?: number | null } | null },
->(jobs: T[], userLat?: number | null, userLng?: number | null, radiusKm?: number | null): T[] {
-  if (!Array.isArray(jobs) || jobs.length === 0) return [];
-  if (!isFiniteNumber(userLat) || !isFiniteNumber(userLng) || !isFiniteNumber(radiusKm))
-    return jobs;
-
-  return jobs.filter((job) => {
-    const distance = calculateDistance(
-      userLat,
-      userLng,
-      job.location?.lat ?? null,
-      job.location?.lng ?? null
-    );
-    return distance !== null && distance <= radiusKm;
-  });
-}
-
 export function getCityCoordinates(
   cityName: string,
   citiesData: CityCoordinate[]
@@ -118,3 +70,6 @@ export function getDistancePriority(distanceKm?: number | null): number {
   if (distanceKm <= 25) return 1;
   return 0;
 }
+
+// Re-export sorting/filtering utilities
+export { sortJobsByDistance, filterJobsByRadius } from './geo.sorting';
