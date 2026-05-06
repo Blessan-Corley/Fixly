@@ -1,17 +1,11 @@
 import type { ComponentType } from 'react';
 
-import { env } from '@/lib/env';
-
 type ImportFactory<TModule> = () => Promise<TModule>;
 
 export interface DynamicImportFallback<TModule> {
   load: () => Promise<TModule>;
   fallback: ComponentType;
 }
-
-const dynamicImportByPath = <TModule = unknown>(modulePath: string): Promise<TModule> => {
-  return import(modulePath) as Promise<TModule>;
-};
 
 export const importWithRetry = async <TModule>(
   importFunction: ImportFactory<TModule>,
@@ -35,28 +29,6 @@ export const importWithRetry = async <TModule>(
   }
 
   throw new Error('Unreachable import retry state');
-};
-
-export const loadChartLibrary = () => importWithRetry(() => dynamicImportByPath('recharts'));
-export const loadMapsLibrary = () =>
-  importWithRetry(() => dynamicImportByPath('@react-google-maps/api'));
-export const loadEditorLibrary = () => importWithRetry(() => dynamicImportByPath('react-quill'));
-export const loadCarouselLibrary = () => importWithRetry(() => dynamicImportByPath('react-slick'));
-
-export const loadRichTextEditor = () =>
-  importWithRetry(() => dynamicImportByPath('../components/ui/RichTextEditor'));
-export const loadImageCropper = () =>
-  importWithRetry(() => dynamicImportByPath('../components/ui/ImageCropper'));
-export const loadAdvancedDataTable = () =>
-  importWithRetry(() => dynamicImportByPath('../components/ui/AdvancedDataTable'));
-export const loadMapComponent = () =>
-  importWithRetry(() => dynamicImportByPath('../components/ui/MapComponent'));
-
-export const loadAnalytics = async () => {
-  if (typeof window !== 'undefined' && env.NODE_ENV === 'production') {
-    return importWithRetry(() => dynamicImportByPath('react-ga4'));
-  }
-  return null;
 };
 
 export const dynamicImportWithFallback = <TModule>(
@@ -100,8 +72,8 @@ export const preloadComponent = async <TModule>(
   }
 };
 
-export default {
-  importWithRetry,
+// Re-export library loaders for convenience
+export {
   loadChartLibrary,
   loadMapsLibrary,
   loadEditorLibrary,
@@ -111,6 +83,10 @@ export default {
   loadAdvancedDataTable,
   loadMapComponent,
   loadAnalytics,
+} from './dynamicImports.loaders';
+
+export default {
+  importWithRetry,
   dynamicImportWithFallback,
   preloadComponent,
 };
