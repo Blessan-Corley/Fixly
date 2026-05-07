@@ -1,11 +1,11 @@
-import { ArrowRight, Building, CheckCircle, Users, Zap } from 'lucide-react';
+import { ArrowRight, CheckCircle2, ClipboardList, Star, Users } from 'lucide-react';
 
 const HOW_IT_WORKS = [
   {
     step: 1,
     title: 'Post Your Job',
     description: 'Describe what needs to be fixed with photos and details',
-    icon: Building,
+    icon: ClipboardList,
   },
   {
     step: 2,
@@ -17,13 +17,13 @@ const HOW_IT_WORKS = [
     step: 3,
     title: 'Choose & Book',
     description: 'Select the best fixer and schedule the work',
-    icon: CheckCircle,
+    icon: Star,
   },
   {
     step: 4,
     title: 'Get It Done',
     description: 'Your job gets completed by a verified professional',
-    icon: Zap,
+    icon: CheckCircle2,
   },
 ] as const;
 
@@ -46,14 +46,16 @@ export default function LandingHowItWorks() {
               key={step.step}
               className="relative text-center transition-transform duration-300 hover:-translate-y-1"
             >
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-fixly-accent text-xl font-bold text-fixly-text">
-                {step.step}
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-fixly-accent" aria-hidden="true">
+                <step.icon className="h-8 w-8 text-fixly-text" aria-hidden="true" />
               </div>
-              <step.icon className="mx-auto mb-4 h-8 w-8 text-fixly-accent" />
+              <div className="mb-1 text-xs font-bold uppercase tracking-widest text-fixly-accent">
+                Step {step.step}
+              </div>
               <h3 className="mb-2 text-xl font-semibold text-fixly-text">{step.title}</h3>
               <p className="text-fixly-text-light">{step.description}</p>
               {index < HOW_IT_WORKS.length - 1 && (
-                <ArrowRight className="absolute -right-4 top-8 hidden h-6 w-6 text-fixly-accent md:block" />
+                <ArrowRight className="absolute -right-4 top-8 hidden h-6 w-6 text-fixly-accent md:block" aria-hidden="true" />
               )}
             </div>
           ))}
