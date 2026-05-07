@@ -94,10 +94,24 @@ export function getPlatformName(capabilities: PWAPlatformCapabilities): string {
   return 'Desktop';
 }
 
+function safeLocalStorage(op: 'get', key: string): string | null;
+function safeLocalStorage(op: 'set', key: string, value: string): void;
+function safeLocalStorage(op: 'remove', key: string): void;
+function safeLocalStorage(op: 'get' | 'set' | 'remove', key: string, value?: string): string | null | void {
+  try {
+    if (op === 'get') return localStorage.getItem(key);
+    if (op === 'set' && value !== undefined) localStorage.setItem(key, value);
+    if (op === 'remove') localStorage.removeItem(key);
+  } catch {
+    // localStorage is unavailable (private mode, storage quota exceeded, etc.)
+  }
+  return op === 'get' ? null : undefined;
+}
+
 export function checkPWADismissalStatus(): boolean {
-  const dismissedValue = localStorage.getItem('pwa-install-dismissed');
-  const lastShown = localStorage.getItem('pwa-install-last-shown');
-  const attemptValue = Number.parseInt(localStorage.getItem('pwa-install-attempts') ?? '0', 10);
+  const dismissedValue = safeLocalStorage('get', 'pwa-install-dismissed');
+  const lastShown = safeLocalStorage('get', 'pwa-install-last-shown');
+  const attemptValue = Number.parseInt(safeLocalStorage('get', 'pwa-install-attempts') ?? '0', 10);
   const installCount = Number.isFinite(attemptValue) ? attemptValue : 0;
 
   if (dismissedValue) {
@@ -113,6 +127,8 @@ export function checkPWADismissalStatus(): boolean {
 
   return daysSinceLastShown >= 3;
 }
+
+export { safeLocalStorage };
 
 export function buildFeatures(
   networkStatus: boolean,
