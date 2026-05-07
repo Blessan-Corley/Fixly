@@ -77,10 +77,8 @@ export interface UsePWAInstallPromptResult {
 
 export type UsePWAInstallPromptOptions = Pick<
   PWAInstallPromptProps,
-  'autoShow' | 'onInstall' | 'onDismiss' | 'showFeatures' | 'customFeatures'
-> & {
-  networkStatus: boolean;
-};
+  'autoShow' | 'onInstall' | 'onDismiss' | 'customFeatures'
+>;
 
 declare global {
   interface Window {
