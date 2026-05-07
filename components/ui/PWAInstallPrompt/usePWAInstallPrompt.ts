@@ -10,6 +10,7 @@ import {
   getPlatformName,
   PWAAnalytics,
   PWACapabilities,
+  safeLocalStorage,
 } from './pwaUtils';
 import type {
   BeforeInstallPromptEvent,
@@ -21,12 +22,8 @@ import type {
 
 export type { UsePWAInstallPromptResult, UsePWAInstallPromptOptions };
 
-export function usePWAInstallPrompt({
-  autoShow,
-  onInstall,
-  onDismiss,
-  customFeatures,
-}: UsePWAInstallPromptOptions): UsePWAInstallPromptResult {
+export function usePWAInstallPrompt(options: UsePWAInstallPromptOptions): UsePWAInstallPromptResult {
+  const { autoShow, onInstall, onDismiss, customFeatures } = options;
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState<boolean>(false);
   const [isInstallable, setIsInstallable] = useState<boolean>(false);
@@ -58,7 +55,7 @@ export function usePWAInstallPrompt({
         setTimeout(() => {
           if (dismissedRef.current) return;
           setShowPrompt(true);
-          localStorage.setItem('pwa-install-last-shown', Date.now().toString());
+          safeLocalStorage('set', 'pwa-install-last-shown', Date.now().toString());
         }, showDelay);
       }
     };
@@ -68,9 +65,9 @@ export function usePWAInstallPrompt({
       setIsInstallable(false);
       setInstallResult({ success: true, method: 'native' });
 
-      localStorage.removeItem('pwa-install-dismissed');
-      localStorage.removeItem('pwa-install-attempts');
-      localStorage.setItem('pwa-installed', Date.now().toString());
+      safeLocalStorage('remove', 'pwa-install-dismissed');
+      safeLocalStorage('remove', 'pwa-install-attempts');
+      safeLocalStorage('set', 'pwa-installed', Date.now().toString());
 
       PWAAnalytics.track('app_installed', { method: 'native', platform: getPlatformName(caps) });
       onInstall?.({ success: true, method: 'native' });
@@ -133,7 +130,7 @@ export function usePWAInstallPrompt({
           duration: 4000,
         });
 
-        localStorage.setItem('pwa-install-attempts', installAttemptRef.current.toString());
+        safeLocalStorage('set', 'pwa-install-attempts', installAttemptRef.current.toString());
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -153,11 +150,11 @@ export function usePWAInstallPrompt({
     setShowPrompt(false);
     dismissedRef.current = true;
 
-    const attemptValue = Number.parseInt(localStorage.getItem('pwa-install-attempts') ?? '0', 10);
+    const attemptValue = Number.parseInt(safeLocalStorage('get', 'pwa-install-attempts') ?? '0', 10);
     const currentAttempts = Number.isFinite(attemptValue) ? attemptValue : 0;
 
-    localStorage.setItem('pwa-install-dismissed', Date.now().toString());
-    localStorage.setItem('pwa-install-attempts', (currentAttempts + 1).toString());
+    safeLocalStorage('set', 'pwa-install-dismissed', Date.now().toString());
+    safeLocalStorage('set', 'pwa-install-attempts', (currentAttempts + 1).toString());
 
     PWAAnalytics.track('install_dismissed', { platform: getPlatformName(capabilities), dismissCount: currentAttempts + 1 });
     onDismiss?.();
@@ -165,7 +162,7 @@ export function usePWAInstallPrompt({
 
   const showManualPrompt = useCallback((): void => {
     setShowPrompt(true);
-    localStorage.setItem('pwa-install-last-shown', Date.now().toString());
+    safeLocalStorage('set', 'pwa-install-last-shown', Date.now().toString());
     PWAAnalytics.track('install_manual_trigger', { platform: getPlatformName(capabilities) });
   }, [capabilities]);
 
