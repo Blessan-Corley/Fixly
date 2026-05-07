@@ -25,6 +25,8 @@ export type PWAPromptOverlayProps = {
   handleDismiss: () => void;
 };
 
+const DIALOG_TITLE_ID = 'pwa-install-dialog-title';
+
 export function PWAPromptOverlay({
   showPrompt,
   variant,
@@ -46,9 +48,13 @@ export function PWAPromptOverlay({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 backdrop-blur-sm sm:items-center"
-          onClick={variant === 'modal' ? handleDismiss : undefined}
+          onClick={showDismiss ? handleDismiss : undefined}
+          aria-hidden="true"
         >
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={DIALOG_TITLE_ID}
             initial={{
               y: variant === 'modal' ? 50 : '100%',
               scale: variant === 'modal' ? 0.95 : 1,
@@ -63,18 +69,25 @@ export function PWAPromptOverlay({
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className="w-full max-w-md rounded-t-3xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-gray-900 sm:rounded-2xl"
             onClick={(event) => event.stopPropagation()}
+            aria-hidden="false"
           >
             <div className="mb-4 flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-600 to-teal-500 shadow-lg">
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-600 to-teal-500 shadow-lg"
+                  aria-hidden="true"
+                >
                   {capabilities.isIOS ? (
-                    <Smartphone className="h-6 w-6 text-white" />
+                    <Smartphone className="h-6 w-6 text-white" aria-hidden="true" />
                   ) : (
-                    <Download className="h-6 w-6 text-white" />
+                    <Download className="h-6 w-6 text-white" aria-hidden="true" />
                   )}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                  <h3
+                    id={DIALOG_TITLE_ID}
+                    className="text-lg font-bold text-gray-900 dark:text-white"
+                  >
                     {instructions.title}
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -82,7 +95,7 @@ export function PWAPromptOverlay({
                   </p>
                   {!networkStatus && (
                     <div className="mt-1 flex items-center gap-1">
-                      <WifiOff className="h-3 w-3 text-orange-500" />
+                      <WifiOff className="h-3 w-3 text-orange-500" aria-hidden="true" />
                       <span className="text-xs text-orange-600">Offline mode available</span>
                     </div>
                   )}
@@ -92,58 +105,71 @@ export function PWAPromptOverlay({
                 <button
                   onClick={handleDismiss}
                   className="rounded-full p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
-                  title="Maybe later"
+                  aria-label="Dismiss install prompt"
                 >
-                  <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                  <X className="h-5 w-5 text-gray-500 dark:text-gray-400" aria-hidden="true" />
                 </button>
               )}
             </div>
 
             {showFeatures && features.length > 0 && (
-              <div className="mb-6 space-y-3">
+              <ul className="mb-6 space-y-3" aria-label="App features">
                 {features.map((feature, index) => {
                   const classes = FEATURE_COLOR_CLASSES[feature.color];
                   const FeatureIcon = feature.icon;
 
                   return (
-                    <motion.div
+                    <motion.li
                       key={`${feature.text}-${index}`}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
                       className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400"
                     >
-                      <div className={`h-5 w-5 ${classes.bg} flex items-center justify-center rounded-full`}>
-                        <FeatureIcon className={`h-3 w-3 ${classes.text}`} />
+                      <div
+                        className={`h-5 w-5 ${classes.bg} flex items-center justify-center rounded-full`}
+                        aria-hidden="true"
+                      >
+                        <FeatureIcon className={`h-3 w-3 ${classes.text}`} aria-hidden="true" />
                       </div>
                       <span>{feature.text}</span>
-                    </motion.div>
+                    </motion.li>
                   );
                 })}
-              </div>
+              </ul>
             )}
 
             {capabilities.isIOS ? (
               <div className="space-y-4">
-                <div className="space-y-3">
+                <ol className="space-y-3" aria-label="Installation steps">
                   {instructions.steps.map((step, index) => {
                     const StepIcon = step.icon;
                     return (
-                      <motion.div
+                      <motion.li
                         key={`${step.text}-${index}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 + index * 0.1 }}
                         className="flex items-center gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800"
                       >
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
-                          <StepIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <div
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900"
+                          aria-hidden="true"
+                        >
+                          <StepIcon className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden="true" />
                         </div>
-                        <span className="text-sm text-gray-700 dark:text-gray-300">{step.text}</span>
-                      </motion.div>
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-bold text-gray-600 dark:bg-gray-700 dark:text-gray-300" aria-hidden="true">
+                            {index + 1}
+                          </span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            {step.text}
+                          </span>
+                        </div>
+                      </motion.li>
                     );
                   })}
-                </div>
+                </ol>
                 <p className="text-center text-xs text-gray-500 dark:text-gray-400">
                   {instructions.note}
                 </p>
@@ -171,11 +197,12 @@ export function PWAPromptOverlay({
                       <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                        aria-hidden="true"
                       >
-                        <Download className="h-4 w-4" />
+                        <Download className="h-4 w-4" aria-hidden="true" />
                       </motion.div>
                     ) : (
-                      <Download className="h-4 w-4" />
+                      <Download className="h-4 w-4" aria-hidden="true" />
                     )}
                     {installing ? 'Installing...' : 'Install as App'}
                   </motion.button>
