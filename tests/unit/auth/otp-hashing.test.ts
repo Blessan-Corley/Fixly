@@ -44,7 +44,7 @@ describe('getOtpSecret', () => {
     (env as Record<string, unknown>).AUTH_SECRET = undefined;
 
     expect(() => getOtpSecret()).toThrow(
-      'OTP secret is not configured. Set NEXTAUTH_SECRET or AUTH_SECRET.'
+      'OTP secret is not configured. Set AUTH_OTP_SECRET (recommended) or NEXTAUTH_SECRET.'
     );
   });
 
