@@ -109,6 +109,8 @@ describe('fetchWithTimeout', () => {
         5000,
         externalCtrl.signal
       );
+      // Suppress the unhandled rejection that fires during timer flush
+      promise.catch(() => {});
       await vi.runAllTimersAsync();
       // Since the timeoutController didn't abort, the error propagates
       await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
@@ -169,6 +171,8 @@ describe('fetchWithTimeout', () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(timeoutError));
 
       const promise = fetchWithRetry('https://example.com/api', {}, 2, 100);
+      // Suppress the unhandled rejection that fires during timer flush
+      promise.catch(() => {});
       await vi.runAllTimersAsync();
       await expect(promise).rejects.toMatchObject({ name: 'TimeoutError' });
       expect(fetch).toHaveBeenCalledTimes(3); // initial + 2 retries
@@ -180,6 +184,8 @@ describe('fetchWithTimeout', () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(authError));
 
       const promise = fetchWithRetry('https://example.com/api', {}, 2, 5000);
+      // Suppress the unhandled rejection that fires during timer flush
+      promise.catch(() => {});
       await vi.runAllTimersAsync();
       await expect(promise).rejects.toMatchObject({ name: 'AuthError' });
       expect(fetch).toHaveBeenCalledTimes(1);
