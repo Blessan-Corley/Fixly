@@ -82,42 +82,27 @@ describe('VerifyPaymentSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts valid input with all fields', () => {
+  it('accepts valid Razorpay payload with all fields', () => {
     const result = VerifyPaymentSchema.safeParse({
-      orderId: 'order_abc123',
-      paymentId: 'pay_xyz789',
-      signature: 'sig_hash_value',
-      sessionId: 'sess_12345',
+      razorpay_order_id: 'order_abc123',
+      razorpay_payment_id: 'pay_xyz789',
+      razorpay_signature: 'sig_hash_value',
     });
     expect(result.success).toBe(true);
   });
 
-  it('accepts partial input with only orderId', () => {
-    const result = VerifyPaymentSchema.safeParse({ orderId: 'order_abc' });
+  it('accepts partial input with only razorpay_order_id', () => {
+    const result = VerifyPaymentSchema.safeParse({ razorpay_order_id: 'order_abc' });
     expect(result.success).toBe(true);
   });
 
-  it('accepts partial input with only sessionId (Stripe flow)', () => {
-    const result = VerifyPaymentSchema.safeParse({ sessionId: 'cs_test_123' });
-    expect(result.success).toBe(true);
-  });
-
-  it('accepts partial input with orderId + paymentId + signature (Razorpay flow)', () => {
-    const result = VerifyPaymentSchema.safeParse({
-      orderId: 'order_rp_123',
-      paymentId: 'pay_rp_456',
-      signature: 'rp_sig_789',
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects non-string orderId', () => {
-    const result = VerifyPaymentSchema.safeParse({ orderId: 12345 });
+  it('rejects non-string razorpay_order_id', () => {
+    const result = VerifyPaymentSchema.safeParse({ razorpay_order_id: 12345 });
     expect(result.success).toBe(false);
   });
 
-  it('rejects non-string paymentId', () => {
-    const result = VerifyPaymentSchema.safeParse({ paymentId: true });
+  it('rejects non-string razorpay_payment_id', () => {
+    const result = VerifyPaymentSchema.safeParse({ razorpay_payment_id: true });
     expect(result.success).toBe(false);
   });
 });
