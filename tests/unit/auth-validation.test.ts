@@ -76,4 +76,40 @@ describe('auth validation schemas', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('requires a valid 10-digit phone number in signupApiSchema', () => {
+    const base = {
+      authMethod: 'email',
+      role: 'hirer',
+      email: 'test@example.com',
+      name: 'Test User',
+      username: 'test_user_1',
+      password: 'StrongPass1!',
+    };
+
+    // Missing phone — should fail
+    expect(signupApiSchema.safeParse(base).success).toBe(false);
+
+    // Too short — should fail
+    expect(signupApiSchema.safeParse({ ...base, phone: '12345' }).success).toBe(false);
+
+    // Valid 10-digit Indian number — should pass
+    expect(signupApiSchema.safeParse({ ...base, phone: '9876543210' }).success).toBe(true);
+  });
+
+  it('rejects invalid role in signupApiSchema', () => {
+    const result = signupApiSchema.safeParse({
+      authMethod: 'email',
+      role: 'admin',
+      email: 'test@example.com',
+      name: 'Test User',
+      username: 'test_user_1',
+      phone: '9876543210',
+      password: 'StrongPass1!',
+    });
+
+    expect(result.success).toBe(false);
+    const phoneError = result.error?.issues.find((i) => i.path.includes('role'));
+    expect(phoneError).toBeDefined();
+  });
 });
