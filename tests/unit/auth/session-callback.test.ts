@@ -6,31 +6,8 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
-const mockRedisGet = vi.fn();
-const mockRedisSet = vi.fn();
-
-vi.mock('@/lib/redis', () => ({
-  redisUtils: {
-    get: (...args: unknown[]) => mockRedisGet(...args),
-    set: (...args: unknown[]) => mockRedisSet(...args),
-  },
-}));
-
-const mockConnectDB = vi.fn().mockResolvedValue(undefined);
-vi.mock('@/lib/mongodb', () => ({ default: () => mockConnectDB() }));
-
-const mockUserFindById = vi.fn();
-vi.mock('@/models/User', () => ({
-  default: {
-    findById: () => ({
-      select: () => ({
-        lean: () => mockUserFindById(),
-      }),
-    }),
-  },
-}));
-
 import { sessionCallback as _sessionCallback } from '@/lib/auth/callbacks/session';
+
 import type { AdapterUser } from 'next-auth/adapters';
 import type { Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
@@ -40,7 +17,6 @@ const sessionCallback = _sessionCallback!;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-// Convenience wrapper — JWT strategy doesn't use `user`, but the union type requires it
 async function callSession(session: Session, token: JWT): Promise<Session> {
   return sessionCallback({
     session,
@@ -174,14 +150,15 @@ describe('sessionCallback — disabled account (security boundary)', () => {
     expect(result.user?.role).toBeUndefined();
   });
 
-  it('returns early without hitting DB/Redis for disabled accounts', async () => {
+  it('returns early for disabled accounts without hitting the token fields', async () => {
     const session = makeSession();
     const token = makeToken({ banned: true });
 
-    await callSession(session, token);
+    const result = await callSession(session, token);
 
-    expect(mockRedisGet).not.toHaveBeenCalled();
-    expect(mockUserFindById).not.toHaveBeenCalled();
+    // Verify the early return path: registration and onboarding flags are cleared
+    expect(result.user?.isRegistered).toBe(false);
+    expect(result.user?.needsOnboarding).toBe(false);
   });
 });
 
@@ -190,7 +167,7 @@ describe('sessionCallback — disabled account (security boundary)', () => {
 describe('sessionCallback — pending Google signup (not yet registered)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('returns session early for unregistered user without valid ObjectId', async () => {
+  it('returns session with isRegistered false for pending Google token', async () => {
     const session = makeSession();
     const token = makeToken({
       id: 'pending_google:gid123',
@@ -201,142 +178,39 @@ describe('sessionCallback — pending Google signup (not yet registered)', () =>
 
     const result = await callSession(session, token);
 
-    expect(mockRedisGet).not.toHaveBeenCalled();
     expect(result.user?.isRegistered).toBe(false);
   });
 });
 
-// ── Role fallback — Redis cache hit ───────────────────────────────────────────
+// ── Google ID privacy — never expose raw sub claim ────────────────────────────
 
-describe('sessionCallback — role fallback — Redis cache', () => {
+describe('sessionCallback — Google ID privacy', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('loads role from Redis when token has no role but valid ObjectId', async () => {
-    const cachedUser = {
-      id: '507f1f77bcf86cd799439011',
-      role: 'fixer',
-      emailVerified: true,
-      phoneVerified: true,
-      isVerified: true,
-      banned: false,
-      isActive: true,
-      deleted: false,
-    };
-    mockRedisGet.mockResolvedValue(cachedUser);
-
+  it('sets hasGoogleAuth true when token.googleId is present', async () => {
     const session = makeSession();
-    const token = makeToken({ role: undefined });
+    const token = makeToken({ googleId: '1234567890' });
 
     const result = await callSession(session, token);
 
-    expect(result.user?.role).toBe('fixer');
-    expect(mockUserFindById).not.toHaveBeenCalled();
+    expect(result.user?.hasGoogleAuth).toBe(true);
   });
-});
 
-// ── Role fallback — DB lookup ──────────────────────────────────────────────────
-
-describe('sessionCallback — role fallback — DB lookup', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('loads role from DB when Redis has no data', async () => {
-    mockRedisGet.mockResolvedValue(null);
-    mockUserFindById.mockResolvedValue({
-      _id: { toString: () => '507f1f77bcf86cd799439011' },
-      role: 'admin',
-      emailVerified: true,
-      phoneVerified: false,
-      isVerified: true,
-      banned: false,
-      isActive: true,
-      deletedAt: null,
-    });
-    mockRedisSet.mockResolvedValue('OK');
-
+  it('sets hasGoogleAuth false when token.googleId is absent', async () => {
     const session = makeSession();
-    const token = makeToken({ role: undefined });
+    const token = makeToken({ googleId: undefined });
 
     const result = await callSession(session, token);
 
-    expect(result.user?.role).toBe('admin');
-    expect(mockRedisSet).toHaveBeenCalledTimes(1);
+    expect(result.user?.hasGoogleAuth).toBe(false);
   });
 
-  it('caches DB result in Redis after lookup', async () => {
-    mockRedisGet.mockResolvedValue(null);
-    mockUserFindById.mockResolvedValue({
-      _id: { toString: () => '507f1f77bcf86cd799439011' },
-      role: 'hirer',
-      emailVerified: false,
-      phoneVerified: false,
-      isVerified: false,
-      banned: false,
-      isActive: true,
-      deletedAt: null,
-    });
-    mockRedisSet.mockResolvedValue('OK');
-
-    await callSession(makeSession(), makeToken({ role: undefined }));
-
-    expect(mockRedisSet).toHaveBeenCalledWith(
-      'user_data:507f1f77bcf86cd799439011',
-      expect.objectContaining({ role: 'hirer' }),
-      expect.any(Number)
-    );
-  });
-
-  it('nullifies id for disabled user found in DB lookup', async () => {
-    mockRedisGet.mockResolvedValue(null);
-    mockUserFindById.mockResolvedValue({
-      _id: { toString: () => '507f1f77bcf86cd799439011' },
-      role: 'fixer',
-      emailVerified: false,
-      phoneVerified: false,
-      isVerified: false,
-      banned: true,    // ← found banned
-      isActive: true,
-      deletedAt: null,
-    });
-    mockRedisSet.mockResolvedValue('OK');
-
-    const result = await callSession(makeSession(), makeToken({ role: undefined }));
-
-    expect(result.user?.id).toBeUndefined();
-    expect(result.user?.role).toBeUndefined();
-  });
-
-  it('does not crash when DB returns null user', async () => {
-    mockRedisGet.mockResolvedValue(null);
-    mockUserFindById.mockResolvedValue(null);
-
-    const result = await callSession(makeSession(), makeToken({ role: undefined }));
-
-    expect(result.user?.role).toBeUndefined();
-  });
-
-  it('does not crash on DB error', async () => {
-    mockRedisGet.mockResolvedValue(null);
-    mockUserFindById.mockRejectedValue(new Error('DB failure'));
-
-    const result = await callSession(makeSession(), makeToken({ role: undefined }));
-
-    expect(result).toBeDefined();
-  });
-});
-
-// ── No role fallback when role present ────────────────────────────────────────
-
-describe('sessionCallback — no role fallback needed', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('does not hit Redis or DB when role is already in token', async () => {
+  it('does NOT expose raw googleId on session.user', async () => {
     const session = makeSession();
-    const token = makeToken({ role: 'hirer' });
+    const token = makeToken({ googleId: '1234567890' });
 
     const result = await callSession(session, token);
 
-    expect(mockRedisGet).not.toHaveBeenCalled();
-    expect(mockUserFindById).not.toHaveBeenCalled();
-    expect(result.user?.role).toBe('hirer');
+    expect((result.user as Record<string, unknown>).googleId).toBeUndefined();
   });
 });

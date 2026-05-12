@@ -1,3 +1,13 @@
+const TEST_AUTH_SECRET = 'test-secret-123456789012345678901234567890';
+
+jest.mock('@/lib/env', () => ({
+  env: {
+    NODE_ENV: 'test',
+    NEXTAUTH_SECRET: TEST_AUTH_SECRET,
+    AUTH_STATUS_SECRET: undefined,
+  },
+}));
+
 jest.mock('@/lib/mongodb', () => ({
   __esModule: true,
   default: jest.fn(),
@@ -32,18 +42,12 @@ import { redisUtils } from '@/lib/redis';
 import User from '@/models/User';
 
 describe('/api/auth/status', () => {
-  const internalAuthSecret = 'test-secret-123456789012345678901234567890';
-  const originalSecret = process.env.NEXTAUTH_SECRET;
+  const internalAuthSecret = TEST_AUTH_SECRET;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.NEXTAUTH_SECRET = internalAuthSecret;
     (redisUtils.get as jest.Mock).mockResolvedValue(null);
     (redisUtils.set as jest.Mock).mockResolvedValue('OK');
-  });
-
-  afterAll(() => {
-    process.env.NEXTAUTH_SECRET = originalSecret;
   });
 
   it('rejects requests without the internal auth header', async () => {
