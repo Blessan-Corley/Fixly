@@ -1,6 +1,6 @@
 import type { AppUser } from '../../providers';
 
-import type { BrowseJob, FixerUser } from './browse-jobs.types';
+import type { BrowseJob, FixerUser, HirerShape } from './browse-jobs.types';
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object');
@@ -40,6 +40,20 @@ export function toId(value: unknown): string {
   return '';
 }
 
+function normalizeHirer(value: unknown): HirerShape | null {
+  if (!isRecord(value)) return null;
+  const hirerLocation = isRecord(value.location) ? value.location : {};
+  return {
+    _id: toStringSafe(value._id),
+    name: toStringSafe(value.name),
+    username: toStringSafe(value.username),
+    photoURL: toStringSafe(value.photoURL || value.picture),
+    rating: typeof value.rating === 'number' ? value.rating : undefined,
+    isVerified: value.isVerified === true,
+    location: { city: toStringSafe(hirerLocation.city) },
+  };
+}
+
 export function normalizeJob(payload: unknown): BrowseJob | null {
   if (!isRecord(payload)) return null;
   const budget = isRecord(payload.budget) ? payload.budget : {};
@@ -52,6 +66,7 @@ export function normalizeJob(payload: unknown): BrowseJob | null {
     title: toStringSafe(payload.title, 'Untitled job'),
     description: toStringSafe(payload.description, ''),
     urgency: toStringSafe(payload.urgency, ''),
+    type: toStringSafe(payload.type, ''),
     createdAt: toStringSafe(payload.createdAt, ''),
     deadline: toStringSafe(payload.deadline, ''),
     budget: {
@@ -81,6 +96,7 @@ export function normalizeJob(payload: unknown): BrowseJob | null {
     commentCount: toNumberSafe(payload.commentCount, 0),
     applicationCount: toNumberSafe(payload.applicationCount, 0),
     hasApplied: payload.hasApplied === true,
+    hirer: normalizeHirer(payload.hirer ?? payload.client ?? payload.createdBy),
   };
 }
 
