@@ -19,11 +19,23 @@ export interface JobApplicationShape {
   status?: string;
 }
 
+export interface HirerShape {
+  _id?: string;
+  name?: string;
+  username?: string;
+  photoURL?: string;
+  picture?: string;
+  rating?: number;
+  isVerified?: boolean;
+  location?: { city?: string };
+}
+
 export interface BrowseJob {
   _id: string;
   title?: string;
   description?: string;
   urgency?: string;
+  type?: string;
   createdAt?: string;
   deadline?: string;
   budget?: BudgetShape;
@@ -37,6 +49,7 @@ export interface BrowseJob {
   applicationCount?: number;
   hasApplied?: boolean;
   distance?: number | null;
+  hirer?: HirerShape | null;
 }
 
 export interface PaginationState {
