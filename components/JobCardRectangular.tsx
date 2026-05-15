@@ -107,19 +107,19 @@ function JobCardRectangular({
   const handleViewDetails = async (): Promise<void> => {
     if (!job._id) return;
 
-    try {
-      const response = await fetch(`/api/jobs/${job._id}/view`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+    // Fire-and-forget view count increment — don't await before showing content
+    fetch(`/api/jobs/${job._id}/view`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as { viewCount?: unknown };
+        const nextViewCount = typeof payload.viewCount === 'number' ? payload.viewCount : null;
+        if (response.ok && nextViewCount !== null) setViewCount(nextViewCount);
+      })
+      .catch(() => {
+        // Non-fatal — view count is cosmetic
       });
-      const payload = (await response.json()) as { viewCount?: unknown };
-      const nextViewCount = typeof payload.viewCount === 'number' ? payload.viewCount : null;
-      if (response.ok && nextViewCount !== null) {
-        setViewCount(nextViewCount);
-      }
-    } catch (error) {
-      console.error('Error updating view count:', error);
-    }
 
     if (onClick) {
       onClick(job);
@@ -159,9 +159,10 @@ function JobCardRectangular({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
         whileHover={{ y: -2 }}
+        onClick={onClick ? () => void handleViewDetails() : undefined}
         className={`touch-scroll rounded-xl border border-fixly-border bg-fixly-card p-4 transition-all duration-200 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:shadow-lg ${
           deadlineInfo.urgent ? 'shadow-lg ring-2 ring-orange-300' : ''
-        }`}
+        } ${onClick ? 'cursor-pointer' : ''}`}
       >
         <div className="mb-3 flex items-start justify-between">
           <div className="min-w-0 flex-1">
