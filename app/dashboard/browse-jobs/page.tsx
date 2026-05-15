@@ -1,14 +1,21 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { AlertCircle, Loader, MapPin, RefreshCw, Search, TrendingUp } from 'lucide-react';
+import { AlertCircle, Loader, MapPin, RefreshCw, Search, Sparkles, TrendingUp, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
 
+import { useAblyChannel } from '@/contexts/AblyContext';
+import { Channels, Events } from '@/lib/ably/events';
+
+import type { JobCardData } from '../../../components/JobCardRectangular';
 import JobCardRectangular from '../../../components/JobCardRectangular';
 import LocationPermission from '../../../components/ui/LocationPermission';
 import { RoleGuard } from '../../providers';
 
+import type { BrowseJob } from './browse-jobs.types';
 import BrowseFiltersPanel from './BrowseFiltersPanel';
+import JobDetailModal from './JobDetailModal';
 import { useBrowseJobs } from './useBrowseJobs';
 
 export default function BrowseJobsPage(): JSX.Element {
@@ -21,6 +28,14 @@ export default function BrowseJobsPage(): JSX.Element {
 
 function BrowseJobsContent(): JSX.Element | null {
   const router = useRouter();
+  const [selectedJob, setSelectedJob] = useState<BrowseJob | null>(null);
+  const [newJobsCount, setNewJobsCount] = useState(0);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useAblyChannel(Channels.marketplace, Events.marketplace.jobPosted, () => {
+    setNewJobsCount((prev) => prev + 1);
+    setBannerDismissed(false);
+  });
 
   const {
     jobs,
@@ -44,6 +59,22 @@ function BrowseJobsContent(): JSX.Element | null {
     clearFilters,
     setShowFilters,
   } = useBrowseJobs();
+
+  const handleBannerRefresh = useCallback((): void => {
+    setNewJobsCount(0);
+    setBannerDismissed(true);
+    handleRefresh();
+  }, [handleRefresh]);
+
+  const handleJobClick = useCallback((job: JobCardData): void => {
+    setSelectedJob(job as BrowseJob);
+  }, []);
+
+  const handleModalApply = useCallback(async (jobId: string): Promise<void> => {
+    await handleQuickApply(jobId);
+    // Optimistically update hasApplied in the selected job
+    setSelectedJob((prev) => (prev?._id === jobId ? { ...prev, hasApplied: true } : prev));
+  }, [handleQuickApply]);
 
   if (loading && jobs.length === 0) {
     return (
@@ -149,6 +180,38 @@ function BrowseJobsContent(): JSX.Element | null {
         </motion.div>
       )}
 
+      {newJobsCount > 0 && !bannerDismissed && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          className="mb-4 flex items-center justify-between rounded-xl border border-fixly-accent/30 bg-fixly-accent/10 px-4 py-3"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium text-fixly-accent">
+            <Sparkles className="h-4 w-4 shrink-0" />
+            <span>
+              {newJobsCount === 1
+                ? '1 new job just posted'
+                : `${newJobsCount} new jobs just posted`}
+              {' — '}
+              <button
+                onClick={handleBannerRefresh}
+                className="underline underline-offset-2 hover:no-underline"
+              >
+                Refresh to see them
+              </button>
+            </span>
+          </div>
+          <button
+            onClick={() => setBannerDismissed(true)}
+            aria-label="Dismiss"
+            className="ml-3 rounded p-1 text-fixly-accent hover:bg-fixly-accent/20"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </motion.div>
+      )}
+
       <BrowseFiltersPanel
         filters={filters}
         showFilters={showFilters}
@@ -182,6 +245,7 @@ function BrowseJobsContent(): JSX.Element | null {
               isApplying={applyingJobs.has(job._id)}
               userLocation={userLocation}
               showDistance={locationEnabled}
+              onClick={handleJobClick}
             />
           ))}
         </div>
@@ -215,6 +279,14 @@ function BrowseJobsContent(): JSX.Element | null {
           </div>
         </div>
       )}
+
+      <JobDetailModal
+        job={selectedJob}
+        userSkills={Array.isArray(rawUser?.skills) ? (rawUser.skills as string[]) : []}
+        isApplying={selectedJob ? applyingJobs.has(selectedJob._id) : false}
+        onClose={() => setSelectedJob(null)}
+        onApply={handleModalApply}
+      />
     </div>
   );
 }
