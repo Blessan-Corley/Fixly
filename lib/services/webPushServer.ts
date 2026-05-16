@@ -55,7 +55,7 @@ const ensureVapidConfig = (): boolean => {
 
   const publicKey = env.WEB_PUSH_VAPID_PUBLIC_KEY || env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = env.WEB_PUSH_VAPID_PRIVATE_KEY;
-  const contact = env.WEB_PUSH_CONTACT_EMAIL || 'mailto:support@fixly.app';
+  const contact = env.WEB_PUSH_CONTACT_EMAIL || 'mailto:blessancorley@gmail.com';
 
   if (!publicKey || !privateKey) {
     logger.warn(
