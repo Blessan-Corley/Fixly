@@ -7,9 +7,14 @@ import type { OtpData } from './types';
 const OTP_MAX_ATTEMPTS = 5;
 
 export function getOtpSecret(): string {
-  const secret = env.NEXTAUTH_SECRET || env.AUTH_SECRET;
+  // AUTH_OTP_SECRET is the dedicated HMAC key for OTP hashing.
+  // It must be separate from NEXTAUTH_SECRET to limit blast radius if one key is rotated.
+  // Fallback to NEXTAUTH_SECRET only for backward-compatibility until AUTH_OTP_SECRET is set.
+  const secret = env.AUTH_OTP_SECRET ?? env.NEXTAUTH_SECRET ?? env.AUTH_SECRET;
   if (!secret) {
-    throw new Error('OTP secret is not configured. Set NEXTAUTH_SECRET or AUTH_SECRET.');
+    throw new Error(
+      'OTP secret is not configured. Set AUTH_OTP_SECRET (recommended) or NEXTAUTH_SECRET.'
+    );
   }
   return secret;
 }
