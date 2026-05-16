@@ -4,87 +4,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNotificationStore, type Notification } from '@/lib/stores/notificationStore';
 
 import { queryKeys } from './keys';
+import {
+  extractErrorMessage,
+  fetchNotifications,
+  hasActiveFilters,
+  readJson,
+  type Filters,
+  type NotificationsResponse,
+} from './notifications.helpers';
 
-type Filters = Record<string, unknown>;
-type NotificationsResponse = {
-  data?: {
-    notifications?: Notification[];
-    unreadCount?: number;
-  };
-  message?: string;
-  error?: string;
-  notifications?: Notification[];
-  pagination?: Record<string, unknown>;
-  unreadCount?: number;
-  [key: string]: unknown;
-};
-
-function toSearchParams(filters: Filters = {}): URLSearchParams {
-  const params = new URLSearchParams();
-
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') {
-      return;
-    }
-
-    params.set(key, String(value));
-  });
-
-  return params;
-}
-
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
-}
-
-async function fetchNotifications(filters: Filters = {}): Promise<NotificationsResponse> {
-  const params = toSearchParams(filters);
-  const response = await fetch(`/api/user/notifications?${params.toString()}`);
-  const payload = await readJson(response);
-
-  if (!response.ok) {
-    const message =
-      payload &&
-      typeof payload === 'object' &&
-      'message' in payload &&
-      typeof payload.message === 'string'
-        ? payload.message
-        : payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-          ? payload.error
-        : 'Failed to fetch notifications';
-    throw new Error(message);
-  }
-
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return {};
-  }
-
-  const normalizedPayload = payload as NotificationsResponse;
-  if (normalizedPayload.data && typeof normalizedPayload.data === 'object') {
-    return {
-      notifications: normalizedPayload.data.notifications,
-      unreadCount: normalizedPayload.data.unreadCount,
-      pagination: normalizedPayload.pagination,
-      message: normalizedPayload.message,
-    };
-  }
-
-  return normalizedPayload;
-}
-
-function hasActiveFilters(filters: Filters): boolean {
-  return Object.values(filters).some((value) => {
-    if (Array.isArray(value)) {
-      return value.length > 0;
-    }
-
-    return value !== undefined && value !== null && value !== '' && value !== 'all';
-  });
-}
+export type { Filters, NotificationsResponse };
 
 export function useNotifications(filters: Filters = {}) {
   const setNotifications = useNotificationStore((state) => state.setNotifications);
@@ -94,7 +23,7 @@ export function useNotifications(filters: Filters = {}) {
     queryFn: async () => {
       const result = await fetchNotifications(filters);
       if (!hasActiveFilters(filters) && Array.isArray(result.notifications)) {
-        setNotifications(result.notifications);
+        setNotifications(result.notifications as Notification[]);
       }
       return result;
     },
@@ -111,23 +40,9 @@ export function useMarkNotificationRead() {
 
   return useMutation({
     mutationFn: async (notificationId: string) => {
-      const response = await fetch(`/api/user/notifications/${notificationId}`, {
-        method: 'PATCH',
-      });
+      const response = await fetch(`/api/user/notifications/${notificationId}`, { method: 'PATCH' });
       const payload = await readJson(response);
-      if (!response.ok) {
-        const message =
-          payload &&
-          typeof payload === 'object' &&
-          'message' in payload &&
-          typeof payload.message === 'string'
-            ? payload.message
-            : payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-              ? payload.error
-              : 'Failed to mark notification read';
-        throw new Error(message);
-      }
-
+      if (!response.ok) throw new Error(extractErrorMessage(payload, 'Failed to mark notification read'));
       return payload;
     },
     onMutate: async (notificationId) => {
@@ -148,21 +63,8 @@ export function useMarkAllNotificationsRead() {
   return useMutation({
     mutationFn: async () => {
       const response = await fetch('/api/user/notifications/read-all', { method: 'PATCH' });
-
       const payload = await readJson(response);
-      if (!response.ok) {
-        const message =
-          payload &&
-          typeof payload === 'object' &&
-          'message' in payload &&
-          typeof payload.message === 'string'
-            ? payload.message
-            : payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-              ? payload.error
-            : 'Failed to mark all notifications read';
-        throw new Error(message);
-      }
-
+      if (!response.ok) throw new Error(extractErrorMessage(payload, 'Failed to mark all notifications read'));
       return payload;
     },
     onMutate: async () => {
@@ -182,24 +84,9 @@ export function useDeleteNotification() {
 
   return useMutation({
     mutationFn: async (notificationId: string) => {
-      const response = await fetch(`/api/user/notifications/${notificationId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(`/api/user/notifications/${notificationId}`, { method: 'DELETE' });
       const payload = await readJson(response);
-
-      if (!response.ok) {
-        const message =
-          payload &&
-          typeof payload === 'object' &&
-          'message' in payload &&
-          typeof payload.message === 'string'
-            ? payload.message
-            : payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-              ? payload.error
-            : 'Failed to delete notification';
-        throw new Error(message);
-      }
-
+      if (!response.ok) throw new Error(extractErrorMessage(payload, 'Failed to delete notification'));
       return payload;
     },
     onMutate: async (notificationId) => {
