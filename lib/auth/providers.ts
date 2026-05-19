@@ -1,4 +1,5 @@
 // NextAuth provider configurations (Google OAuth + Credentials)
+import bcrypt from 'bcryptjs';
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
@@ -23,6 +24,17 @@ import {
   getRequestIpFromCredentialsRequest,
   isEmailLike,
 } from './utils';
+
+// Cached dummy hash for timing-equalization on failed lookups.
+// Generated once per serverless instance; purely ensures bcrypt runs whether
+// or not the user account exists, preventing user-enumeration via response time.
+let _dummyBcryptHash: string | null = null;
+async function getDummyHash(): Promise<string> {
+  if (!_dummyBcryptHash) {
+    _dummyBcryptHash = await bcrypt.hash('__fixly_timing_guard__', 12);
+  }
+  return _dummyBcryptHash;
+}
 
 export const googleProvider =
   env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
@@ -91,20 +103,18 @@ export const credentialsProvider = CredentialsProvider({
             : [{ username: identifier }, { email: identifier }],
         }).select('+passwordHash');
 
-        if (!userDoc) {
-          throw new Error(AUTH_ERROR_INVALID_CREDENTIALS);
-        }
+        // Always run bcrypt regardless of whether the account exists.
+        // This equalizes response time and prevents user-enumeration
+        // attacks via response-time analysis (timing oracle).
+        const hashToCompare = userDoc?.passwordHash ?? (await getDummyHash());
+        const isPasswordMatch = await bcrypt.compare(password, hashToCompare);
 
-        if (userDoc.authMethod === 'google') {
-          throw new Error(AUTH_ERROR_INVALID_CREDENTIALS);
-        }
-
-        if (!userDoc.passwordHash) {
-          throw new Error(AUTH_ERROR_INVALID_CREDENTIALS);
-        }
-
-        const isValidPassword = await userDoc.comparePassword(password);
-        if (!isValidPassword) {
+        if (
+          !userDoc ||
+          userDoc.authMethod === 'google' ||
+          !userDoc.passwordHash ||
+          !isPasswordMatch
+        ) {
           throw new Error(AUTH_ERROR_INVALID_CREDENTIALS);
         }
 
