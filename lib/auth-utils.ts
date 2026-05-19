@@ -70,13 +70,11 @@ export function computeIsFullyVerified(
 }
 
 export async function invalidateAuthCache(userId: string): Promise<void> {
-  // Delete all three cache layers in a single round-trip.
+  // Delete both cache layers in a single round-trip.
   // user_session   — JWT callback cache (lib/auth/callbacks/jwt.ts)
-  // user_data      — session callback fallback cache (lib/auth/callbacks/session.ts)
   // auth_status    — middleware live-auth endpoint cache (app/api/auth/status/route.ts)
   await redisUtils.del(
     `user_session:${userId}`,
-    `user_data:${userId}`,
     `auth_status:${userId}`
   );
 }
