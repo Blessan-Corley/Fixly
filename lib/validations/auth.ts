@@ -143,7 +143,7 @@ export const signupApiSchema = z.object({
   // Profile
   name: z.string().min(2),
   username: usernameSchema,
-  phone: z.string().optional(), // Transformed/Normalized before this check usually
+  phone: phoneSchema,
 
   // Location
   location: z.union([locationSchema, legacyLocationSchema]).optional(), // Support both new and legacy payloads
