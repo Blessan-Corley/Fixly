@@ -1,4 +1,6 @@
 // Phase 2: Replaced legacy ID-based CSRF checks with session token validation middleware.
+import { createHmac, timingSafeEqual } from 'crypto';
+
 import { NextRequest, NextResponse } from 'next/server';
 
 import { validateCsrfToken } from '@/lib/security/csrf.server';
@@ -49,7 +51,7 @@ export function isCsrfExempt(request: CsrfRequest): boolean {
   }
 
   const pathname = getPathname(request);
-  if (pathname.startsWith('/api/stripe')) {
+  if (pathname.startsWith('/api/razorpay/webhook')) {
     return true;
   }
 
@@ -62,14 +64,28 @@ export function isCsrfExempt(request: CsrfRequest): boolean {
     return true;
   }
 
+  // Bearer tokens are only valid for internal server-to-server calls.
+  // They must be HMAC-SHA256(NEXTAUTH_SECRET, "internal-api-v1") — anything else
+  // is rejected. This prevents a client from bypassing CSRF with arbitrary headers.
   const authorization = request.headers.get('authorization') ?? '';
   if (!authorization.startsWith('Bearer ')) {
     return false;
   }
-  // Require a substantive token — reject trivially short values that indicate
-  // a client is using "Bearer <anything>" purely as a CSRF bypass.
   const token = authorization.slice(7).trim();
-  return token.length >= 20;
+  if (!token) return false;
+
+  try {
+    const secret = process.env.NEXTAUTH_SECRET;
+    if (!secret) return false;
+    const expected = createHmac('sha256', secret).update('internal-api-v1').digest('hex');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    const tokenBuf = Buffer.from(token, 'utf8');
+    return (
+      expectedBuf.length === tokenBuf.length && timingSafeEqual(expectedBuf, tokenBuf)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function validateCsrfMiddleware(
