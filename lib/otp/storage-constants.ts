@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger';
 import { shouldAllowInMemoryAuthFallback } from '@/lib/redis';
 
 export const OTP_EXPIRY_TIME_SECONDS = 5 * 60;
-export const OTP_VERIFICATION_RECEIPT_TTL_SECONDS = 5 * 60;
+export const OTP_VERIFICATION_RECEIPT_TTL_SECONDS = 30 * 60;
 export const OTP_SERVICE_UNAVAILABLE_MESSAGE =
   'Verification service temporarily unavailable. Please try again shortly.';
 
