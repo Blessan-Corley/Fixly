@@ -141,7 +141,7 @@ describe('/api/auth/send-otp', () => {
     expect(payload.message).toBe('Invalid phone number');
   });
 
-  it('rejects duplicate signup phone numbers', async () => {
+  it('silently succeeds for duplicate signup phone numbers without sending OTP', async () => {
     (User.findOne as jest.Mock).mockResolvedValue({ _id: 'existing-user' });
 
     const response = await POST(
@@ -155,8 +155,9 @@ describe('/api/auth/send-otp', () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(payload.message).toBe('Phone number already registered');
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.message).toBe('OTP sent via WhatsApp');
     expect(sendWhatsAppOTP).not.toHaveBeenCalled();
   });
 
@@ -243,7 +244,7 @@ describe('/api/auth/send-otp', () => {
     expect(payload.details?.fieldErrors?.email).toBeDefined();
   });
 
-  it('rejects duplicate signup email addresses', async () => {
+  it('silently succeeds for duplicate signup email addresses without sending OTP', async () => {
     (User.findByEmail as jest.Mock).mockResolvedValue({ _id: 'existing-user' });
 
     const response = await POST(
@@ -257,8 +258,10 @@ describe('/api/auth/send-otp', () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(409);
-    expect(payload.message).toBe('Email already registered');
+    expect(response.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.message).toBe('OTP sent to email');
+    expect(sendSignupOTP).not.toHaveBeenCalled();
   });
 
   it('surfaces signup email OTP delivery degradation', async () => {
