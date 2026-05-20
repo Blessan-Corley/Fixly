@@ -21,7 +21,7 @@ describe('AuthShell', () => {
     expect(screen.getByText('Auth content')).toBeInTheDocument();
     expect(screen.getByText('Footer CTA')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back home/i })).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', { name: /help/i })).toHaveAttribute('href', '/help');
-    expect(screen.getByRole('link', { name: /support/i })).toHaveAttribute('href', '/support');
+    expect(screen.getByRole('link', { name: /help/i })).toHaveAttribute('href', '/about');
+    expect(screen.getByRole('link', { name: /support/i })).toHaveAttribute('href', '/contact');
   });
 });
