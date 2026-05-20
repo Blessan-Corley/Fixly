@@ -69,10 +69,10 @@ jest.mock('@/lib/logger', () => ({
   },
 }));
 
-jest.mock('@/lib/stripe', () => ({
-  stripe: {
-    webhooks: {
-      constructEvent: jest.fn(),
+jest.mock('@/lib/razorpay', () => ({
+  razorpay: {
+    orders: {
+      create: jest.fn(),
     },
   },
 }));
@@ -91,7 +91,7 @@ jest.mock('@/lib/services/billing/entitlementService', () => ({
 import { getServerSession } from 'next-auth/next';
 
 import { POST as postMessages } from '@/app/api/messages/route';
-import { POST as postStripeWebhook } from '@/app/api/stripe/webhook/route';
+import { POST as postRazorpayWebhook } from '@/app/api/razorpay/webhook/route';
 import { csrfGuard } from '@/lib/security/csrf';
 import { rateLimit } from '@/utils/rateLimiting';
 
@@ -141,17 +141,17 @@ describe('CSRF guards', () => {
     expect(response.status).not.toBe(403);
   });
 
-  it('does not apply CSRF blocking to POST /api/stripe/webhook', async () => {
+  it('does not apply CSRF blocking to POST /api/razorpay/webhook', async () => {
     const webhookRequest = {
       method: 'POST',
-      url: 'http://localhost/api/stripe/webhook',
+      url: 'http://localhost/api/razorpay/webhook',
       headers: new Headers({
         'content-type': 'application/json',
       }),
       text: jest.fn(async () => '{}'),
     } as unknown as Request;
 
-    const response = await postStripeWebhook(webhookRequest as unknown as NextRequest);
+    const response = await postRazorpayWebhook(webhookRequest as unknown as NextRequest);
 
     expect(response.status).not.toBe(403);
   });
