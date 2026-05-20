@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 jest.mock('next-auth/next', () => ({
   getServerSession: jest.fn(),
 }));
@@ -29,6 +31,8 @@ jest.mock('@/lib/env', () => ({
     NODE_ENV: 'test',
     NEXTAUTH_URL: 'http://localhost:3000',
     NEXT_PUBLIC_SITE_URL: undefined,
+    RAZORPAY_KEY_ID: 'rzp_test_key',
+    RAZORPAY_KEY_SECRET: 'test_secret',
   },
 }));
 
@@ -49,13 +53,10 @@ jest.mock('@/lib/redis', () => ({
   },
 }));
 
-jest.mock('@/lib/stripe', () => ({
-  stripe: {
-    checkout: {
-      sessions: {
-        create: jest.fn(),
-        retrieve: jest.fn(),
-      },
+jest.mock('@/lib/razorpay', () => ({
+  razorpay: {
+    orders: {
+      create: jest.fn(),
     },
   },
 }));
@@ -85,14 +86,22 @@ jest.mock('@/lib/services/billing/entitlementService', () => ({
 }));
 
 jest.mock('@/lib/services/billing/paymentEventService', () => ({
-  findProcessedPaymentEventBySessionId: jest.fn(),
   recordPaymentEvent: jest.fn(),
   markEventProcessed: jest.fn(),
   markEventFailed: jest.fn(),
 }));
 
+jest.mock('@/lib/ably/publisher', () => ({
+  publishToChannel: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('@/lib/inngest/client', () => ({
+  inngest: {
+    send: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
 // parseBody from lib/api/parse calls schema.parse() (not safeParse).
-// Provide both so tests can mock via CreateOrderSchema.parse.
 jest.mock('@/lib/validations/subscription', () => ({
   CreateOrderSchema: {
     safeParse: jest.fn(),
@@ -106,9 +115,15 @@ import { getServerSession } from 'next-auth/next';
 import { POST as createOrder } from '@/app/api/subscription/create-order/route';
 import { GET as getFixerSub } from '@/app/api/subscription/fixer/route';
 import { GET as getHirerSub } from '@/app/api/subscription/hirer/route';
-import { GET as verifyPayment } from '@/app/api/subscription/verify-payment/route';
-import { stripe } from '@/lib/stripe';
+import { POST as verifyPayment } from '@/app/api/subscription/verify-payment/route';
+import { razorpay } from '@/lib/razorpay';
 import { redisUtils } from '@/lib/redis';
+import {
+  getEntitlementStatus,
+} from '@/lib/services/billing/entitlementService';
+import {
+  recordPaymentEvent,
+} from '@/lib/services/billing/paymentEventService';
 import {
   getPlanById,
   resolvePlanId,
@@ -118,17 +133,13 @@ import {
   getFixerSubscriptionStatus,
   getHirerSubscriptionStatus,
 } from '@/lib/services/billing/subscriptionStatus';
-import {
-  getEntitlementStatus,
-} from '@/lib/services/billing/entitlementService';
-import {
-  findProcessedPaymentEventBySessionId,
-} from '@/lib/services/billing/paymentEventService';
 import User from '@/models/User';
 import { TEST_CSRF_TOKEN, createTestSession } from '@/tests/helpers/auth';
 
-function makePOSTRequest(body: object): NextRequest {
-  return new Request('http://localhost/api/subscription/create-order', {
+const TEST_KEY_SECRET = 'test_secret';
+
+function makePOSTRequest(url: string, body: object): NextRequest {
+  return new Request(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -144,16 +155,26 @@ function makeGetRequest(url: string): NextRequest {
     method: 'GET',
     headers: { 'x-csrf-token': TEST_CSRF_TOKEN },
   });
-  // parseQuery() uses req.nextUrl.searchParams — add it to the request
   return Object.assign(req, {
     nextUrl: parsedUrl,
   }) as unknown as NextRequest;
 }
 
-/**
- * Helper to mock CreateOrderSchema for parseBody (which calls schema.parse()).
- * `parse` should return data directly (no success wrapper), and throw on failure.
- */
+function makeRazorpaySignature(orderId: string, paymentId: string): string {
+  return crypto.createHmac('sha256', TEST_KEY_SECRET).update(`${orderId}|${paymentId}`).digest('hex');
+}
+
+function makeVerifyRequest(body: object): NextRequest {
+  return new Request('http://localhost/api/subscription/verify-payment', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-csrf-token': TEST_CSRF_TOKEN,
+    },
+    body: JSON.stringify(body),
+  }) as unknown as NextRequest;
+}
+
 function mockCreateOrderSchema(data: object) {
   const { CreateOrderSchema } = require('@/lib/validations/subscription');
   (CreateOrderSchema.parse as jest.Mock).mockReturnValue(data);
@@ -166,7 +187,6 @@ function mockCreateOrderSchema(data: object) {
 describe('POST /api/subscription/create-order', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Default: rateLimit allows
     const { rateLimit } = require('@/utils/rateLimiting');
     (rateLimit as jest.Mock).mockResolvedValue({ success: true });
   });
@@ -174,7 +194,7 @@ describe('POST /api/subscription/create-order', () => {
   it('returns 401 when not authenticated', async () => {
     (getServerSession as jest.Mock).mockResolvedValue(null);
 
-    const response = await createOrder(makePOSTRequest({ plan: 'hirer_monthly' }));
+    const response = await createOrder(makePOSTRequest('http://localhost/api/subscription/create-order', { plan: 'hirer_monthly' }));
 
     expect(response.status).toBe(401);
   });
@@ -185,7 +205,7 @@ describe('POST /api/subscription/create-order', () => {
 
     mockCreateOrderSchema({ planId: 'hirer_monthly', plan: 'hirer_monthly', role: undefined });
 
-    const response = await createOrder(makePOSTRequest({ plan: 'hirer_monthly' }));
+    const response = await createOrder(makePOSTRequest('http://localhost/api/subscription/create-order', { plan: 'hirer_monthly' }));
 
     expect(response.status).toBe(403);
   });
@@ -197,7 +217,7 @@ describe('POST /api/subscription/create-order', () => {
 
     mockCreateOrderSchema({ planId: 'invalid_plan', plan: 'invalid_plan', role: undefined });
 
-    const response = await createOrder(makePOSTRequest({ plan: 'invalid_plan' }));
+    const response = await createOrder(makePOSTRequest('http://localhost/api/subscription/create-order', { plan: 'invalid_plan' }));
 
     expect(response.status).toBe(400);
   });
@@ -218,7 +238,7 @@ describe('POST /api/subscription/create-order', () => {
 
     (User.findById as jest.Mock).mockResolvedValue(null);
 
-    const response = await createOrder(makePOSTRequest({ plan: 'hirer_monthly' }));
+    const response = await createOrder(makePOSTRequest('http://localhost/api/subscription/create-order', { plan: 'hirer_monthly' }));
 
     expect(response.status).toBe(404);
   });
@@ -251,12 +271,12 @@ describe('POST /api/subscription/create-order', () => {
       },
     });
 
-    const response = await createOrder(makePOSTRequest({ plan: 'hirer_monthly' }));
+    const response = await createOrder(makePOSTRequest('http://localhost/api/subscription/create-order', { plan: 'hirer_monthly' }));
 
     expect(response.status).toBe(409);
   });
 
-  it('returns 201 with Stripe checkout session on success', async () => {
+  it('returns 201 with Razorpay order on success', async () => {
     (getServerSession as jest.Mock).mockResolvedValue(createTestSession('hirer'));
     (roleSupportsPaidPlan as unknown as jest.Mock).mockReturnValue(true);
     (resolvePlanId as jest.Mock).mockReturnValue('hirer_monthly');
@@ -283,19 +303,22 @@ describe('POST /api/subscription/create-order', () => {
     };
     (User.findById as jest.Mock).mockResolvedValue(mockUser);
 
-    const mockCheckoutSession = {
-      id: 'cs_test_abc123',
-      url: 'https://checkout.stripe.com/cs_test_abc123',
+    const mockRazorpayOrder = {
+      id: 'order_test_abc123',
+      amount: 9900,
+      currency: 'INR',
     };
-    (stripe.checkout.sessions.create as jest.Mock).mockResolvedValue(mockCheckoutSession);
+    (razorpay.orders.create as jest.Mock).mockResolvedValue(mockRazorpayOrder);
     (redisUtils.del as jest.Mock).mockResolvedValue(true);
 
-    const response = await createOrder(makePOSTRequest({ plan: 'hirer_monthly' }));
-    const body = await response.json();
+    const response = await createOrder(makePOSTRequest('http://localhost/api/subscription/create-order', { plan: 'hirer_monthly' }));
+    const body = await response.json() as { data: { orderId: string; amount: number; currency: string; keyId: string } };
 
     expect(response.status).toBe(201);
-    expect(body.data.sessionId).toBe('cs_test_abc123');
-    expect(body.data.url).toBe('https://checkout.stripe.com/cs_test_abc123');
+    expect(body.data.orderId).toBe('order_test_abc123');
+    expect(body.data.amount).toBe(9900);
+    expect(body.data.currency).toBe('INR');
+    expect(body.data.keyId).toBeDefined();
   });
 
   it('returns 429 when rate limited', async () => {
@@ -306,7 +329,7 @@ describe('POST /api/subscription/create-order', () => {
     mockCreateOrderSchema({ planId: 'hirer_monthly', plan: 'hirer_monthly', role: undefined });
     (roleSupportsPaidPlan as unknown as jest.Mock).mockReturnValue(true);
 
-    const response = await createOrder(makePOSTRequest({ plan: 'hirer_monthly' }));
+    const response = await createOrder(makePOSTRequest('http://localhost/api/subscription/create-order', { plan: 'hirer_monthly' }));
 
     expect(response.status).toBe(429);
   });
@@ -367,10 +390,9 @@ describe('GET /api/subscription/fixer', () => {
     (getFixerSubscriptionStatus as jest.Mock).mockReturnValue(mockStatus);
 
     const response = await getFixerSub(makeGetRequest('http://localhost/api/subscription/fixer'));
-    const body = await response.json();
+    const body = await response.json() as { data: { plan: unknown } };
 
     expect(response.status).toBe(200);
-    // ok() wraps response in { success: true, data: ... }
     expect(body.data.plan).toBeDefined();
   });
 
@@ -383,10 +405,8 @@ describe('GET /api/subscription/fixer', () => {
     (redisUtils.get as jest.Mock).mockResolvedValue(cachedStatus);
 
     const response = await getFixerSub(makeGetRequest('http://localhost/api/subscription/fixer'));
-    const body = await response.json();
 
     expect(response.status).toBe(200);
-    // Should not have queried DB
     expect(User.findById).not.toHaveBeenCalled();
   });
 
@@ -463,10 +483,9 @@ describe('GET /api/subscription/hirer', () => {
     (getHirerSubscriptionStatus as jest.Mock).mockReturnValue(mockStatus);
 
     const response = await getHirerSub(makeGetRequest('http://localhost/api/subscription/hirer'));
-    const body = await response.json();
+    const body = await response.json() as { data: { plan: unknown } };
 
     expect(response.status).toBe(200);
-    // ok() wraps response in { success: true, data: ... }
     expect(body.data.plan).toBeDefined();
   });
 
@@ -489,9 +508,13 @@ describe('GET /api/subscription/hirer', () => {
 });
 
 // ─────────────────────────────────────────────
-// verify-payment tests
+// verify-payment tests (POST with Razorpay signature)
 // ─────────────────────────────────────────────
-describe('GET /api/subscription/verify-payment', () => {
+describe('POST /api/subscription/verify-payment', () => {
+  const orderId = 'order_test_abc';
+  const paymentId = 'pay_test_xyz';
+  const signature = makeRazorpaySignature(orderId, paymentId);
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -500,101 +523,100 @@ describe('GET /api/subscription/verify-payment', () => {
     (getServerSession as jest.Mock).mockResolvedValue(null);
 
     const response = await verifyPayment(
-      makeGetRequest('http://localhost/api/subscription/verify-payment?session_id=cs_test_123')
+      makeVerifyRequest({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature })
     );
 
     expect(response.status).toBe(401);
   });
 
-  it('returns 400 when session_id query param is missing', async () => {
+  it('returns 400 when signature verification fails', async () => {
     (getServerSession as jest.Mock).mockResolvedValue(createTestSession('hirer'));
 
     const response = await verifyPayment(
-      makeGetRequest('http://localhost/api/subscription/verify-payment')
+      makeVerifyRequest({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: 'bad_signature' })
     );
 
     expect(response.status).toBe(400);
   });
 
-  it('returns 403 when checkout session belongs to a different user', async () => {
+  it('returns 400 when user has no pending order', async () => {
     (getServerSession as jest.Mock).mockResolvedValue(createTestSession('hirer'));
 
-    (stripe.checkout.sessions.retrieve as jest.Mock).mockResolvedValue({
-      id: 'cs_test_abc',
-      payment_status: 'paid',
-      metadata: { userId: 'some-other-user-id' },
+    (User.findById as jest.Mock).mockResolvedValue({
+      _id: 'test-user-hirer-id',
+      pendingOrder: null,
     });
 
     const response = await verifyPayment(
-      makeGetRequest('http://localhost/api/subscription/verify-payment?session_id=cs_test_abc')
+      makeVerifyRequest({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature })
     );
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(400);
   });
 
-  it('returns 402 when payment has not been completed', async () => {
+  it('returns 200 with processed status for duplicate payment', async () => {
     (getServerSession as jest.Mock).mockResolvedValue(createTestSession('hirer'));
 
-    (stripe.checkout.sessions.retrieve as jest.Mock).mockResolvedValue({
-      id: 'cs_test_abc',
-      payment_status: 'unpaid',
-      metadata: { userId: 'test-user-hirer-id' },
+    (User.findById as jest.Mock).mockResolvedValue({
+      _id: 'test-user-hirer-id',
+      pendingOrder: { orderId, planId: 'hirer_monthly', plan: 'monthly', amount: 99 },
     });
 
-    const response = await verifyPayment(
-      makeGetRequest('http://localhost/api/subscription/verify-payment?session_id=cs_test_abc')
-    );
+    (recordPaymentEvent as jest.Mock).mockResolvedValue({ isNew: false });
 
-    expect(response.status).toBe(402);
-  });
-
-  it('returns 200 with processed status when payment event is processed', async () => {
-    (getServerSession as jest.Mock).mockResolvedValue(createTestSession('hirer'));
-
-    (stripe.checkout.sessions.retrieve as jest.Mock).mockResolvedValue({
-      id: 'cs_test_abc',
-      payment_status: 'paid',
-      metadata: { userId: 'test-user-hirer-id' },
-    });
-
-    (findProcessedPaymentEventBySessionId as jest.Mock).mockResolvedValue({
-      status: 'processed',
-    });
-
-    const mockSubscription = {
-      plan: { type: 'pro', status: 'active', isActive: true },
-    };
+    const mockSubscription = { plan: { type: 'pro', status: 'active', isActive: true } };
     (getEntitlementStatus as jest.Mock).mockResolvedValue(mockSubscription);
 
     const response = await verifyPayment(
-      makeGetRequest('http://localhost/api/subscription/verify-payment?session_id=cs_test_abc')
+      makeVerifyRequest({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature })
     );
-    const body = await response.json();
+    const body = await response.json() as { data: { status: string; subscription: unknown } };
 
     expect(response.status).toBe(200);
-    // ok() wraps data in { success: true, data: ... }
     expect(body.data.status).toBe('processed');
     expect(body.data.subscription).toBeDefined();
   });
 
-  it('returns 200 with pending status when webhook not yet processed', async () => {
+  it('returns 200 with processed status and activates subscription on success', async () => {
     (getServerSession as jest.Mock).mockResolvedValue(createTestSession('hirer'));
 
-    (stripe.checkout.sessions.retrieve as jest.Mock).mockResolvedValue({
-      id: 'cs_test_abc',
-      payment_status: 'paid',
-      metadata: { userId: 'test-user-hirer-id' },
-    });
+    const mockUser = {
+      _id: 'test-user-hirer-id',
+      email: 'hirer@test.com',
+      name: 'Test Hirer',
+      pendingOrder: { orderId, planId: 'hirer_monthly', plan: 'monthly', amount: 99 },
+    };
+    (User.findById as jest.Mock)
+      .mockResolvedValueOnce(mockUser)  // first call (find user)
+      .mockReturnValueOnce({            // second call (refreshed user)
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue({
+            _id: 'test-user-hirer-id',
+            email: 'hirer@test.com',
+            name: 'Test Hirer',
+            plan: { endDate: new Date(Date.now() + 86400000) },
+          }),
+        }),
+      });
 
-    (findProcessedPaymentEventBySessionId as jest.Mock).mockResolvedValue(null);
+    (recordPaymentEvent as jest.Mock).mockResolvedValue({ isNew: true });
+
+    const { grantSubscriptionEntitlement } = require('@/lib/services/billing/entitlementService');
+    (grantSubscriptionEntitlement as jest.Mock).mockResolvedValue(undefined);
+
+    const { markEventProcessed } = require('@/lib/services/billing/paymentEventService');
+    (markEventProcessed as jest.Mock).mockResolvedValue(undefined);
+
+    const mockSubscription = { plan: { type: 'pro', status: 'active', isActive: true } };
+    (getEntitlementStatus as jest.Mock).mockResolvedValue(mockSubscription);
 
     const response = await verifyPayment(
-      makeGetRequest('http://localhost/api/subscription/verify-payment?session_id=cs_test_abc')
+      makeVerifyRequest({ razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature })
     );
-    const body = await response.json();
+    const body = await response.json() as { data: { status: string; subscription: unknown } };
 
     expect(response.status).toBe(200);
-    // ok() wraps data in { success: true, data: ... }
-    expect(body.data.status).toBe('pending');
+    expect(body.data.status).toBe('processed');
+    expect(body.data.subscription).toBeDefined();
   });
 });
