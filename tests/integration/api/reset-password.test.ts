@@ -145,7 +145,8 @@ describe('/api/auth/reset-password', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(payload.message).toContain('valid email');
+    expect(payload.message).toBe('Validation failed');
+    expect(payload.details?.fieldErrors?.email).toBeDefined();
   });
 
   it('returns 400 when otp is not exactly 6 digits', async () => {
@@ -158,7 +159,8 @@ describe('/api/auth/reset-password', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(payload.message).toContain('6 digits');
+    expect(payload.message).toBe('Validation failed');
+    expect(payload.details?.fieldErrors?.otp).toBeDefined();
   });
 
   it('returns 400 for weak passwords', async () => {
@@ -171,7 +173,8 @@ describe('/api/auth/reset-password', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(typeof payload.message).toBe('string');
+    expect(payload.message).toBe('Validation failed');
+    expect(payload.details?.fieldErrors?.newPassword).toBeDefined();
   });
 
   it('maps temporary OTP verification failures to 503', async () => {
