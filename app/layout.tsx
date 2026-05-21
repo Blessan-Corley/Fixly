@@ -17,7 +17,7 @@ const getMetadataBase = (): URL => {
 const manrope = Manrope({
   subsets: ['latin'],
   weight: ['200', '300', '400', '500', '600', '700', '800'],
-  display: 'fallback',
+  display: 'swap',
   variable: '--font-manrope',
   fallback: [
     'system-ui',
@@ -35,7 +35,7 @@ const manrope = Manrope({
 const ptMono = PT_Mono({
   subsets: ['latin'],
   weight: ['400'],
-  display: 'fallback',
+  display: 'swap',
   variable: '--font-pt-mono',
   fallback: ['Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', 'monospace'],
   adjustFontFallback: false,
