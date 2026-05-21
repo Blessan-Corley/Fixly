@@ -4,16 +4,14 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { IncompleteSignupNotice } from '@/components/landing/landing.types';
 import { hasIncompleteSignupSession } from '@/components/landing/landing.utils';
 import LandingCta from '@/components/landing/LandingCta';
-import LandingFeatures from '@/components/landing/LandingFeatures';
 import LandingFooter from '@/components/landing/LandingFooter';
 import LandingHeader from '@/components/landing/LandingHeader';
 import LandingHero from '@/components/landing/LandingHero';
-import LandingHowItWorks from '@/components/landing/LandingHowItWorks';
-import LandingStats from '@/components/landing/LandingStats';
 import { closeAblyClient } from '@/lib/ably';
 import {
   clearSignupDraft,
@@ -28,7 +26,11 @@ const RoleSelectionModal = dynamic(() => import('@/components/landing/RoleSelect
   ssr: false,
 });
 
-export default function LandingPageClient() {
+type LandingPageClientProps = {
+  children: ReactNode;
+};
+
+export default function LandingPageClient({ children }: LandingPageClientProps) {
   const [showRoleSelection, setShowRoleSelection] = useState(false);
   const [resumeSignupNotice, setResumeSignupNotice] = useState<IncompleteSignupNotice | null>(
     null
@@ -37,12 +39,6 @@ export default function LandingPageClient() {
 
   const { data: session, status } = useSession();
   const router = useRouter();
-
-  useEffect(() => {
-    if (status === 'authenticated' && session && !hasIncompleteSignupSession(session)) {
-      router.push('/dashboard');
-    }
-  }, [session, status, router]);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -119,18 +115,24 @@ export default function LandingPageClient() {
 
   return (
     <div className="min-h-screen bg-fixly-bg">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-fixly-accent focus:px-4 focus:py-2 focus:text-white focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        Skip to main content
+      </a>
       <LandingHeader onGetStarted={() => setShowRoleSelection(true)} />
-      <LandingHero
-        onHireService={() => handleRoleSelect('hirer')}
-        onProvideService={() => handleRoleSelect('fixer')}
-      />
-      <LandingStats />
-      <LandingHowItWorks />
-      <LandingFeatures />
-      <LandingCta
-        onPostJob={() => handleRoleSelect('hirer')}
-        onBecomeFixer={() => handleRoleSelect('fixer')}
-      />
+      <main id="main-content">
+        <LandingHero
+          onHireService={() => handleRoleSelect('hirer')}
+          onProvideService={() => handleRoleSelect('fixer')}
+        />
+        {children}
+        <LandingCta
+          onPostJob={() => handleRoleSelect('hirer')}
+          onBecomeFixer={() => handleRoleSelect('fixer')}
+        />
+      </main>
       <LandingFooter
         onPostJob={() => handleRoleSelect('hirer')}
         onBecomeFixer={() => handleRoleSelect('fixer')}
