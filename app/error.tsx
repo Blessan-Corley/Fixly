@@ -4,8 +4,6 @@ import { motion } from 'framer-motion';
 import { RefreshCw, Home, AlertTriangle, Wrench } from 'lucide-react';
 import { useEffect } from 'react';
 
-import { env } from '@/lib/env';
-
 type AppErrorProps = {
   error: Error & { digest?: string };
   reset: () => void;
@@ -41,7 +39,7 @@ export default function Error({ error, reset }: AppErrorProps) {
             we&apos;re working to fix it.
           </p>
 
-          {env.NODE_ENV === 'development' ? (
+          {process.env.NODE_ENV === 'development' ? (
             <div className="mb-8 rounded-lg border border-red-200 bg-red-50 p-4 text-left">
               <h3 className="mb-2 font-semibold text-red-800">Error Details:</h3>
               <pre className="overflow-auto text-xs text-red-700">{error.message}</pre>
