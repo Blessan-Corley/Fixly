@@ -1,6 +1,6 @@
 'use client';
 
-import { Facebook, Instagram, Mail, MessageCircle, Twitter, Wrench } from 'lucide-react';
+import { Facebook, Instagram, Twitter, Wrench } from 'lucide-react';
 import Link from 'next/link';
 
 type LandingFooterProps = {
@@ -15,54 +15,38 @@ export default function LandingFooter({ onPostJob, onBecomeFixer }: LandingFoote
         <div className="grid gap-8 md:grid-cols-4">
           <div>
             <div className="mb-4 flex items-center">
-              <Wrench className="mr-2 h-6 w-6 text-fixly-accent" />
+              <Wrench className="mr-2 h-6 w-6 text-fixly-accent" aria-hidden="true" />
               <span className="text-xl font-bold">Fixly</span>
             </div>
             <p className="mb-4 text-fixly-bg/80">Your trusted local service marketplace</p>
 
             <div className="flex space-x-4">
               <a
-                href="https://www.instagram.com/fixly"
+                href="https://www.instagram.com/fixlyapp"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-fixly-bg/60 transition-colors duration-200 hover:text-fixly-accent"
                 aria-label="Instagram"
               >
-                <Instagram className="h-5 w-5" />
+                <Instagram className="h-5 w-5" aria-hidden="true" />
               </a>
               <a
-                href="https://x.com/fixly"
+                href="https://x.com/fixlyapp"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-fixly-bg/60 transition-colors duration-200 hover:text-fixly-accent"
                 aria-label="Twitter/X"
               >
-                <Twitter className="h-5 w-5" />
+                <Twitter className="h-5 w-5" aria-hidden="true" />
               </a>
               <a
-                href="https://www.facebook.com/fixly"
+                href="https://www.facebook.com/fixlyapp"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-fixly-bg/60 transition-colors duration-200 hover:text-fixly-accent"
                 aria-label="Facebook"
               >
-                <Facebook className="h-5 w-5" />
-              </a>
-              <a
-                href="https://wa.me/919976768211?text=Hi! I'm interested in Fixly services."
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-fixly-bg/60 transition-colors duration-200 hover:text-fixly-accent"
-                aria-label="WhatsApp"
-              >
-                <MessageCircle className="h-5 w-5" />
-              </a>
-              <a
-                href="mailto:blessancorley@gmail.com"
-                className="text-fixly-bg/60 transition-colors duration-200 hover:text-fixly-accent"
-                aria-label="Email"
-              >
-                <Mail className="h-5 w-5" />
+                <Facebook className="h-5 w-5" aria-hidden="true" />
               </a>
             </div>
           </div>
@@ -79,18 +63,18 @@ export default function LandingFooter({ onPostJob, onBecomeFixer }: LandingFoote
                 </button>
               </li>
               <li>
-                <Link href="/services" className="transition-colors hover:text-fixly-accent">
-                  Find Services
-                </Link>
-              </li>
-              <li>
                 <Link href="/how-it-works" className="transition-colors hover:text-fixly-accent">
                   How It Works
                 </Link>
               </li>
               <li>
-                <Link href="/safety" className="transition-colors hover:text-fixly-accent">
-                  Safety
+                <Link href="/about" className="transition-colors hover:text-fixly-accent">
+                  About Fixly
+                </Link>
+              </li>
+              <li>
+                <Link href="/contact" className="transition-colors hover:text-fixly-accent">
+                  Contact Us
                 </Link>
               </li>
             </ul>
@@ -113,13 +97,13 @@ export default function LandingFooter({ onPostJob, onBecomeFixer }: LandingFoote
                 </Link>
               </li>
               <li>
-                <Link href="/resources" className="transition-colors hover:text-fixly-accent">
-                  Resources
+                <Link href="/how-it-works" className="transition-colors hover:text-fixly-accent">
+                  How It Works
                 </Link>
               </li>
               <li>
-                <Link href="/support" className="transition-colors hover:text-fixly-accent">
-                  Support
+                <Link href="/contact" className="transition-colors hover:text-fixly-accent">
+                  Get Support
                 </Link>
               </li>
             </ul>
@@ -155,7 +139,7 @@ export default function LandingFooter({ onPostJob, onBecomeFixer }: LandingFoote
         <div className="mt-8 border-t border-fixly-bg/20 pt-8">
           <div className="text-center text-fixly-bg/60">
             <p>
-              &copy; 2025 Fixly. All rights reserved. |
+              &copy; 2026 Fixly. All rights reserved. |
               <Link
                 href="/cookies"
                 className="ml-1 underline transition-colors hover:text-fixly-accent"
