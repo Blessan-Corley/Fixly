@@ -7,7 +7,7 @@ export default function MaintenancePage(): React.JSX.Element {
         and will be back online shortly.
       </p>
       <p className="text-sm text-fixly-text-muted">
-        If you need urgent assistance, contact us at support@fixly.com.
+        If you need urgent assistance, contact us at blessancorley@gmail.com.
       </p>
     </div>
   );
