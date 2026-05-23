@@ -47,6 +47,7 @@ type UseDashboardLayoutResult = {
   sidebarHovered: boolean;
   setSidebarHovered: (value: boolean) => void;
   isRealTimeConnected: boolean;
+  connectionBadge: 'live' | 'connecting' | 'offline';
   badgeStyle: BadgeStyle;
   notificationDropdownOpen: boolean;
   setNotificationDropdownOpen: (value: boolean) => void;
@@ -75,7 +76,13 @@ export function useDashboardLayout(): UseDashboardLayoutResult {
     markAsRead,
     markAllAsRead: markAllNotificationsAsRead,
   } = useRealTimeNotifications();
-  const { isConnected: isRealTimeConnected } = useAbly();
+  const { isConnected: isRealTimeConnected, connectionStatus: ablyConnectionStatus } = useAbly();
+  const connectionBadge: 'live' | 'connecting' | 'offline' =
+    ablyConnectionStatus === 'connected'
+      ? 'live'
+      : ablyConnectionStatus === 'suspended' || ablyConnectionStatus === 'failed'
+        ? 'offline'
+        : 'connecting';
 
   const typedNotifications = notifications as DashboardNotification[];
   const router = useRouter();
@@ -194,6 +201,7 @@ export function useDashboardLayout(): UseDashboardLayoutResult {
     sidebarHovered,
     setSidebarHovered,
     isRealTimeConnected,
+    connectionBadge,
     badgeStyle,
     notificationDropdownOpen,
     setNotificationDropdownOpen,
