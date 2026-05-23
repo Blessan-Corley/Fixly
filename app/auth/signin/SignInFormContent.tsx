@@ -1,6 +1,7 @@
 'use client';
 
 import { Eye, EyeOff, Loader, Lock, UserCircle2 } from 'lucide-react';
+import Link from 'next/link';
 import type { UseFormRegister } from 'react-hook-form';
 
 import type { SignInFormData } from './_hooks/useSignInPage';
@@ -65,6 +66,16 @@ export default function SignInFormContent({
         )}
         Continue with Google
       </button>
+
+      <p className="text-center text-xs text-fixly-text-muted dark:text-gray-400">
+        Originally signed up with Google?{' '}Use the button above.{' '}
+        <Link
+          href="/auth/signup"
+          className="font-medium text-fixly-accent underline transition-colors hover:text-fixly-accent-dark"
+        >
+          Didn&apos;t finish signup?
+        </Link>
+      </p>
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
@@ -143,22 +154,17 @@ export default function SignInFormContent({
           {loading ? <Loader className="mr-2 inline h-5 w-5 animate-spin" /> : null}
           Sign In
         </button>
+
+        <div className="text-center text-sm">
+          <button
+            type="button"
+            onClick={onForgotPassword}
+            className="font-medium text-fixly-accent transition-colors hover:text-fixly-accent-dark"
+          >
+            Forgot your password?
+          </button>
+        </div>
       </form>
-
-      <div className="rounded-2xl border border-fixly-border bg-fixly-bg/60 px-4 py-3 text-sm text-fixly-text-light dark:border-gray-700 dark:bg-gray-800/70 dark:text-gray-300">
-        Use Google if you originally joined with Google. If you started creating an account but
-        didn&apos;t finish, continue signup instead.
-      </div>
-
-      <div className="text-center text-sm">
-        <button
-          type="button"
-          onClick={onForgotPassword}
-          className="font-medium text-fixly-accent transition-colors hover:text-fixly-accent-dark"
-        >
-          Forgot your password?
-        </button>
-      </div>
     </div>
   );
 }
