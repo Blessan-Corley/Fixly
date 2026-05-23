@@ -95,9 +95,10 @@ export type Events = {
       jobTitle?: string;
     };
   };
-  'stripe/checkout.completed': {
+  'razorpay/payment.captured': {
     data: {
       orderId: string;
+      paymentId: string;
       userId: string;
       userEmail: string;
       userName: string;
@@ -105,6 +106,18 @@ export type Events = {
       currency: string;
       planId: string;
       periodEnd?: string;
+    };
+  };
+  'razorpay/payment.failed': {
+    data: {
+      userId: string;
+      userEmail: string;
+      userName: string;
+      amountRs: number;
+      currency: string;
+      reason: string;
+      paymentId: string;
+      orderId: string;
     };
   };
   'order/payment.failed': {
