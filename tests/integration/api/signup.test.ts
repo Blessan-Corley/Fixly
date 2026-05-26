@@ -169,7 +169,8 @@ describe('/api/auth/signup', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(payload.message).toContain('valid phone number');
+    expect(payload.message).toBe('Validation failed');
+    expect(payload.details?.fieldErrors?.phone).toBeDefined();
   });
 
   it('rejects invalid profile name content', async () => {
