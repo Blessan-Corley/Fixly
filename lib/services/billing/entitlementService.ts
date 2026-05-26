@@ -1,5 +1,3 @@
-import Stripe from 'stripe';
-
 import { AppError } from '@/lib/api/errors';
 import { logger } from '@/lib/logger';
 import { redisUtils } from '@/lib/redis';
@@ -16,6 +14,15 @@ export type EntitlementResult =
   | { allowed: true }
   | { allowed: false; reason: string; upgradeRequired?: boolean; nextAllowedAt?: Date };
 
+export interface RazorpayPaymentData {
+  orderId: string;
+  paymentId: string;
+  planId: PlanId;
+  planType?: string;
+  razorpayCustomerId?: string;
+  amount?: number;
+}
+
 async function invalidateBillingCache(userId: string, role: string | undefined): Promise<void> {
   const cacheKeys = [`dashboard:stats:${userId}`];
 
@@ -26,44 +33,11 @@ async function invalidateBillingCache(userId: string, role: string | undefined):
   await redisUtils.del(...cacheKeys);
 }
 
-function toStripeId(value: string | Stripe.Customer | Stripe.DeletedCustomer | null): string | null {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value;
-  }
-
-  if (value && typeof value === 'object' && 'id' in value && typeof value.id === 'string') {
-    return value.id;
-  }
-
-  return null;
-}
-
-function toStripeSubscriptionId(
-  value: string | Stripe.Subscription | null
-): string | null {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value;
-  }
-
-  if (value && typeof value === 'object' && 'id' in value && typeof value.id === 'string') {
-    return value.id;
-  }
-
-  return null;
-}
-
 export async function grantSubscriptionEntitlement(
   userId: string,
-  stripeSession: Stripe.Checkout.Session
+  paymentData: RazorpayPaymentData
 ): Promise<void> {
-  const planId = stripeSession.metadata?.planId as PlanId | undefined;
-  const planType = stripeSession.metadata?.planType ?? 'pro';
-  const stripeCustomerId = toStripeId(stripeSession.customer);
-  const stripeSubscriptionId = toStripeSubscriptionId(stripeSession.subscription);
-
-  if (!planId) {
-    throw new AppError('VALIDATION_ERROR', 'Stripe session missing plan metadata', 400);
-  }
+  const { planId, planType = 'pro', razorpayCustomerId, paymentId } = paymentData;
 
   const plan = getPlanById(planId);
   const user = await User.findById(userId);
@@ -74,8 +48,6 @@ export async function grantSubscriptionEntitlement(
 
   const startDate = new Date();
   const endDate = new Date(startDate.getTime() + plan.durationDays * 24 * 60 * 60 * 1000);
-  const paymentId =
-    typeof stripeSession.payment_intent === 'string' ? stripeSession.payment_intent : undefined;
 
   await User.findByIdAndUpdate(
     userId,
@@ -89,8 +61,7 @@ export async function grantSubscriptionEntitlement(
         'plan.billingCycle': plan.billingCycle,
         'plan.amount': plan.amountRs,
         'plan.features': plan.features,
-        'plan.stripeCustomerId': stripeCustomerId ?? undefined,
-        'plan.stripeSubscriptionId': stripeSubscriptionId,
+        'plan.razorpayCustomerId': razorpayCustomerId ?? undefined,
         'plan.activatedAt': startDate,
         'plan.subscribedAt': startDate,
         'plan.paymentId': paymentId,
@@ -107,8 +78,8 @@ export async function grantSubscriptionEntitlement(
     userId,
     planType,
     planId,
-    stripeCustomerId,
-    stripeSubscriptionId,
+    razorpayCustomerId,
+    paymentId,
   });
 }
 
