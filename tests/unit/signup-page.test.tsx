@@ -96,8 +96,8 @@ describe('SignupPage', () => {
   it('shows role selection choices on the first step', () => {
     render(<SignupPage />);
 
-    expect(screen.getByRole('button', { name: /join as hirer/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /join as fixer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /hire a fixer/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /offer services/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue with google/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue with email/i })).toBeInTheDocument();
   });
@@ -128,13 +128,13 @@ describe('SignupPage', () => {
 
     render(<SignupPage />);
 
-    await user.click(screen.getByRole('button', { name: /join as fixer/i }));
+    await user.click(screen.getByRole('button', { name: /offer services/i }));
     await user.click(screen.getByRole('button', { name: /continue with email/i }));
     await user.click(screen.getByRole('button', { name: /^continue$/i }));
 
     await user.type(screen.getByRole('textbox', { name: /email address/i }), 'Person@Example.com');
     await user.type(screen.getByLabelText(/^password$/i), 'StrongPass1!');
-    await user.type(screen.getByLabelText(/confirm password/i), 'StrongPass1!');
+    await user.type(screen.getByLabelText('Confirm Password'), 'StrongPass1!');
     await user.click(screen.getByRole('button', { name: /send code/i }));
 
     expect(await screen.findByText(/code sent to/i)).toBeInTheDocument();
