@@ -68,18 +68,21 @@ export function ProfileStep({
         <label htmlFor="signup-phone" className="mb-2 block text-sm font-medium text-fixly-text dark:text-gray-100">
           Phone number
         </label>
-        <div className="relative">
-          <Phone className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-fixly-text-muted" />
+        <div className="flex">
+          <span className="inline-flex items-center gap-1.5 rounded-l-xl border border-r-0 border-fixly-border bg-fixly-bg px-3 text-sm font-medium text-fixly-text-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+            <Phone className="h-4 w-4" />
+            +91
+          </span>
           <input
             id="signup-phone"
             type="tel"
             value={formData.phone}
             onChange={(event) => onChange('phone', event.target.value.replace(/\D/g, '').slice(0, 10))}
-            placeholder="10-digit Indian mobile number"
-            autoComplete="tel"
+            placeholder="10-digit mobile number"
+            autoComplete="tel-national"
             inputMode="numeric"
             disabled={isLoading}
-            className="input-field pl-10 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="input-field min-w-0 flex-1 rounded-l-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
         </div>
         {errors.phone ? <p className="mt-1 text-sm text-red-500">{errors.phone}</p> : null}
