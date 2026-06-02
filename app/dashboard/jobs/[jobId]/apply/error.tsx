@@ -4,8 +4,6 @@ import { AlertCircle, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-import { env } from '@/lib/env';
-
 type JobApplyErrorProps = {
   error: Error & { digest?: string };
   reset: () => void;
@@ -46,7 +44,7 @@ export default function Error({ error, reset }: JobApplyErrorProps) {
           </button>
         </div>
 
-        {env.NODE_ENV === 'development' ? (
+        {process.env.NODE_ENV === 'development' ? (
           <details className="mt-6 text-left">
             <summary className="cursor-pointer text-sm text-gray-500">
               Error details (development only)
