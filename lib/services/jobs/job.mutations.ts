@@ -1,6 +1,6 @@
 import { logger } from '@/lib/logger';
 import { runJobPostSideEffects } from '@/lib/services/jobPostSideEffects';
-import type { JobPostRecord, CreateJobInput } from '@/lib/services/jobs/createJob';
+import type { JobPostRecord } from '@/lib/services/jobs/createJob';
 import { buildCreateJobInput } from '@/lib/services/jobs/job.mapper';
 import {
   validateAttachments,
@@ -20,18 +20,9 @@ import {
   toBoolean,
   toFiniteNumber,
 } from '@/lib/services/jobs/job.schema';
-import type { CreateJobBody } from '@/lib/services/jobs/job.types';
+import type { CreateJobBody, MutationError, PreparedJobPayloadResult } from '@/lib/services/jobs/job.types';
 import { moderateJobContent, moderateJobSkills } from '@/lib/services/jobs/jobModeration';
 import Job from '@/models/Job';
-
-type MutationError = {
-  body: Record<string, unknown>;
-  status: number;
-};
-
-type PreparedJobPayloadResult =
-  | { jobData: CreateJobInput; draftId: string; error?: never }
-  | { jobData?: never; draftId?: never; error: MutationError };
 
 export function queueJobPostSideEffects(jobId: string, task: () => Promise<void>): void {
   void Promise.resolve()
