@@ -100,7 +100,6 @@ describe('ForgotPasswordPage', () => {
           body: JSON.stringify({
             email: 'user@example.com',
             newPassword: 'StrongPass1!',
-            otp: '123456',
           }),
         })
       );
